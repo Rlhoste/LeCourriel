@@ -1,0 +1,215 @@
+import { Theme } from "theme.slint";
+
+export struct EmailCardData {
+    uid: int,
+    subject: string,
+    from-name: string,
+    date-str: string,
+    summary: string,
+    priority: string,
+    is-read: bool,
+    project: string,
+    deadline-str: string,
+    task: string,
+    body: string,
+    meeting-link: string,
+}
+
+export component EmailCard inherits Rectangle {
+    in property <EmailCardData> card-data;
+    callback reply-clicked(int);
+    callback view-clicked(int);
+
+    height: card-layout.preferred-height + 20px;
+    background: Theme.bg-card;
+    border-radius: Theme.radius-md;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    touch-area := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.view-clicked(card-data.uid);
+        }
+    }
+
+    animate background { duration: 80ms; }
+
+    states [
+        hovered when touch-area.has-hover: {
+            background: Theme.bg-card-hover;
+        }
+    ]
+
+    card-layout := VerticalLayout {
+        x: 0;
+        y: 10px;
+        width: root.width;
+        padding-left: 14px;
+        padding-right: 14px;
+        spacing: 4px;
+
+        HorizontalLayout {
+            spacing: 12px;
+
+            // Priority dot
+            VerticalLayout {
+                alignment: start;
+                padding-top: 4px;
+                width: 10px;
+
+                Rectangle {
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 4px;
+                    background: root.priority-color();
+                }
+            }
+
+            // Content
+            VerticalLayout {
+                spacing: 4px;
+                alignment: start;
+                horizontal-stretch: 1;
+
+                // Row 1: sender + date
+                HorizontalLayout {
+                    spacing: 0px;
+                    Text {
+                        text: card-data.from-name;
+                        color: Theme.text-primary;
+                        font-size: Theme.font-sm;
+                        font-weight: card-data.is-read ? 400 : 700;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                    }
+                    Text {
+                        text: card-data.date-str;
+                        color: Theme.text-muted;
+                        font-size: Theme.font-xs;
+                    }
+                }
+
+                // Row 2: subject
+                Text {
+                    text: card-data.subject;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-base;
+                    font-weight: card-data.is-read ? 400 : 600;
+                    overflow: elide;
+                }
+
+                // Row 3: AI summary
+                Text {
+                    text: card-data.summary;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-xs;
+                    overflow: elide;
+                    wrap: word-wrap;
+                }
+
+                // Row 4: badges (project, deadline, task)
+                if card-data.project != "" || card-data.deadline-str != "" || card-data.task != "": HorizontalLayout {
+                    spacing: 6px;
+                    alignment: start;
+
+                    if card-data.project != "": Rectangle {
+                        width: proj-text.preferred-width + 10px;
+                        height: 16px;
+                        border-radius: 3px;
+                        background: #1e3a5f;
+
+                        proj-text := Text {
+                            x: 5px;
+                            y: 0;
+                            height: parent.height;
+                            text: card-data.project;
+                            color: #6ab0f5;
+                            font-size: Theme.font-xs;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    if card-data.deadline-str != "": Rectangle {
+                        width: dl-text.preferred-width + 10px;
+                        height: 16px;
+                        border-radius: 3px;
+                        background: #3a1e1e;
+
+                        dl-text := Text {
+                            x: 5px;
+                            y: 0;
+                            height: parent.height;
+                            text: "⏰ " + card-data.deadline-str;
+                            color: #f58c6a;
+                            font-size: Theme.font-xs;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    if card-data.task != "": Rectangle {
+                        width: task-badge-text.preferred-width + 10px;
+                        height: 16px;
+                        border-radius: 3px;
+                        background: #1a3a25;
+
+                        task-badge-text := Text {
+                            x: 5px;
+                            y: 0;
+                            height: parent.height;
+                            text: "✓ " + card-data.task;
+                            color: #4fcf8e;
+                            font-size: Theme.font-xs;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+                }
+            }
+
+            // Reply button (shown on hover)
+            VerticalLayout {
+                alignment: center;
+                width: 54px;
+
+                reply-btn := Rectangle {
+                    width: 54px;
+                    height: 24px;
+                    border-radius: Theme.radius-sm;
+                    background: reply-touch.has-hover ? Theme.accent : transparent;
+                    border-width: 1px;
+                    border-color: reply-touch.has-hover ? Theme.accent : Theme.border;
+                    visible: touch-area.has-hover;
+
+                    reply-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.reply-clicked(card-data.uid);
+                        }
+                    }
+
+                    Text {
+                        x: 0;
+                        y: 0;
+                        width: parent.width;
+                        height: parent.height;
+                        text: "Reply";
+                        color: reply-touch.has-hover ? #1a1a1a : Theme.text-secondary;
+                        font-size: Theme.font-xs;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+
+    pure function priority-color() -> color {
+        if (card-data.priority == "urgent") { return Theme.dot-urgent; }
+        if (card-data.priority == "high") { return Theme.dot-high; }
+        if (card-data.priority == "threat") { return Theme.dot-threat; }
+        if (card-data.priority == "task") { return Theme.dot-task; }
+        if (card-data.priority == "info") { return Theme.dot-info; }
+        return Theme.dot-other;
+    }
+}

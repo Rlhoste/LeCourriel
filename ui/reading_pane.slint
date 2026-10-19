@@ -1,0 +1,141 @@
+import { Theme } from "theme.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export component ReadingPane inherits Rectangle {
+    background: Theme.bg-primary;
+
+    in property <string> from-header;
+    in property <string> subject-header;
+    in property <string> date-header;
+    in property <string> body-text;
+    in property <string> priority;
+    in property <bool> has-email: false;
+
+    callback reply-clicked();
+
+    if !has-email: VerticalLayout {
+        alignment: center;
+        VerticalLayout {
+            alignment: center;
+            spacing: 8px;
+
+            Text {
+                text: "No email selected";
+                color: Theme.text-muted;
+                font-size: Theme.font-lg;
+                horizontal-alignment: center;
+            }
+            Text {
+                text: "Click an email to read it";
+                color: Theme.text-muted;
+                font-size: Theme.font-sm;
+                horizontal-alignment: center;
+            }
+        }
+    }
+
+    if has-email: VerticalLayout {
+        spacing: 0px;
+
+        // Header strip
+        Rectangle {
+            height: header-layout.preferred-height + 24px;
+            background: Theme.bg-card;
+            border-color: Theme.border;
+            border-width: 0;
+
+            header-layout := VerticalLayout {
+                x: 0;
+                y: 12px;
+                width: parent.width;
+                padding-left: 20px;
+                padding-right: 20px;
+                spacing: 4px;
+
+                Text {
+                    text: subject-header;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-lg;
+                    font-weight: 600;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    spacing: 16px;
+                    Text {
+                        text: "From: " + from-header;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-sm;
+                        horizontal-stretch: 1;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: date-header;
+                        color: Theme.text-muted;
+                        font-size: Theme.font-sm;
+                    }
+                }
+            }
+        }
+
+        Rectangle { height: 1px; background: Theme.border; }
+
+        // Body
+        ScrollView {
+            vertical-stretch: 1;
+            horizontal-stretch: 1;
+
+            VerticalLayout {
+                width: parent.visible-width;
+                padding: 20px;
+                spacing: 0px;
+
+                Text {
+                    text: body-text;
+                    color: Theme.text-primary;
+                    font-size: Theme.font-base;
+                    wrap: word-wrap;
+                    horizontal-stretch: 1;
+                }
+            }
+        }
+
+        Rectangle { height: 1px; background: Theme.border; }
+
+        // Footer actions
+        Rectangle {
+            height: 52px;
+            background: Theme.bg-sidebar;
+
+            HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 16px;
+                spacing: 8px;
+                alignment: start;
+
+                reply-btn := Rectangle {
+                    width: 80px;
+                    height: 32px;
+                    border-radius: Theme.radius-md;
+                    background: rt.has-hover ? Theme.btn-primary-hover : Theme.btn-primary;
+                    y: (52px - 32px) / 2;
+
+                    rt := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.reply-clicked(); }
+                    }
+
+                    Text {
+                        x: 0; y: 0;
+                        width: parent.width; height: parent.height;
+                        text: "↩ Reply";
+                        color: #1a1a1a;
+                        font-size: Theme.font-sm;
+                        font-weight: 600;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}

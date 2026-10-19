@@ -1,0 +1,120 @@
+import { Theme } from "theme.slint";
+import { EmailCard, EmailCardData } from "email_card.slint";
+
+export component PrioritySection inherits VerticalLayout {
+    in property <string> section-title;
+    in property <string> priority-key;
+    in property <color> dot-color;
+    in property <[EmailCardData]> emails;
+    in property <bool> collapsed: false;
+    in-out property <bool> expanded: true;
+
+    callback reply-clicked(int);
+    callback view-clicked(int);
+
+    spacing: 0px;
+
+    // Section header
+    header-touch := TouchArea {
+        height: 36px;
+        mouse-cursor: pointer;
+        clicked => {
+            root.expanded = !root.expanded;
+        }
+
+        HorizontalLayout {
+            x: 0;
+            y: 0;
+            width: parent.width;
+            height: parent.height;
+            padding-left: 16px;
+            padding-right: 16px;
+            spacing: 8px;
+            alignment: start;
+
+            // Collapse chevron
+            Text {
+                text: root.expanded ? "▾" : "▸";
+                color: Theme.text-muted;
+                font-size: Theme.font-sm;
+                vertical-alignment: center;
+                width: 12px;
+            }
+
+            // Priority dot
+            Rectangle {
+                width: 7px;
+                height: 7px;
+                border-radius: 4px;
+                background: root.dot-color;
+                y: (parent.height - 7px) / 2;
+            }
+
+            // Title
+            Text {
+                text: root.section-title;
+                color: Theme.text-primary;
+                font-size: Theme.font-sm;
+                font-weight: 600;
+                vertical-alignment: center;
+            }
+
+            // Count badge
+            if emails.length > 0: Rectangle {
+                width: count-text.preferred-width + 10px;
+                height: 18px;
+                border-radius: 9px;
+                background: Theme.bg-input;
+                y: (parent.height - 18px) / 2;
+
+                count-text := Text {
+                    x: 5px;
+                    y: 0;
+                    height: parent.height;
+                    text: emails.length;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-xs;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+
+    // Divider
+    Rectangle {
+        height: 1px;
+        background: Theme.border-subtle;
+    }
+
+    // Cards list
+    if root.expanded && emails.length > 0: VerticalLayout {
+        spacing: 6px;
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-top: 8px;
+        padding-bottom: 12px;
+
+        for card-data[idx] in root.emails: EmailCard {
+            width: parent.width - 32px;
+            card-data: card-data;
+            reply-clicked(uid) => { root.reply-clicked(uid); }
+            view-clicked(uid) => { root.view-clicked(uid); }
+        }
+    }
+
+    // Empty state when expanded but no emails
+    if root.expanded && emails.length == 0: Rectangle {
+        height: 32px;
+        HorizontalLayout {
+            padding-left: 36px;
+            alignment: start;
+            Text {
+                text: "No emails in this category";
+                color: Theme.text-muted;
+                font-size: Theme.font-xs;
+                vertical-alignment: center;
+                height: 32px;
+            }
+        }
+    }
+}

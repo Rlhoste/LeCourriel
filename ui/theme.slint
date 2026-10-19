@@ -1,0 +1,60 @@
+export global Theme {
+    // Background palette
+    out property <color> bg-primary: #1a1a1a;
+    out property <color> bg-sidebar: #141414;
+    out property <color> bg-card: #242424;
+    out property <color> bg-card-hover: #2c2c2c;
+    out property <color> bg-input: #1e1e1e;
+    out property <color> bg-overlay: #0d0d0d;
+
+    // Text
+    out property <color> text-primary: #e8e8e8;
+    out property <color> text-secondary: #9a9a9a;
+    out property <color> text-muted: #5a5a5a;
+    out property <color> text-disabled: #3a3a3a;
+
+    // Accent / gold
+    out property <color> accent: #c9a84c;
+    out property <color> accent-dim: #8a6f2e;
+
+    // Priority dot colors
+    out property <color> dot-urgent: #e05555;
+    out property <color> dot-high: #e07b35;
+    out property <color> dot-other: #4a9eff;
+    out property <color> dot-info: #888888;
+    out property <color> dot-threat: #cc4444;
+    out property <color> dot-task: #4fcf8e;
+
+    // Border / divider
+    out property <color> border: #2e2e2e;
+    out property <color> border-subtle: #222222;
+
+    // Button states
+    out property <color> btn-primary: #c9a84c;
+    out property <color> btn-primary-hover: #d9b85c;
+    out property <color> btn-ghost-hover: #2a2a2a;
+
+    // Font scale (1.0 = 100%, driven by settings zoom slider)
+    in-out property <float> font-scale: 1.0;
+
+    // Typography sizes — multiplied by font-scale for live zoom.
+    // Slint requires: float_val * 1px to produce a length from a float.
+    out property <length> font-xs:   (11 * font-scale) * 1px;
+    out property <length> font-sm:   (12 * font-scale) * 1px;
+    out property <length> font-base: (13 * font-scale) * 1px;
+    out property <length> font-md:   (14 * font-scale) * 1px;
+    out property <length> font-lg:   (16 * font-scale) * 1px;
+    out property <length> font-xl:   (20 * font-scale) * 1px;
+    out property <length> font-2xl:  (26 * font-scale) * 1px;
+
+    // Radii
+    out property <length> radius-sm: 4px;
+    out property <length> radius-md: 8px;
+    out property <length> radius-lg: 12px;
+
+    // Spacing
+    out property <length> gap-xs: 4px;
+    out property <length> gap-sm: 8px;
+    out property <length> gap-md: 16px;
+    out property <length> gap-lg: 24px;
+}

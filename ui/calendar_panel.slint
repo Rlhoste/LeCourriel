@@ -1,0 +1,221 @@
+import { Theme } from "theme.slint";
+import { ReadingPane } from "reading_pane.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export struct DeadlineData {
+    uid: int,
+    subject: string,
+    deadline-str: string,
+    project: string,
+    days-until: int,
+}
+
+export component CalendarPanel inherits Rectangle {
+    background: Theme.bg-primary;
+
+    in property <[DeadlineData]> deadlines;
+    in property <int> calendar-year: 2026;
+    in property <int> calendar-month: 10;
+    in-out property <int> active-uid: -1;
+    in property <string> reading-from;
+    in property <string> reading-subject;
+    in property <string> reading-date;
+    in property <string> reading-body;
+
+    callback view-clicked(int);
+    callback reply-clicked(int);
+
+    pure function month-name(m: int) -> string {
+        if (m == 1) { return "January"; }
+        if (m == 2) { return "February"; }
+        if (m == 3) { return "March"; }
+        if (m == 4) { return "April"; }
+        if (m == 5) { return "May"; }
+        if (m == 6) { return "June"; }
+        if (m == 7) { return "July"; }
+        if (m == 8) { return "August"; }
+        if (m == 9) { return "September"; }
+        if (m == 10) { return "October"; }
+        if (m == 11) { return "November"; }
+        return "December";
+    }
+
+    VerticalLayout {
+        spacing: 0px;
+
+        // Header
+        Rectangle {
+            height: 56px;
+            background: Theme.bg-primary;
+
+            HorizontalLayout {
+                padding-left: 24px;
+                padding-right: 24px;
+
+                Text {
+                    text: "Calendar";
+                    color: Theme.text-primary;
+                    font-size: Theme.font-xl;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                    height: 56px;
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Text {
+                    text: month-name(calendar-month) + " " + calendar-year;
+                    color: Theme.text-secondary;
+                    font-size: Theme.font-md;
+                    vertical-alignment: center;
+                    height: 56px;
+                }
+            }
+        }
+
+        Rectangle { height: 1px; background: Theme.border; }
+
+        HorizontalLayout {
+            spacing: 0px;
+            vertical-stretch: 1;
+
+            // Left: deadline list
+            Rectangle {
+                horizontal-stretch: 2;
+                background: Theme.bg-sidebar;
+
+                ScrollView {
+                    width: parent.width;
+                    height: parent.height;
+
+                    VerticalLayout {
+                        width: parent.visible-width;
+                        padding: 12px;
+                        spacing: 6px;
+
+                        if deadlines.length == 0: Text {
+                            text: "No deadlines detected";
+                            color: Theme.text-muted;
+                            font-size: Theme.font-sm;
+                            horizontal-alignment: center;
+                        }
+
+                        // Overdue section
+                        for dl in deadlines: Rectangle {
+                            visible: dl.days-until < 0;
+                            height: dl.days-until < 0 ? deadline-item.preferred-height + 16px : 0px;
+                            clip: true;
+                            background: #2a1010;
+                            border-radius: Theme.radius-md;
+                            border-width: 1px;
+                            border-color: #5a1a1a;
+
+                            deadline-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.view-clicked(dl.uid); }
+                            }
+
+                            deadline-item := VerticalLayout {
+                                x: 0; y: 8px;
+                                width: parent.width;
+                                padding-left: 12px;
+                                padding-right: 12px;
+                                spacing: 2px;
+
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    Text {
+                                        text: "OVERDUE";
+                                        color: #e05555;
+                                        font-size: Theme.font-xs;
+                                        font-weight: 700;
+                                    }
+                                    Text {
+                                        text: dl.deadline-str;
+                                        color: #f58c8c;
+                                        font-size: Theme.font-xs;
+                                        horizontal-stretch: 1;
+                                    }
+                                    if dl.project != "": Text {
+                                        text: dl.project;
+                                        color: #6ab0f5;
+                                        font-size: Theme.font-xs;
+                                    }
+                                }
+                                Text {
+                                    text: dl.subject;
+                                    color: Theme.text-primary;
+                                    font-size: Theme.font-sm;
+                                    overflow: elide;
+                                }
+                            }
+                        }
+
+                        // Upcoming section
+                        for dl in deadlines: Rectangle {
+                            visible: dl.days-until >= 0;
+                            height: dl.days-until >= 0 ? upcoming-item.preferred-height + 16px : 0px;
+                            clip: true;
+                            background: Theme.bg-card;
+                            border-radius: Theme.radius-md;
+                            border-width: 1px;
+                            border-color: Theme.border;
+
+                            upcoming-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => { root.view-clicked(dl.uid); }
+                            }
+
+                            upcoming-item := VerticalLayout {
+                                x: 0; y: 8px;
+                                width: parent.width;
+                                padding-left: 12px;
+                                padding-right: 12px;
+                                spacing: 2px;
+
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    Text {
+                                        text: dl.deadline-str;
+                                        color: dl.days-until <= 3 ? #f58c6a : Theme.accent;
+                                        font-size: Theme.font-xs;
+                                        font-weight: 600;
+                                    }
+                                    Text {
+                                        text: dl.days-until == 0 ? "Today" :
+                                              dl.days-until == 1 ? "Tomorrow" :
+                                              dl.days-until + " days";
+                                        color: Theme.text-muted;
+                                        font-size: Theme.font-xs;
+                                        horizontal-stretch: 1;
+                                    }
+                                    if dl.project != "": Text {
+                                        text: dl.project;
+                                        color: #6ab0f5;
+                                        font-size: Theme.font-xs;
+                                    }
+                                }
+                                Text {
+                                    text: dl.subject;
+                                    color: Theme.text-primary;
+                                    font-size: Theme.font-sm;
+                                    overflow: elide;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle { width: 1px; background: Theme.border; }
+
+            ReadingPane {
+                horizontal-stretch: 3;
+                has-email: active-uid >= 0;
+                from-header: reading-from;
+                subject-header: reading-subject;
+                date-header: reading-date;
+                body-text: reading-body;
+                reply-clicked => { root.reply-clicked(active-uid); }
+            }
+        }
+    }
+}

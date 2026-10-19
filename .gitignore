@@ -1,0 +1,21 @@
+# Build output
+target/
+src-tauri/gen/
+
+# Secrets — never commit your real config
+config.toml
+*.pem
+*.key
+.env
+
+# Local mailbox data written by the app (email contents, tasks, settings)
+cache.json
+cache-v2.json
+dismissed.json
+tasks.json
+overrides.json
+*.eml
+
+# Local tooling / scratch
+.claude/
+image.png

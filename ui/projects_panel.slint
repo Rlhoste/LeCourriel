@@ -1,0 +1,460 @@
+import { Theme } from "theme.slint";
+import { EmailCard, EmailCardData } from "email_card.slint";
+import { ReadingPane } from "reading_pane.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export struct ProjectData {
+    name: string,
+    urgency: string,
+    description: string,
+    email-count: int,
+}
+
+export component ProjectsPanel inherits Rectangle {
+    background: Theme.bg-primary;
+
+    in property <[EmailCardData]> all-emails;
+    in property <[EmailCardData]> all-emails-by-priority;
+    in property <[ProjectData]> projects;
+    in-out property <int> active-uid: -1;
+    in property <string> reading-from;
+    in property <string> reading-subject;
+    in property <string> reading-date;
+    in property <string> reading-body;
+
+    callback view-clicked(int);
+    callback reply-clicked(int);
+    callback save-description(string, string);  // (project_name, new_description)
+
+    // Local state
+    private property <string> selected-project: projects.length > 0 ? projects[0].name : "";
+    private property <bool> settings-open: false;
+    private property <string> edit-description: "";
+    private property <bool> sort-by-priority: true;
+
+    VerticalLayout {
+        spacing: 0px;
+
+        // Header
+        Rectangle {
+            height: 56px;
+            background: Theme.bg-primary;
+            HorizontalLayout {
+                padding-left: 24px;
+                padding-right: 16px;
+                Text {
+                    text: "Projects";
+                    color: Theme.text-primary;
+                    font-size: Theme.font-xl;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                    height: 56px;
+                    horizontal-stretch: 1;
+                }
+            }
+        }
+
+        Rectangle { height: 1px; background: Theme.border; }
+
+        HorizontalLayout {
+            spacing: 0px;
+            vertical-stretch: 1;
+
+            // ── Left column: project list ─────────────────────────────────
+            Rectangle {
+                horizontal-stretch: 1;
+                background: Theme.bg-sidebar;
+
+                ScrollView {
+                    VerticalLayout {
+                        width: parent.visible-width;
+                        padding-top: 8px;
+                        padding-bottom: 8px;
+                        spacing: 2px;
+
+                        if projects.length == 0: VerticalLayout {
+                            padding: 16px;
+                            spacing: 6px;
+                            Text {
+                                text: "No projects configured.";
+                                color: Theme.text-muted;
+                                font-size: Theme.font-sm;
+                                wrap: word-wrap;
+                                horizontal-alignment: center;
+                            }
+                            Text {
+                                text: "Add [[projects]] to config.toml";
+                                color: Theme.text-muted;
+                                font-size: Theme.font-xs;
+                                wrap: word-wrap;
+                                horizontal-alignment: center;
+                            }
+                        }
+
+                        for proj in projects: Rectangle {
+                            height: 44px;
+                            background: proj.name == root.selected-project
+                                ? #202020
+                                : (proj-touch.has-hover ? Theme.btn-ghost-hover : transparent);
+                            border-radius: Theme.radius-sm;
+
+                            proj-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    root.selected-project = proj.name;
+                                    root.settings-open = false;
+                                    root.edit-description = proj.description;
+                                }
+                            }
+
+                            HorizontalLayout {
+                                padding-left: 14px;
+                                padding-right: 10px;
+                                spacing: 8px;
+                                alignment: start;
+
+                                // Accent dot
+                                Rectangle {
+                                    width: 6px;
+                                    height: 6px;
+                                    border-radius: 3px;
+                                    background: proj.name == root.selected-project
+                                        ? Theme.accent
+                                        : Theme.text-muted;
+                                    y: (44px - 6px) / 2;
+                                }
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    horizontal-stretch: 1;
+                                    spacing: 2px;
+
+                                    Text {
+                                        text: proj.name;
+                                        color: proj.name == root.selected-project
+                                            ? Theme.text-primary
+                                            : Theme.text-secondary;
+                                        font-size: Theme.font-sm;
+                                        font-weight: proj.name == root.selected-project ? 600 : 400;
+                                        overflow: elide;
+                                    }
+                                }
+
+                                // Email count badge
+                                if proj.email-count > 0: Rectangle {
+                                    width: badge-t.preferred-width + 10px;
+                                    height: 18px;
+                                    border-radius: 9px;
+                                    background: proj.name == root.selected-project
+                                        ? Theme.accent
+                                        : Theme.bg-card;
+                                    y: (44px - 18px) / 2;
+
+                                    badge-t := Text {
+                                        x: 5px;
+                                        y: 0;
+                                        height: parent.height;
+                                        text: proj.email-count;
+                                        color: proj.name == root.selected-project
+                                            ? #1a1a1a
+                                            : Theme.text-muted;
+                                        font-size: Theme.font-xs;
+                                        font-weight: 600;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                        }
+
+                        // Unassigned entry
+                        Rectangle {
+                            height: 44px;
+                            background: root.selected-project == ""
+                                ? #202020
+                                : (unassigned-touch.has-hover ? Theme.btn-ghost-hover : transparent);
+                            border-radius: Theme.radius-sm;
+
+                            unassigned-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    root.selected-project = "";
+                                    root.settings-open = false;
+                                }
+                            }
+
+                            HorizontalLayout {
+                                padding-left: 14px;
+                                padding-right: 10px;
+                                spacing: 8px;
+                                alignment: start;
+
+                                Rectangle {
+                                    width: 6px;
+                                    height: 6px;
+                                    border-radius: 3px;
+                                    background: root.selected-project == ""
+                                        ? Theme.accent
+                                        : Theme.text-muted;
+                                    y: (44px - 6px) / 2;
+                                }
+
+                                Text {
+                                    text: "Unassigned";
+                                    color: root.selected-project == ""
+                                        ? Theme.text-primary
+                                        : Theme.text-secondary;
+                                    font-size: Theme.font-sm;
+                                    font-weight: root.selected-project == "" ? 600 : 400;
+                                    vertical-alignment: center;
+                                    height: 44px;
+                                    horizontal-stretch: 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle { width: 1px; background: Theme.border; }
+
+            // ── Middle column: project detail + emails ────────────────────
+            Rectangle {
+                horizontal-stretch: 2;
+                background: Theme.bg-primary;
+
+                VerticalLayout {
+                    spacing: 0px;
+
+                    // Project detail header
+                    Rectangle {
+                        height: 56px;
+                        background: Theme.bg-primary;
+
+                        HorizontalLayout {
+                            padding-left: 16px;
+                            padding-right: 12px;
+                            spacing: 8px;
+
+                            Text {
+                                text: root.selected-project == "" ? "Unassigned" : root.selected-project;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-md;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                                height: 56px;
+                                horizontal-stretch: 1;
+                                overflow: elide;
+                            }
+
+                            // Sort toggle button
+                            Rectangle {
+                                width: sort-btn-text.preferred-width + 16px;
+                                height: 26px;
+                                border-radius: Theme.radius-sm;
+                                background: sort-touch.has-hover ? Theme.btn-ghost-hover : transparent;
+                                border-width: 1px;
+                                border-color: Theme.border;
+                                y: (56px - 26px) / 2;
+
+                                sort-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { root.sort-by-priority = !root.sort-by-priority; }
+                                }
+
+                                sort-btn-text := Text {
+                                    x: 8px;
+                                    y: 0;
+                                    height: parent.height;
+                                    text: root.sort-by-priority ? "★ Priority" : "⏱ Date";
+                                    color: Theme.text-secondary;
+                                    font-size: Theme.font-xs;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            // Settings button (only for named projects)
+                            if root.selected-project != "": Rectangle {
+                                width: 26px;
+                                height: 26px;
+                                border-radius: Theme.radius-sm;
+                                background: settings-touch.has-hover ? Theme.btn-ghost-hover : transparent;
+                                border-width: 1px;
+                                border-color: root.settings-open ? Theme.accent : (settings-touch.has-hover ? Theme.border : transparent);
+                                y: (56px - 26px) / 2;
+
+                                settings-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => {
+                                        root.settings-open = !root.settings-open;
+                                    }
+                                }
+
+                                Text {
+                                    x: 0; y: 0;
+                                    width: parent.width;
+                                    height: parent.height;
+                                    text: "⚙";
+                                    color: root.settings-open ? Theme.accent : Theme.text-secondary;
+                                    font-size: Theme.font-base;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle { height: 1px; background: Theme.border; }
+
+                    // Settings panel (collapsible)
+                    if root.settings-open && root.selected-project != "": Rectangle {
+                        background: #1a1f2e;
+                        border-color: Theme.border;
+                        border-width: 0;
+
+                        VerticalLayout {
+                            padding: 12px;
+                            spacing: 8px;
+
+                            Text {
+                                text: "Project description — guides how emails are ranked";
+                                color: Theme.text-muted;
+                                font-size: Theme.font-xs;
+                                wrap: word-wrap;
+                            }
+
+                            desc-input := TextInput {
+                                text <=> root.edit-description;
+                                color: Theme.text-primary;
+                                font-size: Theme.font-sm;
+                                height: 72px;
+                                wrap: word-wrap;
+                                single-line: false;
+                            }
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                alignment: end;
+
+                                Rectangle {
+                                    width: cancel-t.preferred-width + 16px;
+                                    height: 28px;
+                                    border-radius: Theme.radius-sm;
+                                    background: cancel-touch.has-hover ? Theme.btn-ghost-hover : transparent;
+                                    border-width: 1px;
+                                    border-color: Theme.border;
+
+                                    cancel-touch := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => { root.settings-open = false; }
+                                    }
+
+                                    cancel-t := Text {
+                                        x: 8px; y: 0;
+                                        height: parent.height;
+                                        text: "Cancel";
+                                        color: Theme.text-secondary;
+                                        font-size: Theme.font-xs;
+                                        vertical-alignment: center;
+                                    }
+                                }
+
+                                Rectangle {
+                                    width: save-t.preferred-width + 16px;
+                                    height: 28px;
+                                    border-radius: Theme.radius-sm;
+                                    background: save-touch.has-hover ? Theme.btn-primary-hover : Theme.btn-primary;
+
+                                    save-touch := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => {
+                                            root.save-description(root.selected-project, root.edit-description);
+                                            root.settings-open = false;
+                                        }
+                                    }
+
+                                    save-t := Text {
+                                        x: 8px; y: 0;
+                                        height: parent.height;
+                                        text: "Save";
+                                        color: #1a1a1a;
+                                        font-size: Theme.font-xs;
+                                        font-weight: 600;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Email list for selected project
+                    ScrollView {
+                        vertical-stretch: 1;
+
+                        VerticalLayout {
+                            width: parent.visible-width;
+                            padding: 8px;
+                            spacing: 6px;
+
+                            // Priority-sorted list (shown when sort-by-priority)
+                            for email in root.all-emails-by-priority: Rectangle {
+                                property <bool> matches: (root.selected-project == "" && email.project == "")
+                                    || (root.selected-project != "" && email.project == root.selected-project);
+                                visible: matches && root.sort-by-priority;
+                                height: (matches && root.sort-by-priority)
+                                    ? ep-card.preferred-height + 20px
+                                    : 0px;
+                                clip: true;
+
+                                ep-card := EmailCard {
+                                    width: parent.width;
+                                    card-data: email;
+                                    view-clicked(uid) => { root.view-clicked(uid); }
+                                    reply-clicked(uid) => { root.reply-clicked(uid); }
+                                }
+                            }
+
+                            // Date-sorted list (shown when !sort-by-priority)
+                            for email in root.all-emails: Rectangle {
+                                property <bool> matches: (root.selected-project == "" && email.project == "")
+                                    || (root.selected-project != "" && email.project == root.selected-project);
+                                visible: matches && !root.sort-by-priority;
+                                height: (matches && !root.sort-by-priority)
+                                    ? ed-card.preferred-height + 20px
+                                    : 0px;
+                                clip: true;
+
+                                ed-card := EmailCard {
+                                    width: parent.width;
+                                    card-data: email;
+                                    view-clicked(uid) => { root.view-clicked(uid); }
+                                    reply-clicked(uid) => { root.reply-clicked(uid); }
+                                }
+                            }
+
+                            // Empty state
+                            if root.all-emails.length == 0: Text {
+                                text: "No emails in this project.";
+                                color: Theme.text-muted;
+                                font-size: Theme.font-sm;
+                                horizontal-alignment: center;
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle { width: 1px; background: Theme.border; }
+
+            // ── Right column: reading pane ────────────────────────────────
+            ReadingPane {
+                horizontal-stretch: 3;
+                has-email: active-uid >= 0;
+                from-header: reading-from;
+                subject-header: reading-subject;
+                date-header: reading-date;
+                body-text: reading-body;
+                reply-clicked => { root.reply-clicked(active-uid); }
+            }
+        }
+    }
+}

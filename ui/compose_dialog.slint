@@ -1,0 +1,194 @@
+import { Theme } from "theme.slint";
+import { LineEdit, TextEdit } from "std-widgets.slint";
+
+// Helper: single-line labeled field row (must be declared before ComposeDialog)
+component FieldRow inherits Rectangle {
+    height: 40px;
+    background: transparent;
+
+    in property <string> label;
+    in-out property <string> content;
+    callback changed(string);
+
+    HorizontalLayout {
+        padding-left: 20px;
+        padding-right: 16px;
+        spacing: 12px;
+
+        Text {
+            text: label;
+            color: Theme.text-muted;
+            font-size: Theme.font-sm;
+            width: 52px;
+            vertical-alignment: center;
+            height: 40px;
+        }
+
+        LineEdit {
+            horizontal-stretch: 1;
+            text <=> root.content;
+            font-size: Theme.font-sm;
+            placeholder-text: "";
+            edited(v) => { root.changed(v); }
+        }
+    }
+}
+
+export component ComposeDialog inherits Rectangle {
+    in-out property <bool> visible-dialog: false;
+    in-out property <string> to-address;
+    in-out property <string> subject-text;
+    in-out property <string> body-text;
+    in property <string> status-message;
+
+    callback send-clicked(string, string, string);
+    callback close-clicked();
+
+    // Full-screen semi-transparent overlay
+    background: #00000099;
+
+    if root.visible-dialog: Rectangle {
+        // Center the dialog
+        width: min(600px, root.width - 48px);
+        height: min(500px, root.height - 80px);
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
+        border-radius: Theme.radius-lg;
+        background: #1e1e1e;
+        border-width: 1px;
+        border-color: Theme.border;
+        drop-shadow-blur: 32px;
+        drop-shadow-color: #00000066;
+
+        VerticalLayout {
+            x: 0; y: 0;
+            width: parent.width;
+            height: parent.height;
+            spacing: 0px;
+
+            // Header
+            Rectangle {
+                height: 52px;
+                background: transparent;
+                border-radius: Theme.radius-lg;
+
+                HorizontalLayout {
+                    padding-left: 20px;
+                    padding-right: 16px;
+                    spacing: 0px;
+
+                    Text {
+                        text: "New Message";
+                        color: Theme.text-primary;
+                        font-size: Theme.font-lg;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                        height: 52px;
+                        horizontal-stretch: 1;
+                    }
+
+                    close-btn := Rectangle {
+                        width: 32px;
+                        height: 32px;
+                        border-radius: 16px;
+                        background: close-touch.has-hover ? Theme.bg-card : transparent;
+                        y: (52px - 32px) / 2;
+
+                        close-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.close-clicked(); }
+                        }
+                        Text {
+                            x: 0; y: 0;
+                            width: parent.width; height: parent.height;
+                            text: "x";
+                            color: Theme.text-muted;
+                            font-size: Theme.font-md;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+
+            // Divider
+            Rectangle { height: 1px; background: Theme.border; }
+
+            // To field
+            FieldRow {
+                label: "To";
+                content: root.to-address;
+                changed(v) => { root.to-address = v; }
+            }
+            Rectangle { height: 1px; background: Theme.border-subtle; }
+
+            // Subject field
+            FieldRow {
+                label: "Subject";
+                content: root.subject-text;
+                changed(v) => { root.subject-text = v; }
+            }
+            Rectangle { height: 1px; background: Theme.border-subtle; }
+
+            // Body
+            TextEdit {
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+                text <=> root.body-text;
+                font-size: Theme.font-base;
+            }
+
+            // Footer
+            Rectangle {
+                height: 1px;
+                background: Theme.border;
+            }
+            Rectangle {
+                height: 56px;
+                background: transparent;
+
+                HorizontalLayout {
+                    padding-left: 20px;
+                    padding-right: 16px;
+                    spacing: 12px;
+
+                    if root.status-message != "": Text {
+                        text: root.status-message;
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-sm;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        height: 56px;
+                    }
+                    if root.status-message == "": Rectangle { horizontal-stretch: 1; }
+
+                    // Send button
+                    send-btn := Rectangle {
+                        width: 100px;
+                        height: 36px;
+                        border-radius: Theme.radius-md;
+                        background: send-touch.has-hover ? Theme.btn-primary-hover : Theme.btn-primary;
+                        y: (56px - 36px) / 2;
+
+                        send-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                root.send-clicked(root.to-address, root.subject-text, root.body-text);
+                            }
+                        }
+                        Text {
+                            x: 0; y: 0;
+                            width: parent.width; height: parent.height;
+                            text: "Send";
+                            color: #1a1a1a;
+                            font-size: Theme.font-sm;
+                            font-weight: 700;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

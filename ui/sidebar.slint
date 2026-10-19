@@ -1,0 +1,316 @@
+import { Theme } from "theme.slint";
+import { ScrollView } from "std-widgets.slint";
+
+component NavItem inherits Rectangle {
+    in property <string> label;
+    in property <string> icon;
+    in property <int> badge-count;
+    in property <bool> active;
+
+    callback clicked();
+
+    height: 34px;
+
+    background: nav-touch.has-hover ? Theme.btn-ghost-hover
+              : active ? #202020
+              : transparent;
+    border-radius: Theme.radius-sm;
+
+    nav-touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 12px;
+        spacing: 8px;
+        alignment: start;
+
+        Text {
+            text: icon;
+            font-size: 12px;
+            vertical-alignment: center;
+            height: 34px;
+            width: 16px;
+        }
+        Text {
+            text: label;
+            color: active ? Theme.text-primary : Theme.text-secondary;
+            font-size: Theme.font-sm;
+            font-weight: active ? 600 : 400;
+            vertical-alignment: center;
+            height: 34px;
+            horizontal-stretch: 1;
+        }
+        if badge-count > 0: Rectangle {
+            width: badge-text.preferred-width + 10px;
+            height: 18px;
+            border-radius: 9px;
+            background: active ? Theme.accent : Theme.bg-card;
+            y: (34px - 18px) / 2;
+
+            badge-text := Text {
+                x: 5px;
+                y: 0;
+                height: parent.height;
+                text: badge-count;
+                color: active ? #1a1a1a : Theme.text-muted;
+                font-size: Theme.font-xs;
+                font-weight: 600;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+export component Sidebar inherits Rectangle {
+    width: 220px;
+    background: Theme.bg-sidebar;
+
+    callback compose-clicked();
+    callback refresh-clicked();
+    callback settings-clicked();
+    callback panel-changed(string);
+
+    in property <string> active-panel: "overview";
+    in property <int> inbox-count;
+    in property <int> triage-count;
+    in property <int> task-count;
+    in property <int> project-count;
+    in property <int> deadline-count;
+    in property <int> sent-count;
+    in property <int> drafts-count;
+    in property <int> trash-count;
+
+    VerticalLayout {
+        x: 0;
+        y: 0;
+        width: parent.width;
+        height: parent.height;
+        spacing: 0px;
+
+        // App branding
+        Rectangle {
+            height: 60px;
+            background: transparent;
+            HorizontalLayout {
+                padding-left: 20px;
+                spacing: 8px;
+                alignment: start;
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 6px;
+                    background: Theme.accent;
+                    y: (60px - 24px) / 2;
+                    Text {
+                        x: 0; y: 0;
+                        width: parent.width;
+                        height: parent.height;
+                        text: "C";
+                        color: #1a1a1a;
+                        font-size: Theme.font-md;
+                        font-weight: 800;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                Text {
+                    text: "Courriel";
+                    color: Theme.text-primary;
+                    font-size: Theme.font-lg;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                    height: 60px;
+                }
+            }
+        }
+
+        Rectangle { height: 1px; background: Theme.border; }
+
+        // Navigation items
+        ScrollView {
+            vertical-stretch: 1;
+
+        VerticalLayout {
+            width: parent.visible-width;
+            padding-top: 12px;
+            spacing: 2px;
+
+            NavItem {
+                label: "Overview";
+                icon: "⊞";
+                badge-count: 0;
+                active: active-panel == "overview";
+                clicked => { root.panel-changed("overview"); }
+            }
+            NavItem {
+                label: "Inbox";
+                icon: "✉";
+                badge-count: inbox-count;
+                active: active-panel == "inbox";
+                clicked => { root.panel-changed("inbox"); }
+            }
+            NavItem {
+                label: "AI Triage";
+                icon: "★";
+                badge-count: triage-count;
+                active: active-panel == "triage";
+                clicked => { root.panel-changed("triage"); }
+            }
+            NavItem {
+                label: "Tasks";
+                icon: "✓";
+                badge-count: task-count;
+                active: active-panel == "tasks";
+                clicked => { root.panel-changed("tasks"); }
+            }
+            NavItem {
+                label: "Projects";
+                icon: "◈";
+                badge-count: project-count;
+                active: active-panel == "projects";
+                clicked => { root.panel-changed("projects"); }
+            }
+            NavItem {
+                label: "Calendar";
+                icon: "◷";
+                badge-count: deadline-count;
+                active: active-panel == "calendar";
+                clicked => { root.panel-changed("calendar"); }
+            }
+
+            Rectangle { height: 6px; }
+            Rectangle { height: 1px; background: Theme.border-subtle; }
+            Rectangle { height: 2px; }
+
+            NavItem {
+                label: "Sent";
+                icon: "↗";
+                badge-count: 0;
+                active: active-panel == "sent";
+                clicked => { root.panel-changed("sent"); }
+            }
+            NavItem {
+                label: "Drafts";
+                icon: "✎";
+                badge-count: drafts-count;
+                active: active-panel == "drafts";
+                clicked => { root.panel-changed("drafts"); }
+            }
+            NavItem {
+                label: "Trash";
+                icon: "🗑";
+                badge-count: 0;
+                active: active-panel == "trash";
+                clicked => { root.panel-changed("trash"); }
+            }
+        }
+
+        } // ScrollView
+
+        Rectangle { height: 1px; background: Theme.border; }
+
+        VerticalLayout {
+            padding: 12px;
+            spacing: 6px;
+
+            refresh-btn := Rectangle {
+                height: 36px;
+                border-radius: Theme.radius-md;
+                background: refresh-touch.has-hover ? Theme.btn-ghost-hover : transparent;
+                border-width: 1px;
+                border-color: refresh-touch.has-hover ? Theme.border : transparent;
+
+                refresh-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.refresh-clicked(); }
+                }
+                HorizontalLayout {
+                    padding-left: 12px;
+                    spacing: 8px;
+                    alignment: start;
+                    Text {
+                        text: "↺";
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-lg;
+                        vertical-alignment: center;
+                        height: 36px;
+                    }
+                    Text {
+                        text: "Refresh";
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-sm;
+                        vertical-alignment: center;
+                        height: 36px;
+                    }
+                }
+            }
+
+            settings-btn := Rectangle {
+                height: 36px;
+                border-radius: Theme.radius-md;
+                background: settings-touch.has-hover ? Theme.btn-ghost-hover : transparent;
+                border-width: 1px;
+                border-color: settings-touch.has-hover ? Theme.border : transparent;
+
+                settings-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.settings-clicked(); }
+                }
+                HorizontalLayout {
+                    padding-left: 12px;
+                    spacing: 8px;
+                    alignment: start;
+                    Text {
+                        text: "⚙";
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-lg;
+                        vertical-alignment: center;
+                        height: 36px;
+                    }
+                    Text {
+                        text: "Settings";
+                        color: Theme.text-secondary;
+                        font-size: Theme.font-sm;
+                        vertical-alignment: center;
+                        height: 36px;
+                    }
+                }
+            }
+
+            compose-btn := Rectangle {
+                height: 36px;
+                border-radius: Theme.radius-md;
+                background: compose-touch.has-hover ? Theme.btn-primary-hover : Theme.btn-primary;
+
+                compose-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.compose-clicked(); }
+                }
+                HorizontalLayout {
+                    padding-left: 12px;
+                    spacing: 8px;
+                    alignment: start;
+                    Text {
+                        text: "+";
+                        color: #1a1a1a;
+                        font-size: Theme.font-lg;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                        height: 36px;
+                    }
+                    Text {
+                        text: "Compose";
+                        color: #1a1a1a;
+                        font-size: Theme.font-sm;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                        height: 36px;
+                    }
+                }
+            }
+        }
+    }
+}

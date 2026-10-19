@@ -1,0 +1,36 @@
+{
+  "productName": "Courriel",
+  "version": "0.1.0",
+  "identifier": "io.courriel.app",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "Courriel",
+        "width": 1200,
+        "height": 720,
+        "minWidth": 900,
+        "minHeight": 500,
+        "resizable": true,
+        "decorations": true,
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false,
+    "targets": "all",
+    "icon": []
+  },
+  "plugins": {
+    "shell": {
+      "open": true
+    }
+  }
+}

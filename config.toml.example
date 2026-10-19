@@ -1,0 +1,46 @@
+# Copy this file to config.toml (next to this file) and fill in your details.
+# config.toml is git-ignored: it holds your passwords and API keys.
+
+[user]
+display_name = "Your Name"
+font_scale = 1.0
+
+# One [[accounts]] block per mailbox. The first account is used for sending,
+# moving to Trash/Spam and marking read.
+[[accounts]]
+name = "Personal"
+
+[accounts.imap]
+# Gmail: imap.gmail.com · Outlook: outlook.office365.com · Yahoo: imap.mail.yahoo.com
+host = "imap.gmail.com"
+port = 993
+username = "you@gmail.com"
+# Gmail: use an App Password (myaccount.google.com/apppasswords)
+password = "your-app-password"
+mailbox = "INBOX"
+fetch_count = 50
+
+[accounts.smtp]
+# Port 465 = implicit TLS, 587 = STARTTLS
+# Gmail: smtp.gmail.com · Outlook: smtp.office365.com · Yahoo: smtp.mail.yahoo.com
+host = "smtp.gmail.com"
+port = 587
+username = "you@gmail.com"
+password = "your-app-password"
+from_address = "Your Name <you@gmail.com>"
+
+[claude]
+# Get a key at https://console.anthropic.com/
+api_key = "sk-ant-api03-..."
+model = "claude-opus-4-6"
+max_tokens = 300
+
+# Optional: GIF picker in the composer (free key at https://developers.giphy.com/)
+[gifs]
+giphy_api_key = ""
+
+# Optional: projects the AI sorts your emails into.
+[[projects]]
+name = "Work"
+description = "Emails about my job. People: colleagues, management, HR. Keywords: meeting, report, leave."
+urgency = "normal"

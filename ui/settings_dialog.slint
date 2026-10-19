@@ -1,0 +1,665 @@
+import { Theme } from "theme.slint";
+import { Slider, ScrollView } from "std-widgets.slint";
+
+// ── Shared sub-components ────────────────────────────────────────────────────
+
+component TabButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+    callback clicked();
+
+    height: 34px;
+    border-radius: Theme.radius-sm;
+    background: active ? Theme.bg-card : (tab-touch.has-hover ? Theme.btn-ghost-hover : transparent);
+
+    tab-touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    Text {
+        x: 0; y: 0;
+        width: parent.width; height: parent.height;
+        text: label;
+        color: active ? Theme.accent : Theme.text-secondary;
+        font-size: Theme.font-sm;
+        font-weight: active ? 700 : 400;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+// Single-line labeled field
+component SettingsField inherits Rectangle {
+    height: 42px;
+    background: transparent;
+
+    in property <string> label;
+    in-out property <string> value;
+    in property <bool> password: false;
+
+    HorizontalLayout {
+        padding-left: 0px;
+        spacing: 12px;
+
+        Text {
+            text: label;
+            color: Theme.text-muted;
+            font-size: Theme.font-sm;
+            width: 110px;
+            vertical-alignment: center;
+            height: 42px;
+        }
+
+        Rectangle {
+            horizontal-stretch: 1;
+            height: 42px;
+            clip: true;
+            background: transparent;
+
+            TextInput {
+                x: 0;
+                width: parent.width;
+                text <=> root.value;
+                color: Theme.text-primary;
+                font-size: Theme.font-sm;
+                vertical-alignment: center;
+                height: parent.height;
+                single-line: true;
+                input-type: root.password ? InputType.password : InputType.text;
+            }
+        }
+    }
+}
+
+// Section heading
+component SectionHead inherits Text {
+    color: Theme.text-muted;
+    font-size: Theme.font-xs;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    height: 28px;
+    vertical-alignment: center;
+}
+
+// ── Data types ───────────────────────────────────────────────────────────────
+
+export struct AccountData {
+    label: string,        // e.g. "Work", "Personal"
+    imap-host: string,
+    imap-port: string,
+    imap-user: string,
+    imap-pass: string,
+    imap-mailbox: string,
+    imap-fetch: string,
+    smtp-host: string,
+    smtp-port: string,
+    smtp-user: string,
+    smtp-pass: string,
+    smtp-from: string,
+}
+
+// ── Main Settings Dialog ─────────────────────────────────────────────────────
+
+export component SettingsDialog inherits Rectangle {
+    background: #00000099;
+
+    // Accounts list passed in from Rust; dialog maintains an editable copy.
+    in property <[AccountData]> accounts;
+    in property <string> display-name;
+    in property <string> claude-key;
+    in property <string> claude-model;
+
+    in property <string> qr-text;
+    in property <string> save-status;
+
+    in-out property <float> font-scale: 1.0;
+
+    callback close();
+    callback save-all(string, [AccountData], string, string, float); // (display-name, accounts, claude-key, claude-model, font-scale)
+    callback request-qr();
+
+    // ── Editable local state ─────────────────────────────────────────────
+    private property <string> f-display-name: display-name;
+    private property <string> f-claude-key: claude-key;
+    private property <string> f-claude-model: claude-model;
+    private property <string> active-tab: "appearance";
+
+    // Selected account index in the list
+    private property <int> sel: 0;
+
+    // Flat editable mirrors for the selected account's fields.
+    // Populated when sel changes via the account-list touch areas.
+    private property <string> f-label;
+    private property <string> f-imap-host;
+    private property <string> f-imap-port;
+    private property <string> f-imap-user;
+    private property <string> f-imap-pass;
+    private property <string> f-imap-mailbox;
+    private property <string> f-imap-fetch;
+    private property <string> f-smtp-host;
+    private property <string> f-smtp-port;
+    private property <string> f-smtp-user;
+    private property <string> f-smtp-pass;
+    private property <string> f-smtp-from;
+
+    // Working copy of accounts list (we pass this back on save).
+    // Slint doesn't allow mutation of model elements in-place easily,
+    // so we carry the list as a property and rebuild it on save.
+    private property <[AccountData]> accs: accounts;
+
+    // Callback from Rust to add a blank account (index returned via new-account-index)
+    callback add-account();
+    callback delete-account(int);
+
+    // ── Helper: load fields from acc[sel] ─────────────────────────────────
+    // Called inside touch-area clicked handlers.
+
+    // Dismiss on backdrop click
+    outer-touch := TouchArea {
+        clicked => { root.close(); }
+    }
+
+    // ── Dialog card ──────────────────────────────────────────────────────
+    Rectangle {
+        width: min(820px, root.width - 48px);
+        height: min(600px, root.height - 64px);
+        x: (root.width  - self.width)  / 2;
+        y: (root.height - self.height) / 2;
+        border-radius: Theme.radius-lg;
+        background: #1c1c1c;
+        border-width: 1px;
+        border-color: Theme.border;
+        drop-shadow-blur: 40px;
+        drop-shadow-color: #00000088;
+
+        inner-touch := TouchArea { }
+
+        VerticalLayout {
+            x: 0; y: 0;
+            width: parent.width;
+            height: parent.height;
+            spacing: 0px;
+
+            // ── Header ───────────────────────────────────────────────────
+            Rectangle {
+                height: 52px;
+                background: transparent;
+
+                HorizontalLayout {
+                    padding-left: 24px;
+                    padding-right: 16px;
+
+                    Text {
+                        text: "Settings";
+                        color: Theme.text-primary;
+                        font-size: Theme.font-lg;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                        height: 52px;
+                        horizontal-stretch: 1;
+                    }
+
+                    Rectangle {
+                        width: 32px; height: 32px;
+                        border-radius: 16px;
+                        background: close-t.has-hover ? Theme.bg-card : transparent;
+                        y: (52px - 32px) / 2;
+
+                        close-t := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { root.close(); }
+                        }
+                        Text {
+                            x: 0; y: 0;
+                            width: parent.width; height: parent.height;
+                            text: "✕";
+                            color: Theme.text-muted;
+                            font-size: Theme.font-sm;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+
+            Rectangle { height: 1px; background: Theme.border; }
+
+            HorizontalLayout {
+                spacing: 0px;
+                vertical-stretch: 1;
+
+                // ── Left main-tab rail ────────────────────────────────────
+                Rectangle {
+                    width: 150px;
+                    background: #161616;
+
+                    VerticalLayout {
+                        padding: 12px;
+                        spacing: 4px;
+
+                        TabButton {
+                            label: "Appearance";
+                            active: root.active-tab == "appearance";
+                            clicked => { root.active-tab = "appearance"; }
+                        }
+                        TabButton {
+                            label: "Accounts";
+                            active: root.active-tab == "account";
+                            clicked => { root.active-tab = "account"; }
+                        }
+                        TabButton {
+                            label: "Mobile / QR";
+                            active: root.active-tab == "export";
+                            clicked => {
+                                root.active-tab = "export";
+                                root.request-qr();
+                            }
+                        }
+
+                        Rectangle { vertical-stretch: 1; }
+                    }
+                }
+
+                Rectangle { width: 1px; background: Theme.border; }
+
+                // ── Right content ─────────────────────────────────────────
+                Rectangle {
+                    horizontal-stretch: 1;
+                    background: transparent;
+
+                    // ══ Appearance ═══════════════════════════════════════════
+                    if root.active-tab == "appearance": VerticalLayout {
+                        padding: 24px;
+                        spacing: 24px;
+                        x: 0; y: 0;
+                        width: parent.width;
+
+                        SectionHead { text: "FONT SIZE"; }
+
+                        HorizontalLayout {
+                            spacing: 16px;
+
+                            Text {
+                                text: "A";
+                                color: Theme.text-muted;
+                                font-size: 11px;
+                                vertical-alignment: center;
+                                width: 16px;
+                            }
+
+                            zoom-slider := Slider {
+                                horizontal-stretch: 1;
+                                minimum: 0.75;
+                                maximum: 1.5;
+                                value <=> root.font-scale;
+                            }
+
+                            Text {
+                                text: "A";
+                                color: Theme.text-muted;
+                                font-size: 18px;
+                                vertical-alignment: center;
+                                width: 18px;
+                            }
+
+                            Text {
+                                text: Math.round(root.font-scale * 100) + "%";
+                                color: Theme.accent;
+                                font-size: Theme.font-sm;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                                width: 42px;
+                            }
+                        }
+
+                        HorizontalLayout {
+                            alignment: start;
+                            Rectangle {
+                                width: reset-t.preferred-width + 20px;
+                                height: 30px;
+                                border-radius: Theme.radius-sm;
+                                background: reset-touch.has-hover ? Theme.btn-ghost-hover : transparent;
+                                border-width: 1px;
+                                border-color: Theme.border;
+
+                                reset-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { root.font-scale = 1.0; }
+                                }
+                                reset-t := Text {
+                                    x: 10px; y: 0;
+                                    height: parent.height;
+                                    text: "Reset to 100%";
+                                    color: Theme.text-secondary;
+                                    font-size: Theme.font-xs;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        Rectangle { vertical-stretch: 1; }
+                    }
+
+                    // ══ Accounts ══════════════════════════════════════════════
+                    if root.active-tab == "account": HorizontalLayout {
+                        x: 0; y: 0;
+                        width: parent.width;
+                        height: parent.height;
+                        spacing: 0px;
+
+                        // ── Account list (left sub-rail) ──────────────────
+                        Rectangle {
+                            width: 160px;
+                            background: #181818;
+
+                            VerticalLayout {
+                                spacing: 0px;
+
+                                // Account rows
+                                ScrollView {
+                                    vertical-stretch: 1;
+
+                                    VerticalLayout {
+                                        width: parent.visible-width;
+                                        padding-top: 8px;
+                                        padding-bottom: 4px;
+                                        spacing: 2px;
+
+                                        for acc[idx] in root.accs: Rectangle {
+                                            height: 40px;
+                                            background: idx == root.sel
+                                                ? Theme.bg-card
+                                                : (acc-touch.has-hover ? Theme.btn-ghost-hover : transparent);
+
+                                            acc-touch := TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => {
+                                                    // Commit current edits back before switching.
+                                                    root.sel = idx;
+                                                    root.f-label        = acc.label;
+                                                    root.f-imap-host    = acc.imap-host;
+                                                    root.f-imap-port    = acc.imap-port;
+                                                    root.f-imap-user    = acc.imap-user;
+                                                    root.f-imap-pass    = acc.imap-pass;
+                                                    root.f-imap-mailbox = acc.imap-mailbox;
+                                                    root.f-imap-fetch   = acc.imap-fetch;
+                                                    root.f-smtp-host    = acc.smtp-host;
+                                                    root.f-smtp-port    = acc.smtp-port;
+                                                    root.f-smtp-user    = acc.smtp-user;
+                                                    root.f-smtp-pass    = acc.smtp-pass;
+                                                    root.f-smtp-from    = acc.smtp-from;
+                                                }
+                                            }
+
+                                            HorizontalLayout {
+                                                padding-left: 12px;
+                                                padding-right: 6px;
+                                                spacing: 4px;
+
+                                                Text {
+                                                    text: acc.label == "" ? "Account " + (idx + 1) : acc.label;
+                                                    color: idx == root.sel ? Theme.text-primary : Theme.text-secondary;
+                                                    font-size: Theme.font-sm;
+                                                    font-weight: idx == root.sel ? 600 : 400;
+                                                    vertical-alignment: center;
+                                                    horizontal-stretch: 1;
+                                                    overflow: elide;
+                                                    height: 40px;
+                                                }
+
+                                                // Delete button (only if more than 1 account)
+                                                if root.accs.length > 1: Rectangle {
+                                                    width: 20px; height: 20px;
+                                                    border-radius: 10px;
+                                                    background: del-t.has-hover ? #3a1a1a : transparent;
+                                                    y: (40px - 20px) / 2;
+
+                                                    del-t := TouchArea {
+                                                        mouse-cursor: pointer;
+                                                        clicked => {
+                                                            root.delete-account(idx);
+                                                        }
+                                                    }
+                                                    Text {
+                                                        x: 0; y: 0;
+                                                        width: parent.width; height: parent.height;
+                                                        text: "✕";
+                                                        color: Theme.text-muted;
+                                                        font-size: Theme.font-xs;
+                                                        horizontal-alignment: center;
+                                                        vertical-alignment: center;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // "Add account" button
+                                Rectangle { height: 1px; background: Theme.border; }
+                                Rectangle {
+                                    height: 36px;
+                                    background: add-touch.has-hover ? Theme.btn-ghost-hover : transparent;
+
+                                    add-touch := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => { root.add-account(); }
+                                    }
+
+                                    HorizontalLayout {
+                                        padding-left: 12px;
+                                        spacing: 6px;
+                                        alignment: start;
+
+                                        Text {
+                                            text: "+";
+                                            color: Theme.accent;
+                                            font-size: Theme.font-lg;
+                                            font-weight: 700;
+                                            vertical-alignment: center;
+                                            height: 36px;
+                                        }
+                                        Text {
+                                            text: "Add account";
+                                            color: Theme.accent;
+                                            font-size: Theme.font-xs;
+                                            vertical-alignment: center;
+                                            height: 36px;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle { width: 1px; background: Theme.border; }
+
+                        // ── Account fields (right) ────────────────────────
+                        Rectangle {
+                            horizontal-stretch: 1;
+
+                            VerticalLayout {
+                                spacing: 0px;
+
+                                ScrollView {
+                                    vertical-stretch: 1;
+
+                                    VerticalLayout {
+                                        width: parent.visible-width;
+                                        padding: 20px;
+                                        spacing: 4px;
+
+                                        SectionHead { text: "IDENTITY"; }
+                                        Rectangle { height: 1px; background: Theme.border-subtle; }
+                                        SettingsField { label: "Display name"; value <=> root.f-display-name; }
+
+                                        Rectangle { height: 6px; }
+                                        SectionHead { text: "ACCOUNT LABEL"; }
+                                        Rectangle { height: 1px; background: Theme.border-subtle; }
+                                        SettingsField { label: "Label"; value <=> root.f-label; }
+
+                                        Rectangle { height: 6px; }
+                                        SectionHead { text: "IMAP — INCOMING"; }
+                                        Rectangle { height: 1px; background: Theme.border-subtle; }
+                                        SettingsField { label: "Host"; value <=> root.f-imap-host; }
+                                        Rectangle { height: 1px; background: Theme.border-subtle; }
+                                        SettingsField { label: "Port"; value <=> root.f-imap-port; }
+                                        Rectangle { height: 1px; background: Theme.border-subtle; }
+                                        SettingsField { label: "Username"; value <=> root.f-imap-user; }
+                                        Rectangle { height: 1px; background: Theme.border-subtle; }
+                                        SettingsField { label: "Password"; value <=> root.f-imap-pass; password: true; }
+                                        Rectangle { height: 1px; background: Theme.border-subtle; }
+                                        SettingsField { label: "Mailbox"; value <=> root.f-imap-mailbox; }
+                                        Rectangle { height: 1px; background: Theme.border-subtle; }
+                                        SettingsField { label: "Fetch count"; value <=> root.f-imap-fetch; }
+
+                                        Rectangle { height: 6px; }
+                                        SectionHead { text: "SMTP — OUTGOING"; }
+                                        Rectangle { height: 1px; background: Theme.border-subtle; }
+                                        SettingsField { label: "Host"; value <=> root.f-smtp-host; }
+                                        Rectangle { height: 1px; background: Theme.border-subtle; }
+                                        SettingsField { label: "Port"; value <=> root.f-smtp-port; }
+                                        Rectangle { height: 1px; background: Theme.border-subtle; }
+                                        SettingsField { label: "Username"; value <=> root.f-smtp-user; }
+                                        Rectangle { height: 1px; background: Theme.border-subtle; }
+                                        SettingsField { label: "Password"; value <=> root.f-smtp-pass; password: true; }
+                                        Rectangle { height: 1px; background: Theme.border-subtle; }
+                                        SettingsField { label: "From address"; value <=> root.f-smtp-from; }
+
+                                        Rectangle { height: 6px; }
+                                        SectionHead { text: "AI — CLAUDE"; }
+                                        Rectangle { height: 1px; background: Theme.border-subtle; }
+                                        SettingsField { label: "API key"; value <=> root.f-claude-key; password: true; }
+                                        Rectangle { height: 1px; background: Theme.border-subtle; }
+                                        SettingsField { label: "Model"; value <=> root.f-claude-model; }
+                                    }
+                                }
+
+                                // Footer
+                                Rectangle { height: 1px; background: Theme.border; }
+                                Rectangle {
+                                    height: 52px;
+                                    background: transparent;
+
+                                    HorizontalLayout {
+                                        padding-left: 20px;
+                                        padding-right: 20px;
+                                        spacing: 12px;
+
+                                        if root.save-status != "": Text {
+                                            text: root.save-status;
+                                            color: Theme.text-secondary;
+                                            font-size: Theme.font-sm;
+                                            vertical-alignment: center;
+                                            horizontal-stretch: 1;
+                                            height: 52px;
+                                        }
+                                        if root.save-status == "": Rectangle { horizontal-stretch: 1; }
+
+                                        Rectangle {
+                                            width: save-t.preferred-width + 24px;
+                                            height: 34px;
+                                            border-radius: Theme.radius-md;
+                                            background: save-btn-t.has-hover ? Theme.btn-primary-hover : Theme.btn-primary;
+                                            y: (52px - 34px) / 2;
+
+                                            save-btn-t := TouchArea {
+                                                mouse-cursor: pointer;
+                                                clicked => {
+                                                    root.save-all(
+                                                        root.f-display-name,
+                                                        root.accs,
+                                                        root.f-claude-key,
+                                                        root.f-claude-model,
+                                                        root.font-scale,
+                                                    );
+                                                }
+                                            }
+                                            save-t := Text {
+                                                x: 12px; y: 0;
+                                                height: parent.height;
+                                                text: "Save all";
+                                                color: #1a1a1a;
+                                                font-size: Theme.font-sm;
+                                                font-weight: 700;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ══ Mobile / QR ════════════════════════════════════════════
+                    if root.active-tab == "export": VerticalLayout {
+                        x: 0; y: 0;
+                        width: parent.width;
+                        height: parent.height;
+                        padding: 24px;
+                        spacing: 16px;
+
+                        Text {
+                            text: "Scan this QR code with a compatible mail app to import your account settings.";
+                            color: Theme.text-secondary;
+                            font-size: Theme.font-sm;
+                            wrap: word-wrap;
+                        }
+
+                        Rectangle {
+                            vertical-stretch: 1;
+                            background: #ffffff;
+                            border-radius: Theme.radius-md;
+
+                            if root.qr-text == "": Text {
+                                x: 0; y: 0;
+                                width: parent.width; height: parent.height;
+                                text: "Generating…";
+                                color: #888888;
+                                font-size: Theme.font-sm;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+
+                            if root.qr-text != "": Text {
+                                x: 0; y: 0;
+                                width: parent.width; height: parent.height;
+                                text: root.qr-text;
+                                color: #000000;
+                                font-size: 6px;
+                                font-family: "monospace";
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                wrap: no-wrap;
+                            }
+                        }
+
+                        HorizontalLayout {
+                            alignment: end;
+                            Rectangle {
+                                width: regen-t.preferred-width + 20px;
+                                height: 30px;
+                                border-radius: Theme.radius-sm;
+                                background: regen-touch.has-hover ? Theme.btn-ghost-hover : transparent;
+                                border-width: 1px;
+                                border-color: Theme.border;
+
+                                regen-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => { root.request-qr(); }
+                                }
+                                regen-t := Text {
+                                    x: 10px; y: 0;
+                                    height: parent.height;
+                                    text: "Regenerate";
+                                    color: Theme.text-secondary;
+                                    font-size: Theme.font-xs;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
