@@ -1,4 +1,6 @@
-# LeCourriel
+<p align="center"><img src="assets/logo-ceres.png" alt="Le courriel logo" width="160"></p>
+
+# Le courriel
 
 An AI-assisted desktop email client built with [Tauri 2](https://tauri.app/) (Rust backend, HTML/JS UI).
 It connects to any IMAP/SMTP mailbox and uses Claude to triage your inbox.
@@ -70,6 +72,48 @@ Run this from the repository root too.
 
 ```sh
 cargo test --manifest-path src-tauri/Cargo.toml
+```
+
+## Sync with your PostgreSQL (optional)
+
+Le courriel can sync its data with **your own PostgreSQL server**, so a second computer gets
+your tasks, preferences and AI results without paying to re-classify every email.
+Local files remain the working copy: the app keeps working offline and syncs at the next start.
+
+1. On the server, create a database and a user:
+
+   ```sql
+   CREATE DATABASE courriel;
+   CREATE USER courriel WITH PASSWORD 'choose-a-password';
+   GRANT ALL PRIVILEGES ON DATABASE courriel TO courriel;
+   \c courriel
+   GRANT ALL ON SCHEMA public TO courriel;
+   ```
+
+2. In the app, open **⚙ Settings → Database**, paste the URL and press **Test connection**:
+
+   ```
+   postgres://courriel:choose-a-password@db.example.com:5432/courriel?sslmode=require
+   ```
+
+   `sslmode` can be `disable`, `prefer` (default) or `require`. Tick **Accept self-signed
+   certificates** if your server uses one. Then press **Save**; the first sync runs at once.
+
+The app creates its two tables itself (`courriel_documents`, `courriel_ai_results`). Rows are keyed
+by your mailbox (`user@imap-host`), so several mailboxes can share one database.
+
+| Synced | Never synced |
+|---|---|
+| Task board, swipe dismissals, project tags | Mail passwords (IMAP/SMTP) |
+| Projects, display name, font size, theme, language, Claude model | Claude and GIPHY API keys |
+| AI results per email (priority, summary, project, deadline, task) — no email bodies | The database URL itself |
+
+When both sides changed, the most recent version wins (per document).
+
+To check the sync against your server:
+
+```sh
+TEST_DATABASE_URL='postgres://…' cargo test --manifest-path src-tauri/Cargo.toml -- --ignored
 ```
 
 ## Files the app creates

@@ -1,4 +1,4 @@
-// Courriel — an AI-assisted email client.
+// Le courriel — an AI-assisted email client.
 // Copyright (C) 2026 Remi Lhoste
 //
 // This program is free software: you can redistribute it and/or modify

@@ -1,4 +1,4 @@
-/// Unit tests for Courriel backend logic.
+/// Unit tests for Le courriel backend logic.
 /// Run with: cargo test
 #[cfg(test)]
 mod tests {
@@ -260,7 +260,7 @@ api_key = "k" model = "m" max_tokens = 100
 
     fn make_test_config() -> Config {
         Config {
-            user: UserConfig { display_name: "Test".to_string(), font_scale: 1.0 },
+            user: UserConfig { display_name: "Test".to_string(), font_scale: 1.0, theme: "midnight".to_string(), language: "en".to_string() },
             accounts: vec![AccountConfig {
                 name: "Work".to_string(),
                 imap: ImapConfig {
@@ -281,6 +281,7 @@ api_key = "k" model = "m" max_tokens = 100
             },
             projects: vec![],
             gifs: Default::default(),
+            database: None,
         }
     }
 
@@ -532,6 +533,257 @@ api_key = "k" model = "m" max_tokens = 100
         assert_eq!(strip_fences("```html\n<p>Hi</p>\n```"), "<p>Hi</p>");
         assert_eq!(strip_fences("```\n<p>Hi</p>```"), "<p>Hi</p>");
         assert_eq!(strip_fences("  <p>Hi</p> "), "<p>Hi</p>");
+    }
+
+
+    // ── Theme ─────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_theme_defaults_and_roundtrip() {
+        let toml_str = r#"
+[user]
+display_name = "A"
+
+[claude]
+api_key = "k"
+model = "m"
+max_tokens = 10
+"#;
+        let mut cfg: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(cfg.user.theme, "midnight");
+        cfg.user.theme = "brutalist".into();
+        let back: Config = toml::from_str(&toml::to_string_pretty(&cfg).unwrap()).unwrap();
+        assert_eq!(back.user.theme, "brutalist");
+        assert_eq!(config_to_dto(&back).theme, "brutalist");
+    }
+
+
+    // ── Overview week strip ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_week_strip_starts_today() {
+        use crate::app_state::build_week_days;
+        use chrono::NaiveDate;
+        // Wednesday 21 Oct 2026; a deadline on Tue 27 Oct must be the last day shown.
+        let today = NaiveDate::from_ymd_opt(2026, 10, 21).unwrap();
+        let mut card = make_test_card(42, Priority::Task);
+        card.subject = "Defense rehearsal".into();
+        let past = make_test_card(43, Priority::Task);
+        let deadlines = vec![
+            (NaiveDate::from_ymd_opt(2026, 10, 27).unwrap(), card),
+            (NaiveDate::from_ymd_opt(2026, 10, 19).unwrap(), past), // before today: not shown
+        ];
+        let days = build_week_days(today, &deadlines);
+        assert_eq!(days.len(), 7);
+        assert_eq!((days[0].day_name.as_str(), days[0].day_number), ("Wed", 21));
+        assert!(days[0].is_today);
+        assert!(days[1..].iter().all(|d| !d.is_today));
+        assert_eq!((days[6].day_name.as_str(), days[6].day_number), ("Tue", 27));
+        assert_eq!(days[6].dl1_subject, "Defense rehearsal");
+        assert!(days.iter().all(|d| d.dl1_uid != 43 || d.dl1_subject.is_empty()));
+    }
+
+    #[test]
+    fn test_week_strip_crosses_month_end() {
+        use crate::app_state::build_week_days;
+        use chrono::NaiveDate;
+        let today = NaiveDate::from_ymd_opt(2026, 10, 29).unwrap();
+        let nums: Vec<u32> = build_week_days(today, &[]).iter().map(|d| d.day_number).collect();
+        assert_eq!(nums, vec![29, 30, 31, 1, 2, 3, 4]);
+    }
+
+
+    // ── Language ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_i18n_dates() {
+        use crate::i18n::{day_month, full_datetime, short_day, Lang};
+        use chrono::NaiveDate;
+        let d = NaiveDate::from_ymd_opt(2026, 10, 20).unwrap();   // a Tuesday
+        let dt = d.and_hms_opt(9, 5, 0).unwrap();
+        assert_eq!(short_day(&d, Lang::En), "Tue");
+        assert_eq!(short_day(&d, Lang::Fr), "mar.");
+        assert_eq!(day_month(&d, Lang::En), "Oct 20");
+        assert_eq!(day_month(&d, Lang::Fr), "20 oct.");
+        assert_eq!(full_datetime(&dt, Lang::En), "Tuesday 20 October 2026, 09:05");
+        assert_eq!(full_datetime(&dt, Lang::Fr), "mardi 20 octobre 2026, 09:05");
+        let feb = NaiveDate::from_ymd_opt(2027, 2, 1).unwrap();
+        assert_eq!(day_month(&feb, Lang::Fr), "1 févr.");
+        assert_eq!(day_month(&feb, Lang::En), "Feb 01");
+    }
+
+    #[test]
+    fn test_i18n_texts() {
+        use crate::i18n::{briefing_cached, briefing_live, classifying, greeting, Lang};
+        assert_eq!(greeting(9, "Remi", Lang::En), "Good morning, Remi.");
+        assert_eq!(greeting(20, "Remi", Lang::En), "Good evening, Remi.");
+        assert_eq!(greeting(9, "Remi", Lang::Fr), "Bonjour, Remi.");
+        assert_eq!(greeting(19, "Remi", Lang::Fr), "Bonsoir, Remi.");
+        assert_eq!(greeting(9, "", Lang::Fr), "Bonjour.");
+        assert_eq!(briefing_live(10, 42, 3, Lang::En), "Briefed at 10:42 · 3 require your attention");
+        assert_eq!(briefing_live(10, 42, 1, Lang::En), "Briefed at 10:42 · 1 requires you");
+        assert_eq!(briefing_live(10, 42, 3, Lang::Fr), "Résumé à 10h42 · 3 e-mails demandent votre attention");
+        assert_eq!(briefing_cached(1, Lang::Fr), "En cache · 1 e-mail demande votre attention");
+        assert_eq!(briefing_cached(0, Lang::Fr), "En cache · rien ne demande votre attention");
+        assert_eq!(classifying(1, Lang::Fr), "Classement d'un nouvel e-mail par l'IA…");
+        assert_eq!(classifying(4, Lang::En), "Classifying 4 new emails with AI…");
+    }
+
+    #[test]
+    fn test_language_default_and_roundtrip() {
+        let mut cfg: Config = toml::from_str(
+            "[user]\ndisplay_name = \"A\"\n\n[claude]\napi_key = \"k\"\nmodel = \"m\"\nmax_tokens = 10\n",
+        ).unwrap();
+        assert_eq!(cfg.user.language, "en");
+        cfg.user.language = "fr".into();
+        let back: Config = toml::from_str(&toml::to_string_pretty(&cfg).unwrap()).unwrap();
+        assert_eq!(back.user.language, "fr");
+        assert_eq!(config_to_dto(&back).language, "fr");
+    }
+
+
+    // ── PostgreSQL sync ───────────────────────────────────────────────────────
+
+    fn config_with_secrets() -> Config {
+        let mut cfg = make_test_config();
+        cfg.accounts = vec![AccountConfig {
+            name: "Main".into(),
+            imap: ImapConfig { host: "imap.example.com".into(), port: 993, username: "remi".into(),
+                password: "IMAP-SECRET".into(), mailbox: "INBOX".into(), fetch_count: 50 },
+            smtp: SmtpConfig { host: "smtp.example.com".into(), port: 465, username: "remi".into(),
+                password: "SMTP-SECRET".into(), from_address: "Remi <remi@example.com>".into() },
+        }];
+        cfg.claude.api_key = "CLAUDE-SECRET".into();
+        cfg.gifs.giphy_api_key = "GIPHY-SECRET".into();
+        cfg.database = Some(DatabaseConfig { url: "postgres://u:DB-SECRET@h/db".into(), accept_invalid_certs: false });
+        cfg.user.theme = "aero".into();
+        cfg.projects = vec![ProjectConfig { name: "Thesis".into(), description: "PhD".into(), urgency: "high".into() }];
+        cfg
+    }
+
+    #[test]
+    fn test_pgsync_decide() {
+        use crate::pgsync::{decide, SyncAction};
+        use chrono::{Duration, Utc};
+        let now = Utc::now();
+        assert_eq!(decide(None, None), SyncAction::Nothing);
+        assert_eq!(decide(Some(now), None), SyncAction::Push);
+        assert_eq!(decide(None, Some(now)), SyncAction::Pull);
+        assert_eq!(decide(Some(now), Some(now + Duration::seconds(60))), SyncAction::Pull);
+        assert_eq!(decide(Some(now + Duration::seconds(60)), Some(now)), SyncAction::Push);
+        // Within the 2 s timestamp tolerance: same version.
+        assert_eq!(decide(Some(now), Some(now + Duration::milliseconds(1500))), SyncAction::Nothing);
+    }
+
+    #[test]
+    fn test_pgsync_prefs_never_contain_secrets() {
+        use crate::pgsync::prefs_from_config;
+        let json = prefs_from_config(&config_with_secrets()).to_string();
+        for secret in ["IMAP-SECRET", "SMTP-SECRET", "CLAUDE-SECRET", "GIPHY-SECRET", "DB-SECRET", "imap.example.com"] {
+            assert!(!json.contains(secret), "prefs leak {}", secret);
+        }
+        assert!(json.contains("aero") && json.contains("Thesis"));
+    }
+
+    #[test]
+    fn test_pgsync_merge_prefs_keeps_local_secrets() {
+        use crate::pgsync::{merge_prefs, prefs_from_config};
+        let mut remote_cfg = make_test_config();
+        remote_cfg.user.theme = "brutalist".into();
+        remote_cfg.user.language = "fr".into();
+        remote_cfg.projects = vec![ProjectConfig { name: "Work".into(), description: "".into(), urgency: "normal".into() }];
+        let remote = prefs_from_config(&remote_cfg);
+
+        let mut local = config_with_secrets();
+        merge_prefs(&mut local, &remote);
+        assert_eq!(local.user.theme, "brutalist");
+        assert_eq!(local.user.language, "fr");
+        assert_eq!(local.projects.len(), 1);
+        assert_eq!(local.projects[0].name, "Work");
+        // Untouched: accounts, keys, database.
+        assert_eq!(local.accounts[0].imap.password, "IMAP-SECRET");
+        assert_eq!(local.claude.api_key, "CLAUDE-SECRET");
+        assert_eq!(local.gifs.giphy_api_key, "GIPHY-SECRET");
+        assert_eq!(local.database_url(), Some("postgres://u:DB-SECRET@h/db"));
+    }
+
+    #[test]
+    fn test_pgsync_mailbox_key_and_url() {
+        use crate::pgsync::mailbox_key;
+        assert_eq!(mailbox_key(&config_with_secrets()), "remi@imap.example.com");
+        let mut no_accounts = make_test_config();
+        no_accounts.accounts.clear();
+        assert_eq!(mailbox_key(&no_accounts), "default");
+        let mut cfg = make_test_config();
+        cfg.database = Some(DatabaseConfig { url: "   ".into(), accept_invalid_certs: false });
+        assert_eq!(cfg.database_url(), None);
+    }
+
+    #[test]
+    fn test_classified_email_roundtrip_and_placeholders() {
+        use crate::ai_classifier::{is_real_result, ClassifiedEmail};
+        let c = ClassifiedEmail {
+            priority: Priority::HighPriority,
+            summary: "Jury asks for the manuscript".into(),
+            project: Some("Thesis".into()),
+            deadline: chrono::NaiveDate::from_ymd_opt(2026, 11, 2),
+            task: Some("Send manuscript".into()),
+            meeting_link: None,
+        };
+        let back: ClassifiedEmail = serde_json::from_value(serde_json::to_value(&c).unwrap()).unwrap();
+        assert_eq!(back, c);
+        assert!(is_real_result(&c));
+        let failed = ClassifiedEmail { summary: "Could not classify email.".into(), ..c };
+        assert!(!is_real_result(&failed));
+    }
+
+    #[tokio::test]
+    async fn test_pgsync_unreachable_server_fails_fast() {
+        // Port 1 on localhost: nothing listens there.
+        let started = std::time::Instant::now();
+        let err = crate::pgsync::test_connection("postgres://u:p@127.0.0.1:1/db?connect_timeout=3", false)
+            .await
+            .unwrap_err();
+        assert!(format!("{:#}", err).contains("Could not connect to PostgreSQL"), "{:#}", err);
+        assert!(started.elapsed() < std::time::Duration::from_secs(11));
+        // An invalid URL is reported, not a panic.
+        assert!(crate::pgsync::test_connection("not a url", false).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_pgsync_off_without_database() {
+        crate::pgsync::configure(&make_test_config());
+        assert!(!crate::pgsync::is_configured());
+        assert!(crate::pgsync::lookup_ai(&["<x@y>".into()]).await.is_empty());
+        crate::pgsync::store_ai(&[]).await;   // no-op, must not try to connect
+        assert_eq!(crate::pgsync::pull_all().await.unwrap(), "database sync off");
+    }
+
+    /// Against a real server: TEST_DATABASE_URL=postgres://… cargo test -- --ignored
+    #[tokio::test]
+    #[ignore]
+    async fn test_pgsync_integration() {
+        use crate::ai_classifier::ClassifiedEmail;
+        let url = std::env::var("TEST_DATABASE_URL").expect("set TEST_DATABASE_URL");
+        let version = crate::pgsync::test_connection(&url, false).await.unwrap();
+        assert!(version.starts_with("PostgreSQL"), "{}", version);
+
+        let mut cfg = config_with_secrets();
+        cfg.accounts[0].imap.username = format!("courriel-test-{}", std::process::id());
+        cfg.database = Some(DatabaseConfig { url, accept_invalid_certs: false });
+        crate::pgsync::configure(&cfg);
+
+        let c = ClassifiedEmail {
+            priority: Priority::Urgent, summary: "Integration test".into(), project: None,
+            deadline: None, task: Some("Check".into()), meeting_link: None,
+        };
+        crate::pgsync::store_ai(&[("<it-1@example.com>".into(), c.clone())]).await;
+        let found = crate::pgsync::lookup_ai(&["<it-1@example.com>".into(), "<missing@x>".into()]).await;
+        assert_eq!(found.len(), 1);
+        assert_eq!(found["<it-1@example.com>"], c);
+
+        crate::pgsync::delete_mailbox_rows().await.unwrap();
+        crate::pgsync::configure(&make_test_config());
     }
 
 }

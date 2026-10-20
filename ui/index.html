@@ -3,7 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Courriel</title>
+  <title>Le courriel</title>
+  <script>
+    // Apply the last theme before the first paint (config.toml is applied again by app.js).
+    try { document.documentElement.dataset.theme = localStorage.getItem('theme') || 'midnight'; } catch (_) {}
+  </script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -13,27 +17,28 @@
 
   <!-- Sidebar -->
   <nav id="sidebar">
-    <div id="sidebar-logo">✉ Courriel</div>
+    <div id="sidebar-logo"><img src="logo.png" alt="" class="sidebar-logo-img" /><span>Le courriel</span></div>
 
-    <button class="nav-btn active" data-panel="overview">Overview</button>
-    <button class="nav-btn" data-panel="inbox">Inbox</button>
-    <button class="nav-btn" data-panel="important">Important</button>
-    <button class="nav-btn" data-panel="tasks">Tasks</button>
-    <button class="nav-btn" data-panel="meetings">Meetings</button>
-    <button class="nav-btn" data-panel="calendar">Calendar</button>
-    <button class="nav-btn" data-panel="projects">Projects</button>
+    <button class="nav-btn active" data-panel="overview" data-i18n="nav.overview">Overview</button>
+    <button class="nav-btn" data-panel="inbox" data-i18n="nav.inbox">Inbox</button>
+    <button class="nav-btn" data-panel="important" data-i18n="nav.important">Important</button>
+    <button class="nav-btn" data-panel="tasks" data-i18n="nav.tasks">Tasks</button>
+    <button class="nav-btn" data-panel="meetings" data-i18n="nav.meetings">Meetings</button>
+    <button class="nav-btn" data-panel="calendar" data-i18n="nav.calendar">Calendar</button>
+    <button class="nav-btn" data-panel="projects" data-i18n="nav.projects">Projects</button>
 
     <div class="nav-sep"></div>
 
-    <button class="nav-btn" data-panel="sent">Sent</button>
-    <button class="nav-btn" data-panel="drafts">Drafts</button>
-    <button class="nav-btn" data-panel="trash">Trash</button>
+    <button class="nav-btn" data-panel="sent" data-i18n="nav.sent">Sent</button>
+    <button class="nav-btn" data-panel="drafts" data-i18n="nav.drafts">Drafts</button>
+    <button class="nav-btn" data-panel="trash" data-i18n="nav.trash">Trash</button>
 
     <div class="nav-spacer"></div>
 
-    <button class="nav-btn" id="btn-refresh">↻ Refresh</button>
-    <button class="nav-btn" id="btn-settings">⚙ Settings</button>
-    <button class="nav-btn compose-btn" id="btn-compose">+ Compose</button>
+    <button class="nav-btn" id="btn-report-bug" data-i18n="nav.reportBug">🐞 Report a bug</button>
+    <button class="nav-btn" id="btn-refresh" data-i18n="nav.refresh">↻ Refresh</button>
+    <button class="nav-btn" id="btn-settings" data-i18n="nav.settings">⚙ Settings</button>
+    <button class="nav-btn compose-btn" id="btn-compose" data-i18n="nav.compose">+ Compose</button>
   </nav>
 
   <!-- Main area -->
@@ -46,30 +51,30 @@
     <section id="panel-overview" class="panel active">
       <header class="panel-header">
         <div>
-          <div id="ov-greeting" class="greeting">Good morning.</div>
-          <div id="ov-briefing" class="briefing">Loading…</div>
+          <div id="ov-greeting" class="greeting" data-i18n="ov.greeting">Good morning.</div>
+          <div id="ov-briefing" class="briefing" data-i18n="ov.loading">Loading…</div>
         </div>
       </header>
 
       <div id="ov-grid">
         <!-- Urgent + High -->
         <div class="ov-box" id="ov-urgent-box">
-          <div class="ov-box-title">Urgent &amp; High</div>
+          <div class="ov-box-title" data-i18n="ov.urgent">Urgent &amp; High</div>
           <div class="ov-box-body" id="ov-urgent-list"></div>
         </div>
         <!-- Deadlines -->
         <div class="ov-box" id="ov-deadlines-box">
-          <div class="ov-box-title">Deadlines</div>
+          <div class="ov-box-title" data-i18n="ov.deadlines">Deadlines</div>
           <div class="ov-box-body" id="ov-deadlines-list"></div>
         </div>
         <!-- Tasks -->
         <div class="ov-box" id="ov-tasks-box">
-          <div class="ov-box-title">Tasks</div>
+          <div class="ov-box-title" data-i18n="ov.tasks">Tasks</div>
           <div class="ov-box-body" id="ov-tasks-list"></div>
         </div>
         <!-- Meetings -->
         <div class="ov-box" id="ov-meetings-box">
-          <div class="ov-box-title">Meetings</div>
+          <div class="ov-box-title" data-i18n="ov.meetings">Meetings</div>
           <div class="ov-box-body" id="ov-meetings-list"></div>
         </div>
       </div>
@@ -84,27 +89,27 @@
     <!-- ── Tasks (kanban) ──────────────────────────────────────────────────── -->
     <section id="panel-tasks" class="panel">
       <header class="panel-header kanban-header">
-        <span class="kanban-title">Tasks</span>
+        <span class="kanban-title" data-i18n="kanban.title">Tasks</span>
         <div id="kanban-boards" class="kanban-boards"></div>
       </header>
       <div id="kanban" class="kanban">
         <div class="kanban-col" data-status="todo">
-          <div class="kanban-col-title">Todo <span class="kanban-count"></span></div>
+          <div class="kanban-col-title"><span data-i18n="kanban.todo">Todo</span> <span class="kanban-count"></span></div>
           <div class="kanban-add">
-            <input type="text" id="kanban-new-title" placeholder="+ Add a task…" />
+            <input type="text" id="kanban-new-title" placeholder="+ Add a task…" data-i18n-placeholder="kanban.add" />
           </div>
           <div class="kanban-cards"></div>
         </div>
         <div class="kanban-col" data-status="in_progress">
-          <div class="kanban-col-title">In progress <span class="kanban-count"></span></div>
+          <div class="kanban-col-title"><span data-i18n="kanban.inProgress">In progress</span> <span class="kanban-count"></span></div>
           <div class="kanban-cards"></div>
         </div>
         <div class="kanban-col" data-status="done">
-          <div class="kanban-col-title">Done <span class="kanban-count"></span></div>
+          <div class="kanban-col-title"><span data-i18n="kanban.done">Done</span> <span class="kanban-count"></span></div>
           <div class="kanban-cards"></div>
         </div>
         <div class="kanban-col" data-status="given_up">
-          <div class="kanban-col-title">Given up <span class="kanban-count"></span></div>
+          <div class="kanban-col-title"><span data-i18n="kanban.givenUp">Given up</span> <span class="kanban-count"></span></div>
           <div class="kanban-cards"></div>
         </div>
       </div>
@@ -117,7 +122,7 @@
     <!-- ── Calendar ────────────────────────────────────────────────────────── -->
     <section id="panel-calendar" class="panel">
       <header class="panel-header">
-        <span id="cal-title">Calendar</span>
+        <span id="cal-title" data-i18n="cal.title">Calendar</span>
         <div>
           <button class="icon-btn" id="cal-prev">&#8249;</button>
           <button class="icon-btn" id="cal-next">&#8250;</button>
@@ -130,17 +135,17 @@
     <section id="panel-projects" class="panel">
       <div id="projects-layout">
         <div id="projects-sidebar">
-          <button id="projects-new">+ New project</button>
+          <button id="projects-new" data-i18n="proj.new">+ New project</button>
           <div id="projects-new-form" class="hidden">
-            <input type="text" id="projects-new-name" placeholder="Project name" />
+            <input type="text" id="projects-new-name" placeholder="Project name" data-i18n-placeholder="proj.namePlaceholder" />
             <select id="projects-new-urgency">
-              <option value="normal">Normal</option>
-              <option value="high">High</option>
+              <option value="normal" data-i18n="proj.urgency.normal">Normal</option>
+              <option value="high" data-i18n="proj.urgency.high">High</option>
             </select>
             <div id="projects-new-error"></div>
             <div class="projects-new-actions">
-              <button id="projects-new-create">Create</button>
-              <button id="projects-new-cancel">Cancel</button>
+              <button id="projects-new-create" data-i18n="proj.create">Create</button>
+              <button id="projects-new-cancel" data-i18n="proj.cancel">Cancel</button>
             </div>
           </div>
           <div id="projects-list"></div>
@@ -150,8 +155,8 @@
             <div id="projects-detail-name"></div>
             <div id="projects-detail-urgency"></div>
           </div>
-          <textarea id="projects-desc" placeholder="Project description…"></textarea>
-          <button id="projects-save-desc">Save</button>
+          <textarea id="projects-desc" placeholder="Project description…" data-i18n-placeholder="proj.descPlaceholder"></textarea>
+          <button id="projects-save-desc" data-i18n="proj.save">Save</button>
           <div id="projects-emails-list"></div>
         </div>
         <div id="projects-reading-pane" class="reading-pane hidden">
@@ -167,91 +172,91 @@
 <!-- ── Compose Dialog ──────────────────────────────────────────────────────── -->
 <!-- Floating composer (Compose / Reply / Forward) -->
 <div id="composer" class="composer hidden">
-  <div class="composer-resize" title="Drag to resize"></div>
+  <div class="composer-resize" title="Drag to resize" data-i18n-title="cmp.resize"></div>
   <div class="composer-header">
-    <span id="composer-title">New Message</span>
+    <span id="composer-title" data-i18n="cmp.newMessage">New Message</span>
     <div class="composer-header-btns">
-      <button id="composer-min" title="Minimise">&#8211;</button>
-      <button id="composer-max" title="Expand">&#10530;</button>
-      <button id="composer-close" title="Close">&#10005;</button>
+      <button id="composer-min" title="Minimise" data-i18n-title="cmp.minimise">&#8211;</button>
+      <button id="composer-max" title="Expand" data-i18n-title="cmp.expand">&#10530;</button>
+      <button id="composer-close" title="Close" data-i18n-title="cmp.close">&#10005;</button>
     </div>
   </div>
   <div class="composer-main">
     <div class="composer-field">
-      <label for="compose-to">To</label>
+      <label for="compose-to" data-i18n="cmp.to">To</label>
       <input type="text" id="compose-to" autocomplete="off" />
-      <button class="composer-link" id="compose-show-cc">Cc</button>
-      <button class="composer-link" id="compose-show-bcc">Bcc</button>
+      <button class="composer-link" id="compose-show-cc" data-i18n="cmp.cc">Cc</button>
+      <button class="composer-link" id="compose-show-bcc" data-i18n="cmp.bcc">Bcc</button>
     </div>
     <div class="composer-field hidden" id="compose-cc-row">
-      <label for="compose-cc">Cc</label>
+      <label for="compose-cc" data-i18n="cmp.cc">Cc</label>
       <input type="text" id="compose-cc" autocomplete="off" />
     </div>
     <div class="composer-field hidden" id="compose-bcc-row">
-      <label for="compose-bcc">Bcc</label>
+      <label for="compose-bcc" data-i18n="cmp.bcc">Bcc</label>
       <input type="text" id="compose-bcc" autocomplete="off" />
     </div>
     <div class="composer-field">
-      <input type="text" id="compose-subject" placeholder="Subject" />
+      <input type="text" id="compose-subject" placeholder="Subject" data-i18n-placeholder="cmp.subject" />
     </div>
 
     <div id="compose-body" class="composer-body" contenteditable="true" spellcheck="true"></div>
 
     <div class="composer-toolbar" id="composer-toolbar">
-      <select data-cmd="fontName" title="Font">
+      <select data-cmd="fontName" title="Font" data-i18n-title="cmp.font">
         <option value="Arial, Helvetica, sans-serif">Sans Serif</option>
         <option value="Georgia, 'Times New Roman', serif">Serif</option>
-        <option value="'Courier New', Courier, monospace">Fixed width</option>
+        <option value="'Courier New', Courier, monospace" data-i18n="cmp.fixedWidth">Fixed width</option>
         <option value="Arial">Arial</option>
         <option value="Georgia">Georgia</option>
         <option value="'Times New Roman'">Times New Roman</option>
         <option value="Verdana">Verdana</option>
         <option value="'Courier New'">Courier New</option>
       </select>
-      <select data-cmd="fontSize" title="Size">
-        <option value="1">Small</option>
-        <option value="3" selected>Normal</option>
-        <option value="5">Large</option>
-        <option value="7">Huge</option>
+      <select data-cmd="fontSize" title="Size" data-i18n-title="cmp.size">
+        <option value="1" data-i18n="cmp.small">Small</option>
+        <option value="3" selected data-i18n="cmp.normal">Normal</option>
+        <option value="5" data-i18n="cmp.large">Large</option>
+        <option value="7" data-i18n="cmp.huge">Huge</option>
       </select>
       <span class="tb-sep"></span>
-      <button data-cmd="bold" title="Bold (Ctrl+B)"><b>B</b></button>
-      <button data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>
-      <button data-cmd="underline" title="Underline (Ctrl+U)"><u>U</u></button>
-      <button data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>
+      <button data-cmd="bold" title="Bold (Ctrl+B)" data-i18n-title="cmp.bold"><b>B</b></button>
+      <button data-cmd="italic" title="Italic (Ctrl+I)" data-i18n-title="cmp.italic"><i>I</i></button>
+      <button data-cmd="underline" title="Underline (Ctrl+U)" data-i18n-title="cmp.underline"><u>U</u></button>
+      <button data-cmd="strikeThrough" title="Strikethrough" data-i18n-title="cmp.strike"><s>S</s></button>
       <div class="tb-pop-wrap">
-        <button id="tb-color" title="Text colour"><span class="tb-color-a">A</span></button>
+        <button id="tb-color" title="Text colour" data-i18n-title="cmp.color"><span class="tb-color-a">A</span></button>
         <div class="tb-pop hidden" id="tb-color-pop"></div>
       </div>
       <span class="tb-sep"></span>
-      <button data-cmd="justifyLeft" title="Align left">&#8676;</button>
-      <button data-cmd="justifyCenter" title="Centre">&#8596;</button>
-      <button data-cmd="justifyRight" title="Align right">&#8677;</button>
-      <button data-cmd="justifyFull" title="Justify">&#9776;</button>
+      <button data-cmd="justifyLeft" title="Align left" data-i18n-title="cmp.alignLeft">&#8676;</button>
+      <button data-cmd="justifyCenter" title="Centre" data-i18n-title="cmp.center">&#8596;</button>
+      <button data-cmd="justifyRight" title="Align right" data-i18n-title="cmp.alignRight">&#8677;</button>
+      <button data-cmd="justifyFull" title="Justify" data-i18n-title="cmp.justify">&#9776;</button>
       <span class="tb-sep"></span>
-      <button data-cmd="insertUnorderedList" title="Bulleted list">&#8226;&#8801;</button>
-      <button data-cmd="insertOrderedList" title="Numbered list">1&#8801;</button>
-      <button data-cmd="outdent" title="Decrease indent">&#8676;&#8801;</button>
-      <button data-cmd="indent" title="Increase indent">&#8801;&#8677;</button>
-      <button data-cmd="blockquote" title="Quote">&#10077;</button>
+      <button data-cmd="insertUnorderedList" title="Bulleted list" data-i18n-title="cmp.bullets">&#8226;&#8801;</button>
+      <button data-cmd="insertOrderedList" title="Numbered list" data-i18n-title="cmp.numbered">1&#8801;</button>
+      <button data-cmd="outdent" title="Decrease indent" data-i18n-title="cmp.outdent">&#8676;&#8801;</button>
+      <button data-cmd="indent" title="Increase indent" data-i18n-title="cmp.indent">&#8801;&#8677;</button>
+      <button data-cmd="blockquote" title="Quote" data-i18n-title="cmp.quote">&#10077;</button>
       <span class="tb-sep"></span>
       <div class="tb-pop-wrap">
-        <button id="tb-link" title="Insert link">&#128279;</button>
+        <button id="tb-link" title="Insert link" data-i18n-title="cmp.link">&#128279;</button>
         <div class="tb-pop tb-link-pop hidden" id="tb-link-pop">
-          <input type="text" id="tb-link-text" placeholder="Text to display" />
+          <input type="text" id="tb-link-text" placeholder="Text to display" data-i18n-placeholder="cmp.linkText" />
           <input type="text" id="tb-link-url" placeholder="https://…" />
           <div class="tb-link-actions">
-            <button id="tb-link-remove" class="composer-link">Remove link</button>
+            <button id="tb-link-remove" class="composer-link" data-i18n="cmp.removeLink">Remove link</button>
             <button id="tb-link-ok" class="composer-send">OK</button>
           </div>
         </div>
       </div>
-      <button id="tb-image" title="Insert image">&#128444;</button>
+      <button id="tb-image" title="Insert image" data-i18n-title="cmp.image">&#128444;</button>
       <input type="file" id="tb-image-file" accept="image/*" hidden />
       <div class="tb-pop-wrap">
-        <button id="tb-gif" class="tb-gif-btn" title="Insert GIF">GIF</button>
+        <button id="tb-gif" class="tb-gif-btn" title="Insert GIF" data-i18n-title="cmp.gif">GIF</button>
         <div class="tb-pop tb-gif-pop hidden" id="tb-gif-pop">
-          <input type="text" id="tb-gif-search" placeholder="Search GIFs…" autocomplete="off" />
+          <input type="text" id="tb-gif-search" placeholder="Search GIFs…" data-i18n-placeholder="cmp.searchGifs" autocomplete="off" />
           <div class="tb-gif-grid" id="tb-gif-grid"></div>
           <div class="tb-gif-footer">
             <span id="tb-gif-status"></span>
@@ -259,28 +264,29 @@
           </div>
         </div>
       </div>
-      <button data-cmd="removeFormat" title="Remove formatting">T&#824;</button>
+      <button data-cmd="removeFormat" title="Remove formatting" data-i18n-title="cmp.removeFormat">T&#824;</button>
       <span class="tb-sep"></span>
       <div class="tb-pop-wrap">
-        <button id="tb-ai" class="tb-ai-btn" title="AI writing tools">&#10024; AI</button>
+        <button id="tb-ai" class="tb-ai-btn" title="AI writing tools" data-i18n-title="ai.title" data-i18n="ai.button">&#10024; AI</button>
         <div class="tb-pop tb-ai-pop hidden" id="tb-ai-pop">
-          <button data-ai="formal">Make it formal</button>
-          <button data-ai="translate_en">Translate to English</button>
-          <button data-ai="correct">Correct spelling &amp; grammar</button>
-          <button data-ai="auto_reply" id="tb-ai-auto">Auto answer</button>
-          <div class="tb-ai-hint">Works on the selected text, or on your whole message.</div>
+          <button data-ai="formal" data-i18n="ai.formal">Make it formal</button>
+          <button data-ai="translate_en" data-i18n="ai.translateEn">Translate to English</button>
+          <button data-ai="translate_fr" data-i18n="ai.translateFr">Translate to French</button>
+          <button data-ai="correct" data-i18n="ai.correct">Correct spelling &amp; grammar</button>
+          <button data-ai="auto_reply" id="tb-ai-auto" data-i18n="ai.auto">Auto answer</button>
+          <div class="tb-ai-hint" data-i18n="ai.hint">Works on the selected text, or on your whole message.</div>
         </div>
       </div>
     </div>
 
     <div class="composer-footer">
-      <button id="compose-send" class="composer-send" title="Send (Ctrl+Enter)">Send</button>
+      <button id="compose-send" class="composer-send" title="Send (Ctrl+Enter)" data-i18n-title="cmp.sendTitle" data-i18n="cmp.send">Send</button>
       <span id="compose-status" class="composer-status"></span>
       <div id="compose-discard-confirm" class="composer-confirm hidden">
-        Discard draft? <button id="compose-discard-yes" class="composer-link">Discard</button>
-        <button id="compose-discard-no" class="composer-link">Keep</button>
+        <span data-i18n="cmp.discardQ">Discard draft?</span> <button id="compose-discard-yes" class="composer-link" data-i18n="cmp.discard">Discard</button>
+        <button id="compose-discard-no" class="composer-link" data-i18n="cmp.keep">Keep</button>
       </div>
-      <button id="compose-discard" class="composer-icon" title="Discard draft">&#128465;</button>
+      <button id="compose-discard" class="composer-icon" title="Discard draft" data-i18n-title="cmp.discardTitle">&#128465;</button>
     </div>
   </div>
 </div>
@@ -289,47 +295,64 @@
 <div id="settings-overlay" class="overlay hidden">
   <div class="dialog wide-dialog">
     <div class="dialog-header">
-      <span>Settings</span>
+      <span data-i18n="set.title">Settings</span>
       <button class="close-btn" id="settings-close">✕</button>
     </div>
 
     <div class="tabs">
-      <button class="tab active" data-tab="general">General</button>
-      <button class="tab" data-tab="accounts">Accounts</button>
-      <button class="tab" data-tab="ai">AI</button>
+      <button class="tab active" data-tab="general" data-i18n="set.general">General</button>
+      <button class="tab" data-tab="accounts" data-i18n="set.accounts">Accounts</button>
+      <button class="tab" data-tab="ai" data-i18n="set.ai">AI</button>
+      <button class="tab" data-tab="database" data-i18n="set.database">Database</button>
     </div>
 
     <!-- General -->
     <div class="tab-content active" id="tab-general">
-      <label>Display Name</label>
+      <label data-i18n="set.displayName">Display Name</label>
       <input type="text" id="s-display-name" />
-      <label>Font Scale</label>
+      <label data-i18n="set.fontScale">Font Scale</label>
       <input type="range" id="s-font-scale" min="0.7" max="1.8" step="0.05" />
       <span id="s-font-scale-val">1.0×</span>
+      <label data-i18n="set.language">Language</label>
+      <select id="s-language" class="settings-select"></select>
+      <label data-i18n="set.theme">Theme</label>
+      <div class="theme-grid" id="s-theme-grid"></div>
     </div>
 
     <!-- Accounts -->
     <div class="tab-content" id="tab-accounts">
       <div id="s-accounts-container"></div>
-      <button id="s-add-account" class="secondary-btn">+ Add Account</button>
+      <button id="s-add-account" class="secondary-btn" data-i18n="set.addAccount">+ Add Account</button>
     </div>
 
     <!-- AI -->
     <div class="tab-content" id="tab-ai">
-      <label>Claude API Key</label>
+      <label data-i18n="set.claudeKey">Claude API Key</label>
       <input type="password" id="s-claude-key" />
-      <label>Model</label>
+      <label data-i18n="set.model">Model</label>
       <input type="text" id="s-claude-model" placeholder="claude-sonnet-4-6" />
-      <label>GIPHY API Key <span style="opacity:.7">(for the GIF picker — free at developers.giphy.com)</span></label>
+      <label><span data-i18n="set.giphyKey">GIPHY API Key</span> <span style="opacity:.7" data-i18n="set.giphyHint">(for the GIF picker — free at developers.giphy.com)</span></label>
       <input type="password" id="s-giphy-key" />
       <div style="margin-top:16px">
-        <button id="s-show-qr" class="secondary-btn">Show QR Code</button>
+        <button id="s-show-qr" class="secondary-btn" data-i18n="set.showQr">Show QR Code</button>
         <pre id="s-qr-output" style="font-size:0.6rem;display:none"></pre>
       </div>
     </div>
 
+    <!-- Database (PostgreSQL sync) -->
+    <div class="tab-content" id="tab-database">
+      <label data-i18n="set.dbUrl">PostgreSQL URL</label>
+      <input type="password" id="s-db-url" placeholder="postgres://user:password@host:5432/courriel" autocomplete="off" />
+      <label class="checkbox-label"><input type="checkbox" id="s-db-insecure" /> <span data-i18n="set.dbInsecure">Accept self-signed certificates</span></label>
+      <div class="db-test-row">
+        <button id="s-db-test" class="secondary-btn" data-i18n="set.dbTest">Test connection</button>
+        <span id="s-db-status" class="db-status"></span>
+      </div>
+      <p class="settings-note" data-i18n="set.dbNote">Synced: tasks, swipes, project tags, projects, theme, language and AI results. Never synced: mail passwords, API keys and this URL.</p>
+    </div>
+
     <div class="dialog-actions">
-      <button id="settings-save" class="primary-btn">Save</button>
+      <button id="settings-save" class="primary-btn" data-i18n="set.save">Save</button>
     </div>
   </div>
 </div>
@@ -344,7 +367,7 @@
     <div class="email-list"></div>
   </div>
   <div class="reading-pane">
-    <div class="rp-placeholder">Select an email to read</div>
+    <div class="rp-placeholder" data-i18n="rp.select">Select an email to read</div>
     <div class="rp-content hidden">
       <div class="rp-header">
         <div class="rp-subject"></div>
@@ -356,6 +379,7 @@
   </div>
 </template>
 
+<script src="i18n.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

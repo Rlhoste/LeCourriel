@@ -1,4 +1,4 @@
-// Courriel — an AI-assisted email client.
+// Le courriel — an AI-assisted email client.
 // Copyright (C) 2026 Remi Lhoste
 //
 // This program is free software: you can redistribute it and/or modify
@@ -30,9 +30,11 @@ mod config;
 mod dismissals;
 mod dto;
 mod gifs;
+mod i18n;
 mod imap_client;
 mod models;
 mod overrides;
+mod pgsync;
 mod settings;
 mod smtp_sender;
 mod state;
@@ -54,11 +56,37 @@ async fn app_ready(
     let shared_clone = shared.inner().clone();
     // Send cache immediately (fast, synchronous read)
     app_state::load_and_display_cache(&cfg, &app, &shared_clone);
-    // Kick off live refresh in background
     tauri::async_runtime::spawn(async move {
+        let cfg = sync_from_database(&app, &shared_clone).await.unwrap_or(cfg);
+        // Kick off live refresh in background
         app_state::refresh(cfg, app, shared_clone).await;
     });
     Ok(())
+}
+
+/// Startup sync with the user's PostgreSQL. Returns the reloaded config when
+/// anything was pulled (preferences may have changed), None otherwise.
+async fn sync_from_database(app: &AppHandle, shared: &SharedState) -> Option<Arc<Config>> {
+    use tauri::Emitter;
+    if !pgsync::is_configured() {
+        return None;
+    }
+    match pgsync::pull_all().await {
+        Ok(summary) => {
+            info!("Database sync: {}", summary);
+            let cfg = Arc::new(Config::load().ok()?);
+            i18n::set_lang(&cfg.user.language);
+            shared.lock().unwrap().cfg = cfg.clone();
+            // Re-show the cache: tasks or dismissals may have come from another computer.
+            app_state::load_and_display_cache(&cfg, app, shared);
+            Some(cfg)
+        }
+        Err(e) => {
+            tracing::warn!("Database sync failed: {:#}", e);
+            app.emit("error", format!("Database sync failed: {:#}", e)).ok();
+            None
+        }
+    }
 }
 
 #[tauri::command]
@@ -94,7 +122,7 @@ fn get_email(uid: u32, shared: State<'_, SharedState>) -> Option<dto::EmailCardD
         priority: c.priority.as_str().to_string(),
         is_read: c.is_read,
         project: c.project.clone().unwrap_or_default(),
-        deadline_str: c.deadline.map(|d| d.format("%b %d").to_string()).unwrap_or_default(),
+        deadline_str: c.deadline.map(|d| i18n::day_month(&d, i18n::lang())).unwrap_or_default(),
         task: c.task.clone().unwrap_or_default(),
         body_text: c.body_text.clone(),
         body_html: c.body_html.clone(),
@@ -142,19 +170,59 @@ fn save_settings(
     claude_model: String,
     giphy_key: Option<String>,
     font_scale: f32,
+    theme: Option<String>,
+    language: Option<String>,
     shared: State<'_, SharedState>,
 ) -> Result<(), String> {
     let giphy_key = giphy_key.unwrap_or_default();
-    settings::save_config(&display_name, &accounts, &claude_key, &claude_model, &giphy_key, font_scale)
+    settings::save_config(&display_name, &accounts, &claude_key, &claude_model, &giphy_key, font_scale, theme.as_deref(), language.as_deref())
         .map_err(|e| e.to_string())?;
     // Reload config into shared state.
     match Config::load() {
         Ok(new_cfg) => {
+            i18n::set_lang(&new_cfg.user.language);
+            pgsync::configure(&new_cfg);
             let mut s = shared.lock().unwrap();
             s.cfg = Arc::new(new_cfg);
         }
         Err(e) => return Err(e.to_string()),
     }
+    Ok(())
+}
+
+// ── PostgreSQL sync ────────────────────────────────────────────────────────
+
+/// Try a connection without saving anything. Returns e.g. "PostgreSQL 16.4".
+#[tauri::command]
+async fn test_database(url: String, accept_invalid_certs: bool) -> Result<String, String> {
+    if url.trim().is_empty() {
+        return Err("Enter a PostgreSQL URL first".into());
+    }
+    pgsync::test_connection(url.trim(), accept_invalid_certs)
+        .await
+        .map_err(|e| format!("{:#}", e))
+}
+
+/// Save (or clear, with an empty URL) the database settings, then sync right away.
+#[tauri::command]
+async fn set_database(
+    url: String,
+    accept_invalid_certs: bool,
+    app: AppHandle,
+    shared: State<'_, SharedState>,
+) -> Result<(), String> {
+    let mut cfg = (*shared.lock().unwrap().cfg).clone();
+    let url = url.trim().to_string();
+    cfg.database = if url.is_empty() {
+        None
+    } else {
+        Some(config::DatabaseConfig { url, accept_invalid_certs })
+    };
+    // Local only: the database settings are never synced.
+    config::write_local(&cfg).map_err(|e| e.to_string())?;
+    pgsync::configure(&cfg);
+    shared.lock().unwrap().cfg = Arc::new(cfg);
+    sync_from_database(&app, shared.inner()).await;
     Ok(())
 }
 
@@ -370,9 +438,11 @@ fn main() {
         )
         .init();
 
-    info!("Starting Courriel (Tauri)");
+    info!("Starting Le courriel (Tauri)");
 
     let cfg = Config::load().expect("Failed to load config");
+    i18n::set_lang(&cfg.user.language);
+    pgsync::configure(&cfg);
     let cfg = Arc::new(cfg);
 
     let shared: SharedState = Arc::new(Mutex::new(AppState {
@@ -402,6 +472,8 @@ fn main() {
             set_read,
             set_email_project,
             save_email,
+            test_database,
+            set_database,
             search_gifs,
             ai_compose,
             fetch_gif,

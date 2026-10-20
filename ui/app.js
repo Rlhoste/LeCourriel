@@ -2,6 +2,8 @@
 const invoke = window.__TAURI__.core.invoke;
 const { listen } = window.__TAURI__.event;
 
+const BUG_REPORT_TO = 'remi.lhoste@o2game.com';
+
 // ── State ──────────────────────────────────────────────────────────────────
 let appState = null;
 let activePanel = 'overview';
@@ -30,6 +32,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('ov-briefing').textContent = e.payload;
   });
 
+  applyStaticI18n();   // language from the last session (i18n.js), until settings arrive
   setupSidebar();
   setupSplitPanels();
   setupCompose();
@@ -38,11 +41,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupNewProject();
   setupKanban();
 
-  // Apply saved font scale
+  // Apply saved font scale and theme
   try {
     const s = await invoke('get_settings');
     fontScale = s.font_scale || 1.0;
     document.documentElement.style.fontSize = `${fontScale * 14}px`;
+    applyTheme(s.theme);
+    if (s.language && s.language !== LANG) applyLanguage(s.language);
   } catch (_) {}
 
   // Tell backend we're ready — it will now send cache then start live refresh
@@ -56,12 +61,19 @@ function setupSidebar() {
   });
 
   document.getElementById('btn-refresh').addEventListener('click', async () => {
-    document.getElementById('loading-bar').classList.remove('hidden');
-    await cmd('refresh_emails');
+    const bar = document.getElementById('loading-bar');
+    bar.classList.remove('hidden');
+    try { await cmd('refresh_emails'); }
+    catch (_) {}   // the backend also reports errors through the 'error' event
+    finally { bar.classList.add('hidden'); }
   });
 
   document.getElementById('btn-settings').addEventListener('click', openSettings);
   document.getElementById('btn-compose').addEventListener('click', () => openCompose());
+  document.getElementById('btn-report-bug').addEventListener('click', () => openCompose({
+    to: BUG_REPORT_TO,
+    subject: 'Sorry Remi, a new bug in your list',
+  }));
 }
 
 function switchPanel(panel) {
@@ -90,7 +102,9 @@ function setupSplitPanels() {
   for (const [panelId, meta] of Object.entries(SPLIT_PANELS)) {
     const section = document.getElementById(`panel-${panelId}`);
     const clone = tpl.content.cloneNode(true);
-    clone.querySelector('.list-title').textContent = meta.title;
+    const title = clone.querySelector('.list-title');
+    title.dataset.i18n = `nav.${panelId}`;
+    title.textContent = t(title.dataset.i18n);
     section.appendChild(clone);
   }
 }
@@ -128,7 +142,7 @@ function renderOverview() {
   for (const d of appState.deadlines) {
     const row = document.createElement('div');
     row.className = 'email-row';
-    row.innerHTML = `<div class="email-row-top"><span class="email-from">${esc(d.subject)}</span><span class="email-date">${esc(d.deadline_str)}</span></div><div class="email-summary">${esc(d.project)} · ${d.days_until >= 0 ? `in ${d.days_until}d` : `${-d.days_until}d ago`}</div>`;
+    row.innerHTML = `<div class="email-row-top"><span class="email-from">${esc(d.subject)}</span><span class="email-date">${esc(d.deadline_str)}</span></div><div class="email-summary">${esc(d.project)} · ${d.days_until >= 0 ? t('ov.inDays', { n: d.days_until }) : t('ov.daysAgo', { n: -d.days_until })}</div>`;
     row.addEventListener('click', () => switchToEmail(d.uid));
     dl.appendChild(row);
   }
@@ -230,7 +244,7 @@ function commitSwipe(row, onDelete) {
         await onDelete();
       } catch (e) {
         renderAll();   // put the row back
-        document.getElementById('ov-briefing').textContent = `Could not delete: ${e}`;
+        document.getElementById('ov-briefing').textContent = t('ov.couldNotDelete', { err: e });
       }
     }, 180);
   }, 180);
@@ -280,14 +294,14 @@ function removeFromState(uid, kind) {
 
 function renderTaskRows(container, items) {
   container.innerHTML = '';
-  for (const t of items) {
+  for (const task of items) {
     const row = document.createElement('div');
     row.className = 'email-row';
-    const meta = [t.status === 'in_progress' ? 'In progress' : 'Todo', t.project, t.source_from]
+    const meta = [task.status === 'in_progress' ? t('kanban.inProgress') : t('kanban.todo'), task.project, task.source_from]
       .filter(Boolean).join(' · ');
-    row.innerHTML = `<div class="email-row-top"><span class="email-from">${esc(t.title)}</span></div><div class="email-summary">${esc(meta)}</div>`;
+    row.innerHTML = `<div class="email-row-top"><span class="email-from">${esc(task.title)}</span></div><div class="email-summary">${esc(meta)}</div>`;
     row.addEventListener('click', () => {
-      if (t.source_uid) switchToEmail(t.source_uid);
+      if (task.source_uid) switchToEmail(task.source_uid);
       else switchPanel('tasks');
     });
     container.appendChild(row);
@@ -381,7 +395,9 @@ function setRead(email, read) {
     for (const e of val) if (e.uid === uid && 'is_read' in e) e.is_read = read;
   }
   document.querySelectorAll(`.email-row[data-uid="${uid}"]`).forEach(row => {
-    if (!row.closest(NON_INBOX_PANELS)) row.classList.toggle('unread', !read);
+    if (row.closest(NON_INBOX_PANELS)) return;
+    row.classList.toggle('unread', !read);
+    row.querySelector('.row-read-toggle')?.setAttribute('title', readToggleTitle(read));
   });
   renderOverview();
   cmd('set_read', { uid, read }).catch(() => {});   // cmd() already logs the error
@@ -393,19 +409,19 @@ function setRead(email, read) {
 function renderActions(bar, email, onGone) {
   const inInbox = panelForEmail(email) === 'inbox';
   bar.innerHTML = `
-    <button class="rp-btn" data-act="reply">Reply</button>
-    <button class="rp-btn" data-act="forward">Forward</button>
+    <button class="rp-btn" data-act="reply">${t('rp.reply')}</button>
+    <button class="rp-btn" data-act="forward">${t('rp.forward')}</button>
     ${inInbox ? `
-      <button class="rp-btn danger" data-act="spam">Spam</button>
-      <button class="rp-btn danger" data-act="delete">Delete</button>
-      <select class="rp-project" title="Project"></select>` : ''}
+      <button class="rp-btn danger" data-act="spam">${t('rp.spam')}</button>
+      <button class="rp-btn danger" data-act="delete">${t('rp.delete')}</button>
+      <select class="rp-project" title="${t('rp.project')}"></select>` : ''}
     <span class="rp-status"></span>
     <div class="rp-more">
-      <button class="rp-btn" data-act="more" title="More actions">⋯</button>
+      <button class="rp-btn" data-act="more" title="${t('rp.more')}">⋯</button>
       <div class="rp-menu hidden">
-        ${inInbox ? '<button data-act="unread">Mark as unread</button>' : ''}
-        <button data-act="save">Save as…</button>
-        <button data-act="print">Print</button>
+        ${inInbox ? `<button data-act="unread">${t('rp.markUnread')}</button>` : ''}
+        <button data-act="save">${t('rp.saveAs')}</button>
+        <button data-act="print">${t('rp.print')}</button>
       </div>
     </div>`;
 
@@ -420,7 +436,7 @@ function renderActions(bar, email, onGone) {
 
   const select = bar.querySelector('.rp-project');
   if (select) {
-    select.innerHTML = `<option value="">No project</option>` +
+    select.innerHTML = `<option value="">${t('rp.noProject')}</option>` +
       appState.projects.map(p => `<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('');
     select.value = email.project || '';
     select.addEventListener('change', async () => {
@@ -428,7 +444,7 @@ function renderActions(bar, email, onGone) {
       try {
         await cmd('set_email_project', { uid: email.uid, project });
         retagInState(email.uid, project || '');
-        flash(project ? `Moved to ${project}` : 'Removed from project');
+        flash(project ? t('rp.movedTo', { project }) : t('rp.removedFromProject'));
       } catch (e) {
         select.value = email.project || '';
         flash(String(e), true);
@@ -442,7 +458,7 @@ function renderActions(bar, email, onGone) {
     spam: () => moveAway('spam_email', 'Moved to spam'),
     delete: () => moveAway('trash_email', 'Moved to trash'),
     more: () => menu.classList.toggle('hidden'),
-    unread: () => { setRead(email, false); flash('Marked as unread'); },
+    unread: () => { setRead(email, false); flash(t('rp.markedUnread')); },
     save: () => saveEmail(email).then(msg => msg && flash(msg)).catch(e => flash(String(e), true)),
     print: () => printEmail(email),
   };
@@ -490,11 +506,11 @@ async function saveEmail(email) {
   const safe = (email.subject || 'email').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 80).trim() || 'email';
   const path = await window.__TAURI__.dialog.save({
     defaultPath: `${safe}.eml`,
-    filters: [{ name: 'Email', extensions: ['eml'] }],
+    filters: [{ name: t('rp.emailFilter'), extensions: ['eml'] }],
   });
   if (!path) return null;
   await cmd('save_email', { uid: email.uid, path });
-  return `Saved to ${path}`;
+  return t('rp.savedTo', { path });
 }
 
 // Print only the email, from a throwaway sandboxed frame (no scripts allowed).
@@ -533,11 +549,11 @@ function metaHtml(email) {
     ? `${email.from_name} <${email.from_email}>`
     : email.from_name;
   const rows = [
-    ['From', from],
-    ['To', email.to],
-    ['Cc', email.cc],
-    ['Bcc', email.bcc],
-    ['Reply-To', email.reply_to],
+    [t('meta.from'), from],
+    [t('meta.to'), email.to],
+    [t('meta.cc'), email.cc],
+    [t('meta.bcc'), email.bcc],
+    [t('meta.replyTo'), email.reply_to],
   ];
   for (const [label, value] of rows) {
     const people = splitAddresses(value);
@@ -636,14 +652,13 @@ function renderCalendar() {
   if (!appState) return;
   if (!calYear) { calYear = appState.calendar_year; calMonth = appState.calendar_month; }
 
-  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  document.getElementById('cal-title').textContent = `${MONTHS[calMonth - 1]} ${calYear}`;
+  document.getElementById('cal-title').textContent = `${MONTH_NAMES[LANG][calMonth - 1]} ${calYear}`;
 
   const grid = document.getElementById('cal-grid');
   grid.innerHTML = '';
 
   // Day labels
-  for (const d of ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']) {
+  for (const d of WEEKDAY_SHORT[LANG]) {
     const cell = document.createElement('div');
     cell.className = 'cal-day-label';
     cell.textContent = d;
@@ -716,7 +731,7 @@ function renderCalendarEvents(cell, events, past, urgencyOf, expanded = false) {
   if (hidden > 0) {
     const more = document.createElement('div');
     more.className = 'cal-more';
-    more.textContent = `+${hidden} more`;
+    more.textContent = t('cal.more', { n: hidden });
     more.addEventListener('click', () => renderCalendarEvents(cell, events, past, urgencyOf, true));
     cell.appendChild(more);
   }
@@ -782,13 +797,13 @@ function renderKanban() {
     btn.className = 'kanban-board-btn' + (activeBoard === name ? ' active' : '');
     const count = appState.tasks.filter(t =>
       (name === null || t.project === name) && (t.status === 'todo' || t.status === 'in_progress')).length;
-    btn.innerHTML = `${esc(name ?? 'All tasks')} <span class="kanban-board-count">${count}</span>`;
+    btn.innerHTML = `${esc(name ?? t('kanban.all'))} <span class="kanban-board-count">${count}</span>`;
     btn.addEventListener('click', () => { activeBoard = name; renderKanban(); });
     boards.appendChild(btn);
   }
 
   document.getElementById('kanban-new-title').placeholder =
-    activeBoard ? `+ Add a task to ${activeBoard}…` : '+ Add a task…';
+    activeBoard ? t('kanban.addTo', { project: activeBoard }) : t('kanban.add');
 
   const visible = appState.tasks.filter(t => activeBoard === null || t.project === activeBoard);
   document.querySelectorAll('.kanban-col').forEach(col => {
@@ -801,31 +816,31 @@ function renderKanban() {
   });
 }
 
-function kanbanCard(t) {
+function kanbanCard(task) {
   const card = document.createElement('div');
   card.className = 'kanban-card';
   card.draggable = true;
 
   const chips = [];
-  if (activeBoard === null && t.project) chips.push(`<span class="kanban-chip">${esc(t.project)}</span>`);
-  if (t.ai_verdict) chips.push(`<span class="kanban-chip ai" title="Moved automatically by the AI">AI: ${esc(t.ai_verdict)}</span>`);
-  const source = t.source_uid
-    ? `<div class="kanban-source" title="Open the email">✉ ${esc(t.source_from)} · ${esc(t.source_subject)}</div>`
+  if (activeBoard === null && task.project) chips.push(`<span class="kanban-chip">${esc(task.project)}</span>`);
+  if (task.ai_verdict) chips.push(`<span class="kanban-chip ai" title="${t('kanban.aiMoved')}">${esc(task.ai_verdict === 'done' ? t('kanban.aiDone') : t('kanban.aiObsolete'))}</span>`);
+  const source = task.source_uid
+    ? `<div class="kanban-source" title="${t('kanban.openEmail')}">✉ ${esc(task.source_from)} · ${esc(task.source_subject)}</div>`
     : '';
 
   card.innerHTML = `
     <div class="kanban-card-top">
-      <div class="kanban-card-title">${esc(t.title)}</div>
-      <button class="kanban-delete" title="Delete task">×</button>
+      <div class="kanban-card-title">${esc(task.title)}</div>
+      <button class="kanban-delete" title="${t('kanban.delete')}">×</button>
     </div>
     ${source}
     ${chips.length ? `<div class="kanban-chips">${chips.join('')}</div>` : ''}
   `;
 
   card.addEventListener('dragstart', e => {
-    draggedTaskId = t.id;
+    draggedTaskId = task.id;
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(t.id));
+    e.dataTransfer.setData('text/plain', String(task.id));
     card.classList.add('dragging');
   });
   card.addEventListener('dragend', () => {
@@ -836,10 +851,10 @@ function kanbanCard(t) {
 
   card.querySelector('.kanban-delete').addEventListener('click', async e => {
     e.stopPropagation();
-    setTasks(await cmd('delete_task', { id: t.id }));
+    setTasks(await cmd('delete_task', { id: task.id }));
   });
   const src = card.querySelector('.kanban-source');
-  if (src) src.addEventListener('click', () => switchToEmail(t.source_uid));
+  if (src) src.addEventListener('click', () => switchToEmail(task.source_uid));
   return card;
 }
 
@@ -853,7 +868,7 @@ function renderProjects() {
   for (const p of appState.projects) {
     const row = document.createElement('div');
     row.className = 'project-row' + (activeProject === p.name ? ' active' : '');
-    row.innerHTML = `<div>${esc(p.name)}</div><div class="project-urgency ${p.urgency}">${p.urgency} · ${p.email_count} emails</div>`;
+    row.innerHTML = `<div>${esc(p.name)}</div><div class="project-urgency ${p.urgency}">${t('proj.urgency.' + (p.urgency === 'high' ? 'high' : 'normal'))} · ${tn('proj.emails', p.email_count)}</div>`;
     row.addEventListener('click', () => { activeProject = p.name; renderProjects(); showProject(p); });
     list.appendChild(row);
   }
@@ -873,7 +888,7 @@ function setupNewProject() {
   const create = async () => {
     const name = nameEl.value.trim();
     const urgency = document.getElementById('projects-new-urgency').value;
-    if (!name) { errEl.textContent = 'Please enter a name.'; return; }
+    if (!name) { errEl.textContent = t('proj.enterName'); return; }
     try {
       await cmd('add_project', { name, urgency });
     } catch (e) {
@@ -904,7 +919,7 @@ function setupNewProject() {
 function showProject(p) {
   document.getElementById('projects-detail').classList.remove('hidden');
   document.getElementById('projects-detail-name').textContent = p.name;
-  document.getElementById('projects-detail-urgency').textContent = p.urgency;
+  document.getElementById('projects-detail-urgency').textContent = t('proj.urgency.' + (p.urgency === 'high' ? 'high' : 'normal'));
   document.getElementById('projects-desc').value = p.description || '';
 
   document.getElementById('projects-save-desc').onclick = async () => {
@@ -1170,7 +1185,7 @@ function setupComposeImages() {
 function insertImageFile(file) {
   if (!file.type.startsWith('image/')) return;
   if (file.size > MAX_IMAGE_BYTES) {
-    setComposeStatus(`${file.name} is larger than 5 MB`, true);
+    setComposeStatus(t('cmp.imageTooLarge', { name: file.name }), true);
     return;
   }
   const reader = new FileReader();
@@ -1213,7 +1228,7 @@ async function loadGifs(query) {
   const grid = $c('tb-gif-grid');
   const status = $c('tb-gif-status');
   const seq = ++gifSearchSeq;
-  status.textContent = 'Loading…';
+  status.textContent = t('gif.loading');
   status.classList.remove('error');
   let gifs;
   try {
@@ -1226,7 +1241,7 @@ async function loadGifs(query) {
     return;
   }
   if (seq !== gifSearchSeq) return;   // a newer search finished first
-  status.textContent = gifs.length ? (query.trim() ? '' : 'Trending') : 'No GIFs found';
+  status.textContent = gifs.length ? (query.trim() ? '' : t('gif.trending')) : t('gif.none');
   grid.innerHTML = '';
   for (const g of gifs) {
     const img = document.createElement('img');
@@ -1242,7 +1257,7 @@ async function loadGifs(query) {
 
 async function insertGif(gif) {
   const status = $c('tb-gif-status');
-  status.textContent = 'Adding GIF…';
+  status.textContent = t('gif.adding');
   status.classList.remove('error');
   try {
     // Downloaded by the backend and embedded, so it is sent with the email
@@ -1312,7 +1327,7 @@ async function runComposeAi(action) {
   });
   const hasText = holder.textContent.trim().length > 0;
   if (action !== 'auto_reply' && !hasText) {
-    setComposeStatus('Write something first, or select the text to change.', true);
+    setComposeStatus(t('ai.writeFirst'), true);
     return;
   }
 
@@ -1329,8 +1344,7 @@ async function runComposeAi(action) {
   composeAiBusy = true;
   body.contentEditable = 'false';   // the range must not change while the AI works
   $c('tb-ai').disabled = true;
-  const labels = { formal: 'Making it formal', translate_en: 'Translating', correct: 'Correcting', auto_reply: 'Writing a reply' };
-  setComposeStatus(`✨ ${labels[action]}…`);
+  setComposeStatus(`✨ ${t('ai.busy.' + action)}…`);
 
   let result;
   try {
@@ -1366,7 +1380,7 @@ async function runComposeAi(action) {
   sel.addRange(range);
   document.execCommand('insertHTML', false, html);
   composeDirty = true;
-  setComposeStatus('Done — Ctrl+Z to undo');
+  setComposeStatus(t('ai.done'));
 }
 
 // Drag the top-left corner to resize; the size is remembered.
@@ -1432,11 +1446,12 @@ function senderLabel(email) {
     : email.from_name;
 }
 
+// openCompose({ to, subject })           new message with prefilled fields
 // openCompose()                         new message
 // openCompose({ mode: 'reply', email })  reply with the original quoted
 // openCompose({ mode: 'forward', email }) forward with the original below
-function openCompose({ mode = 'new', email = null } = {}) {
-  let to = '', subject = '', html = '<div><br></div>';
+function openCompose({ mode = 'new', email = null, to: presetTo = '', subject: presetSubject = '' } = {}) {
+  let to = presetTo, subject = presetSubject, html = '<div><br></div>';
   composeInReplyTo = null;
 
   if (email && mode === 'reply') {
@@ -1445,21 +1460,21 @@ function openCompose({ mode = 'new', email = null } = {}) {
     composeInReplyTo = email.message_id || null;
     html = `<div><br></div><div><br></div>
       <div class="compose-quoted">
-      <div class="quote-intro">On ${esc(email.date_full || email.date_str)}, ${esc(senderLabel(email))} wrote:</div>
+      <div class="quote-intro">${esc(t('cmp.wrote', { date: email.date_full || email.date_str, from: senderLabel(email) }))}</div>
       <blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">${quotedOriginal(email)}</blockquote>
       </div>`;
   } else if (email && mode === 'forward') {
     subject = /^(fwd?|tr):/i.test(email.subject) ? email.subject : `Fwd: ${email.subject}`;
     const rows = [
-      ['From', senderLabel(email)],
-      ['Date', email.date_full || email.date_str],
-      ['Subject', email.subject],
-      ['To', email.to],
-      ['Cc', email.cc],
+      [t('meta.from'), senderLabel(email)],
+      [t('meta.date'), email.date_full || email.date_str],
+      [t('meta.subject'), email.subject],
+      [t('meta.to'), email.to],
+      [t('meta.cc'), email.cc],
     ].filter(([, v]) => v).map(([k, v]) => `${k}: ${esc(v)}<br>`).join('');
     html = `<div><br></div><div><br></div>
       <div class="compose-quoted">
-      <div>---------- Forwarded message ----------<br>${rows}</div><br>
+      <div>${t('cmp.forwarded')}<br>${rows}</div><br>
       <div>${quotedOriginal(email)}</div>
       </div>`;
   }
@@ -1468,7 +1483,7 @@ function openCompose({ mode = 'new', email = null } = {}) {
   composeMode = email ? mode : 'new';
   // Auto answer needs an email to answer.
   $c('tb-ai-auto').disabled = composeMode !== 'reply';
-  $c('tb-ai-auto').title = composeMode === 'reply' ? 'Write a reply with AI (uses your notes if any)' : 'Only available when replying';
+  $c('tb-ai-auto').title = composeMode === 'reply' ? t('ai.autoTitle') : t('ai.autoDisabled');
 
   $c('compose-to').value = to;
   $c('compose-cc').value = '';
@@ -1480,7 +1495,7 @@ function openCompose({ mode = 'new', email = null } = {}) {
   $c('compose-subject').value = subject;
   $c('compose-body').innerHTML = html;
   $c('composer-title').textContent =
-    mode === 'reply' ? subject : mode === 'forward' ? subject : 'New Message';
+    mode === 'reply' ? subject : mode === 'forward' ? subject : t('cmp.newMessage');
   $c('compose-discard-confirm').classList.add('hidden');
   setComposeStatus('');
   $c('compose-send').disabled = false;
@@ -1490,7 +1505,8 @@ function openCompose({ mode = 'new', email = null } = {}) {
   composeDirty = false;
   composeRange = null;
 
-  if (mode === 'reply') {
+  // Reply, or recipient and subject already filled: start typing the message.
+  if (mode === 'reply' || (to && subject)) {
     // Caret at the very top of the body, above the quote.
     const body = $c('compose-body');
     body.focus();
@@ -1533,18 +1549,18 @@ async function sendEmail() {
   const bcc = $c('compose-bcc').value.trim();
   const subject = $c('compose-subject').value.trim();
   const html = $c('compose-body').innerHTML;
-  if (!to && !cc && !bcc) { setComposeStatus('Please enter a recipient.', true); $c('compose-to').focus(); return; }
+  if (!to && !cc && !bcc) { setComposeStatus(t('cmp.needRecipient'), true); $c('compose-to').focus(); return; }
 
   const btn = $c('compose-send');
   btn.disabled = true;
-  setComposeStatus('Sending…');
+  setComposeStatus(t('cmp.sending'));
   try {
     await cmd('send_email', { to, cc, bcc, subject, html, inReplyTo: composeInReplyTo });
     closeCompose();
-    showToast('Message sent');
+    showToast(t('cmp.sent'));
   } catch (e) {
     btn.disabled = false;
-    setComposeStatus(`Failed to send: ${e}`, true);
+    setComposeStatus(t('cmp.sendFailed', { err: e }), true);
   }
 }
 
@@ -1564,8 +1580,70 @@ function showToast(msg) {
 // ── Settings ───────────────────────────────────────────────────────────────
 let settingsData = null;
 
+// ── Themes ──
+const THEMES = [
+  { id: 'midnight',  name: 'Midnight' },
+  { id: 'white',     name: 'White' },
+  { id: 'modern',    name: 'Modern' },
+  { id: 'brutalist', name: 'Brutalist' },
+  { id: 'aero',      name: 'Frutiger Aero' },
+  { id: 'terminal',  name: 'Terminal' },
+];
+let savedTheme = 'midnight';      // last saved; restored if Settings closes without saving
+let savedFontScale = 1.0;
+
+function applyTheme(id) {
+  if (!THEMES.some(t => t.id === id)) id = 'midnight';
+  document.documentElement.dataset.theme = id;
+  try { localStorage.setItem('theme', id); } catch (_) {}
+  document.querySelectorAll('.theme-card').forEach(c =>
+    c.classList.toggle('selected', c.dataset.theme === id));
+}
+
+function renderThemePicker() {
+  const grid = document.getElementById('s-theme-grid');
+  grid.innerHTML = '';
+  const current = document.documentElement.dataset.theme;
+  for (const theme of THEMES) {
+    // Each card carries its own data-theme, so it previews that theme's variables.
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'theme-card' + (theme.id === current ? ' selected' : '');
+    card.dataset.theme = theme.id;
+    card.innerHTML = `
+      <div class="theme-card-preview">
+        <div class="theme-card-side"></div>
+        <div class="theme-card-main"><div class="theme-card-bar"></div><div class="theme-card-paper"></div></div>
+      </div>
+      <span class="theme-card-name">${esc(t('theme.' + theme.id))}</span>`;
+    card.addEventListener('click', () => applyTheme(theme.id));   // live preview
+    grid.appendChild(card);
+  }
+}
+
+// Switch the UI language: static texts, then everything rendered from data.
+function applyLanguage(code) {
+  setLang(code);
+  applyStaticI18n();
+  if (appState) renderAll();
+  if (!document.getElementById('settings-overlay').classList.contains('hidden')) {
+    renderThemePicker();
+    settingsData.accounts = collectAccounts();   // keep unsaved edits while re-rendering labels
+    renderAccountBlocks(settingsData.accounts);
+  }
+}
+
+let savedLang = 'en';   // last saved; restored if Settings closes without saving
+
 async function openSettings() {
   settingsData = await cmd('get_settings');
+  savedTheme = settingsData.theme || 'midnight';
+  savedLang = settingsData.language || 'en';
+  const langSelect = document.getElementById('s-language');
+  langSelect.innerHTML = LANGUAGES.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
+  langSelect.value = LANG;
+  savedFontScale = settingsData.font_scale || 1.0;
+  renderThemePicker();
   document.getElementById('s-display-name').value = settingsData.display_name;
   fontScale = settingsData.font_scale;
   const slider = document.getElementById('s-font-scale');
@@ -1574,6 +1652,9 @@ async function openSettings() {
   document.getElementById('s-claude-key').value = settingsData.claude_key;
   document.getElementById('s-claude-model').value = settingsData.claude_model;
   document.getElementById('s-giphy-key').value = settingsData.giphy_key || '';
+  document.getElementById('s-db-url').value = settingsData.database_url || '';
+  document.getElementById('s-db-insecure').checked = !!settingsData.database_accept_invalid_certs;
+  document.getElementById('s-db-status').textContent = '';
 
   renderAccountBlocks(settingsData.accounts);
   document.getElementById('settings-overlay').classList.remove('hidden');
@@ -1590,21 +1671,21 @@ function renderAccountBlocks(accounts) {
     block.dataset.idx = idx;
     block.innerHTML = `
       <div class="account-block-title">
-        <span>${esc(acc.label) || `Account ${idx + 1}`}</span>
-        <button class="remove-account-btn" data-idx="${idx}">Remove</button>
+        <span>${esc(acc.label) || t('set.account', { n: idx + 1 })}</span>
+        <button class="remove-account-btn" data-idx="${idx}">${t('set.remove')}</button>
       </div>
-      <label>Label</label><input type="text" class="a-label" value="${esc(acc.label)}" />
-      <label>IMAP Host</label><input type="text" class="a-imap-host" value="${esc(acc.imap_host)}" />
-      <label>IMAP Port</label><input type="text" class="a-imap-port" value="${esc(acc.imap_port)}" />
-      <label>IMAP Username</label><input type="text" class="a-imap-user" value="${esc(acc.imap_user)}" />
-      <label>IMAP Password</label><input type="password" class="a-imap-pass" value="${esc(acc.imap_pass)}" />
-      <label>IMAP Mailbox</label><input type="text" class="a-imap-mailbox" value="${esc(acc.imap_mailbox)}" />
-      <label>Fetch Count</label><input type="text" class="a-imap-fetch" value="${esc(acc.imap_fetch)}" />
-      <label>SMTP Host</label><input type="text" class="a-smtp-host" value="${esc(acc.smtp_host)}" />
-      <label>SMTP Port</label><input type="text" class="a-smtp-port" value="${esc(acc.smtp_port)}" />
-      <label>SMTP Username</label><input type="text" class="a-smtp-user" value="${esc(acc.smtp_user)}" />
-      <label>SMTP Password</label><input type="password" class="a-smtp-pass" value="${esc(acc.smtp_pass)}" />
-      <label>From Address</label><input type="text" class="a-smtp-from" value="${esc(acc.smtp_from)}" />
+      <label>${t('set.label')}</label><input type="text" class="a-label" value="${esc(acc.label)}" />
+      <label>${t('set.imapHost')}</label><input type="text" class="a-imap-host" value="${esc(acc.imap_host)}" />
+      <label>${t('set.imapPort')}</label><input type="text" class="a-imap-port" value="${esc(acc.imap_port)}" />
+      <label>${t('set.imapUser')}</label><input type="text" class="a-imap-user" value="${esc(acc.imap_user)}" />
+      <label>${t('set.imapPass')}</label><input type="password" class="a-imap-pass" value="${esc(acc.imap_pass)}" />
+      <label>${t('set.imapMailbox')}</label><input type="text" class="a-imap-mailbox" value="${esc(acc.imap_mailbox)}" />
+      <label>${t('set.fetchCount')}</label><input type="text" class="a-imap-fetch" value="${esc(acc.imap_fetch)}" />
+      <label>${t('set.smtpHost')}</label><input type="text" class="a-smtp-host" value="${esc(acc.smtp_host)}" />
+      <label>${t('set.smtpPort')}</label><input type="text" class="a-smtp-port" value="${esc(acc.smtp_port)}" />
+      <label>${t('set.smtpUser')}</label><input type="text" class="a-smtp-user" value="${esc(acc.smtp_user)}" />
+      <label>${t('set.smtpPass')}</label><input type="password" class="a-smtp-pass" value="${esc(acc.smtp_pass)}" />
+      <label>${t('set.fromAddress')}</label><input type="text" class="a-smtp-from" value="${esc(acc.smtp_from)}" />
     `;
     block.querySelector('.remove-account-btn').addEventListener('click', () => {
       settingsData.accounts.splice(idx, 1);
@@ -1640,6 +1721,23 @@ function setupSettings() {
   });
 
   document.getElementById('settings-save').addEventListener('click', saveSettings);
+  document.getElementById('s-language').addEventListener('change', e => applyLanguage(e.target.value));   // live preview
+  document.getElementById('s-db-test').addEventListener('click', async () => {
+    const status = document.getElementById('s-db-status');
+    status.classList.remove('error', 'ok');
+    status.textContent = t('set.dbTesting');
+    try {
+      const version = await cmd('test_database', {
+        url: document.getElementById('s-db-url').value,
+        acceptInvalidCerts: document.getElementById('s-db-insecure').checked,
+      });
+      status.textContent = t('set.dbOk', { version });
+      status.classList.add('ok');
+    } catch (e) {
+      status.textContent = String(e);
+      status.classList.add('error');
+    }
+  });
 
   document.getElementById('s-show-qr').addEventListener('click', async () => {
     const qr = await cmd('get_qr');
@@ -1680,15 +1778,34 @@ async function saveSettings() {
   try {
     await cmd('save_settings', {
       displayName, accounts, claudeKey, claudeModel, giphyKey, fontScale,
+      theme: document.documentElement.dataset.theme,
+      language: LANG,
     });
+    // Database settings are local-only and need a reconnect + sync, so they have their own command.
+    const dbUrl = document.getElementById('s-db-url').value.trim();
+    const dbInsecure = document.getElementById('s-db-insecure').checked;
+    if (dbUrl !== (settingsData.database_url || '') || dbInsecure !== !!settingsData.database_accept_invalid_certs) {
+      await cmd('set_database', { url: dbUrl, acceptInvalidCerts: dbInsecure });
+    }
+    const languageChanged = LANG !== savedLang;
+    savedTheme = document.documentElement.dataset.theme;
+    savedFontScale = fontScale;
+    savedLang = LANG;
     closeSettings();
+    // Dates, greeting and briefing are built by the backend: rebuild them in the new language.
+    if (languageChanged) document.getElementById('btn-refresh').click();
   } catch (e) {
-    alert(`Save failed: ${e}`);
+    alert(t('set.saveFailed', { err: e }));
   }
 }
 
+// Closing without saving undoes the live previews (theme, font size).
 function closeSettings() {
   document.getElementById('settings-overlay').classList.add('hidden');
+  if (LANG !== savedLang) applyLanguage(savedLang);
+  applyTheme(savedTheme);
+  fontScale = savedFontScale;
+  document.documentElement.style.fontSize = `${fontScale * 14}px`;
 }
 
 // ── Email row builder ──────────────────────────────────────────────────────
@@ -1697,15 +1814,32 @@ function emailRow(email) {
   row.className = 'email-row' + (email.is_read ? '' : ' unread');
   row.dataset.uid = email.uid;
   const dot = `<span class="priority-dot p-${email.priority}"></span>`;
+  // Read/unread toggle, only for inbox emails (other folders number UIDs separately).
+  const inInbox = appState && panelForEmail(email) === 'inbox';
+  const toggle = inInbox
+    ? `<button class="row-read-toggle" title="${readToggleTitle(email.is_read)}" aria-label="${t('rp.toggleRead')}"></button>`
+    : '';
   row.innerHTML = `
     <div class="email-row-top">
-      <span class="email-from">${dot}${esc(email.from_name)}</span>
+      <span class="email-from">${toggle}${dot}${esc(email.from_name)}</span>
       <span class="email-date">${esc(email.date_str)}</span>
     </div>
     <div class="email-subject">${esc(email.subject)}</div>
     <div class="email-summary">${esc(email.summary)}</div>
   `;
+  const btn = row.querySelector('.row-read-toggle');
+  if (btn) {
+    btn.addEventListener('pointerdown', e => e.stopPropagation());   // not the start of a swipe
+    btn.addEventListener('click', e => {
+      e.stopPropagation();   // don't open the email
+      setRead(email, !email.is_read);
+    });
+  }
   return row;
+}
+
+function readToggleTitle(isRead) {
+  return isRead ? t('rp.markUnread') : t('rp.markRead');
 }
 
 // ── Utils ──────────────────────────────────────────────────────────────────

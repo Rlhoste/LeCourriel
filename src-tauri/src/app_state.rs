@@ -13,6 +13,7 @@ use crate::config::{Config, ImapConfig};
 use crate::dismissals::Dismissals;
 use crate::tasks::{Board, Status};
 use crate::dto::*;
+use crate::i18n;
 use crate::imap_client::{connect, fetch_emails, fetch_folder};
 use crate::models::{EmailCard, Priority};
 use crate::state::AppState;
@@ -28,14 +29,15 @@ pub async fn refresh(cfg: Arc<Config>, app: AppHandle, state: Arc<Mutex<AppState
         Err(e) => {
             error!("Refresh failed: {:#}", e);
             app.emit("error", format!("Refresh failed: {}", e)).ok();
-            app.emit("loading", false).ok();
         }
     }
+    // Hide the loading bar whether the refresh succeeded or failed.
+    app.emit("loading", false).ok();
 }
 
 fn raw_to_card(raw: crate::models::RawEmail) -> EmailCard {
     let (from_name, from_email) = parse_from(&raw.from);
-    let date_str = raw.date.map(format_date).unwrap_or_else(|| "Unknown".to_string());
+    let date_str = raw.date.map(format_date).unwrap_or_else(|| i18n::unknown_date(i18n::lang()).to_string());
     let date_full = raw.date.map(format_date_full).unwrap_or_default();
     EmailCard {
         uid: raw.uid,
@@ -132,6 +134,8 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
             c.bcc = raw.bcc.clone();
             c.message_id = raw.message_id.clone();
             c.date_full = raw.date.map(format_date_full).unwrap_or_default();
+            c.date_str = raw.date.map(format_date)
+                .unwrap_or_else(|| i18n::unknown_date(i18n::lang()).to_string());
             c.is_read = raw.seen;
         }
     }
@@ -145,9 +149,9 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     pre_cards.extend(new_raw_cards);
     let new_count = new_raw.len();
     let briefing_pre = if new_count > 0 {
-        format!("Classifying {} new email{} with AI…", new_count, if new_count == 1 { "" } else { "s" })
+        i18n::classifying(new_count, i18n::lang())
     } else {
-        "Up to date.".to_string()
+        i18n::up_to_date(i18n::lang()).to_string()
     };
     populate(cfg, app, state, pre_cards, sent_cards_pre.clone(), drafts_cards_pre.clone(), trash_cards_pre.clone(), Some(briefing_pre));
 
@@ -157,17 +161,33 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     } else {
         let http_client = Client::builder().timeout(std::time::Duration::from_secs(30)).build()?;
         let projects = cfg.projects.clone();
+        // Emails already classified on another computer: reuse the stored result (no AI call).
+        let ids: Vec<String> = new_raw.iter()
+            .map(|r| r.message_id.clone()).filter(|id| !id.is_empty()).collect();
+        let stored = crate::pgsync::lookup_ai(&ids).await;
         let classify_tasks: Vec<_> = new_raw.iter().map(|email| {
+            if let Some(c) = stored.get(&email.message_id).cloned() {
+                return tokio::spawn(async move { anyhow::Ok((false, c)) });
+            }
             let client = http_client.clone();
             let claude_cfg = cfg.claude.clone();
             let email = email.clone();
             let projects = projects.clone();
-            tokio::spawn(async move { crate::ai_classifier::classify(&client, &claude_cfg, &email, &projects).await })
+            tokio::spawn(async move {
+                let c = crate::ai_classifier::classify(&client, &claude_cfg, &email, &projects).await?;
+                anyhow::Ok((true, c))
+            })
         }).collect();
         let results = join_all(classify_tasks).await;
-        new_raw.into_iter().zip(results).map(|(raw, result)| {
+        let mut to_store: Vec<(String, crate::ai_classifier::ClassifiedEmail)> = Vec::new();
+        let cards: Vec<EmailCard> = new_raw.into_iter().zip(results).map(|(raw, result)| {
             let classified = match result {
-                Ok(Ok(c)) => c,
+                Ok(Ok((fresh, c))) => {
+                    if fresh && !raw.message_id.is_empty() && crate::ai_classifier::is_real_result(&c) {
+                        to_store.push((raw.message_id.clone(), c.clone()));
+                    }
+                    c
+                }
                 _ => crate::ai_classifier::ClassifiedEmail {
                     priority: Priority::Information,
                     summary: String::new(),
@@ -175,7 +195,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
                 },
             };
             let (from_name, from_email) = parse_from(&raw.from);
-            let date_str = raw.date.map(format_date).unwrap_or_else(|| "Unknown".to_string());
+            let date_str = raw.date.map(format_date).unwrap_or_else(|| i18n::unknown_date(i18n::lang()).to_string());
             let date_full = raw.date.map(format_date_full).unwrap_or_default();
             let body_html = raw.body_html.clone().unwrap_or_default();
             EmailCard {
@@ -194,7 +214,9 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
                 task: classified.task,
                 meeting_link: classified.meeting_link,
             }
-        }).collect()
+        }).collect();
+        crate::pgsync::store_ai(&to_store).await;
+        cards
     };
 
     // Merge: cached + newly classified. Remove UIDs no longer in inbox.
@@ -223,11 +245,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     let attention = urgent_count + high_count;
     use chrono::Timelike;
     let now = Local::now();
-    let live_briefing = format!(
-        "Briefed at {:02}:{:02} · {} require{}",
-        now.hour(), now.minute(),
-        attention, if attention == 1 { "s you" } else { " your attention" }
-    );
+    let live_briefing = i18n::briefing_live(now.hour(), now.minute(), attention, i18n::lang());
 
     populate(cfg, app, state, cards, sent_cards, drafts_cards, trash_cards, Some(live_briefing));
     Ok(())
@@ -318,17 +336,14 @@ fn populate(
     let deadline_dtos: Vec<DeadlineDto> = deadlines.iter().map(|(date, card)| DeadlineDto {
         uid: card.uid,
         subject: card.subject.clone(),
-        deadline_str: date.format("%b %d").to_string(),
+        deadline_str: i18n::day_month(date, i18n::lang()),
         date_iso: date.format("%Y-%m-%d").to_string(),
         project: card.project.clone().unwrap_or_default(),
         days_until: (*date - today).num_days() as i32,
     }).collect();
 
     let attention = urgent.len() + high.len();
-    let briefing = briefing_override.unwrap_or_else(|| format!(
-        "Cached · {} require{}", attention,
-        if attention == 1 { "s you" } else { " your attention" }
-    ));
+    let briefing = briefing_override.unwrap_or_else(|| i18n::briefing_cached(attention, i18n::lang()));
 
     use chrono::Datelike;
     let now = Local::now();
@@ -353,8 +368,7 @@ fn populate(
 
     use chrono::Timelike;
     let hour = Local::now().hour();
-    let time_word = if hour < 12 { "morning" } else if hour < 17 { "afternoon" } else { "evening" };
-    let greeting = format!("Good {}, {}.", time_word, cfg.user.display_name);
+    let greeting = i18n::greeting(hour, &cfg.user.display_name, i18n::lang());
 
     let snapshot = AppStateDto {
         greeting,
@@ -401,7 +415,7 @@ fn to_dto_vec(cards: &[EmailCard]) -> Vec<EmailCardDto> {
         priority:     c.priority.as_str().to_string(),
         is_read:      c.is_read,
         project:      c.project.clone().unwrap_or_default(),
-        deadline_str: c.deadline.map(|d| d.format("%b %d").to_string()).unwrap_or_default(),
+        deadline_str: c.deadline.map(|d| i18n::day_month(&d, i18n::lang())).unwrap_or_default(),
         task:         c.task.clone().unwrap_or_default(),
         body_text:    c.body_text.clone(),
         body_html:    c.body_html.clone(),
@@ -409,12 +423,11 @@ fn to_dto_vec(cards: &[EmailCard]) -> Vec<EmailCardDto> {
     }).collect()
 }
 
-fn build_week_days(today: NaiveDate, deadlines: &[(NaiveDate, EmailCard)]) -> Vec<WeekDayDto> {
+/// The Overview strip: today and the 6 following days.
+pub fn build_week_days(today: NaiveDate, deadlines: &[(NaiveDate, EmailCard)]) -> Vec<WeekDayDto> {
     use chrono::Datelike;
-    let days_from_mon = today.weekday().num_days_from_monday();
-    let monday = today - chrono::Duration::days(days_from_mon as i64);
     (0..7).map(|offset| {
-        let day = monday + chrono::Duration::days(offset);
+        let day = today + chrono::Duration::days(offset);
         let slots: Vec<&EmailCard> = deadlines.iter()
             .filter(|(d, _)| *d == day).map(|(_, c)| c).take(3).collect();
         let get = |i: usize| slots.get(i)
@@ -422,7 +435,7 @@ fn build_week_days(today: NaiveDate, deadlines: &[(NaiveDate, EmailCard)]) -> Ve
             .unwrap_or_else(|| (String::new(), 0));
         let (s1, u1) = get(0); let (s2, u2) = get(1); let (s3, u3) = get(2);
         WeekDayDto {
-            day_name: day.format("%a").to_string(),
+            day_name: i18n::short_day(&day, i18n::lang()),
             day_number: day.day(),
             is_today: day == today,
             dl1_subject: s1, dl1_uid: u1,
@@ -453,14 +466,14 @@ fn format_date(dt: chrono::DateTime<Utc>) -> String {
     if diff.num_hours() < 24 {
         format!("{:02}:{:02}", local.hour(), local.minute())
     } else if diff.num_days() < 7 {
-        local.format("%a").to_string()
+        i18n::short_day(&local, i18n::lang())
     } else {
-        local.format("%b %d").to_string()
+        i18n::day_month(&local, i18n::lang())
     }
 }
 
 fn format_date_full(dt: chrono::DateTime<Utc>) -> String {
-    dt.with_timezone(&Local).format("%A %d %B %Y, %H:%M").to_string()
+    i18n::full_datetime(&dt.with_timezone(&Local), i18n::lang())
 }
 
 fn render_body(plain: &str, html: &Option<String>) -> String {

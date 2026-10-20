@@ -98,6 +98,7 @@ impl Board {
         let mut b = Self::load();
         let out = f(&mut b);
         b.save();
+        crate::pgsync::schedule_push(crate::pgsync::Doc::Tasks);
         out
     }
 

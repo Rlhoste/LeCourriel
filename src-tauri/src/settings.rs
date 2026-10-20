@@ -9,9 +9,13 @@ pub fn config_to_dto(cfg: &Config) -> SettingsDto {
     SettingsDto {
         display_name: cfg.user.display_name.clone(),
         font_scale: cfg.user.font_scale,
+        theme: cfg.user.theme.clone(),
+        language: cfg.user.language.clone(),
         claude_key: cfg.claude.api_key.clone(),
         claude_model: cfg.claude.model.clone(),
         giphy_key: cfg.gifs.giphy_api_key.clone(),
+        database_url: cfg.database.as_ref().map(|d| d.url.clone()).unwrap_or_default(),
+        database_accept_invalid_certs: cfg.database.as_ref().map_or(false, |d| d.accept_invalid_certs),
         accounts: cfg.accounts.iter().map(|a| AccountDto {
             label: a.name.clone(),
             imap_host: a.imap.host.clone(),
@@ -36,12 +40,19 @@ pub fn save_config(
     claude_model: &str,
     giphy_key: &str,
     font_scale: f32,
+    theme: Option<&str>,
+    language: Option<&str>,
 ) -> Result<()> {
     let mut cfg = Config::load()?;
 
     cfg.user = UserConfig {
         display_name: display_name.to_string(),
         font_scale,
+        theme: theme.map(str::to_string).unwrap_or_else(|| cfg.user.theme.clone()),
+        language: language
+            .filter(|l| *l == "en" || *l == "fr")
+            .map(str::to_string)
+            .unwrap_or_else(|| cfg.user.language.clone()),
     };
 
     cfg.accounts = accounts.iter().map(|a| AccountConfig {

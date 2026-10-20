@@ -13,6 +13,25 @@ pub struct Config {
     pub projects: Vec<ProjectConfig>,
     #[serde(default)]
     pub gifs: GifConfig,
+    /// Optional PostgreSQL server to sync app data with. Local to this computer: never synced.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub database: Option<DatabaseConfig>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct DatabaseConfig {
+    /// e.g. postgres://courriel:secret@db.example.com:5432/courriel?sslmode=require
+    pub url: String,
+    /// Skip TLS certificate checks (self-signed certificates on a self-hosted server).
+    #[serde(default)]
+    pub accept_invalid_certs: bool,
+}
+
+impl Config {
+    /// The database URL, if one is configured and non-empty.
+    pub fn database_url(&self) -> Option<&str> {
+        self.database.as_ref().map(|d| d.url.trim()).filter(|u| !u.is_empty())
+    }
 }
 
 /// GIF picker in the composer (GIPHY).
@@ -27,9 +46,17 @@ pub struct UserConfig {
     pub display_name: String,
     #[serde(default = "default_font_scale")]
     pub font_scale: f32,
+    /// UI theme: midnight, white, modern, brutalist, aero, terminal.
+    #[serde(default = "default_theme")]
+    pub theme: String,
+    /// UI language: "en" or "fr".
+    #[serde(default = "default_language")]
+    pub language: String,
 }
 
 fn default_font_scale() -> f32 { 1.0 }
+fn default_theme() -> String { "midnight".to_string() }
+fn default_language() -> String { "en".to_string() }
 
 /// One email account (IMAP + SMTP pair).
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -121,12 +148,20 @@ impl Config {
             claude: legacy.claude,
             projects: legacy.projects,
             gifs: GifConfig::default(),
+            database: None,
         })
     }
 }
 
-/// Persist the full config to config.toml.
+/// Persist the full config to config.toml and queue a push of the synced preferences.
 pub fn save_config(cfg: &Config) -> Result<()> {
+    write_local(cfg)?;
+    crate::pgsync::schedule_push(crate::pgsync::Doc::Prefs);
+    Ok(())
+}
+
+/// Write config.toml only (used when applying preferences pulled from the database).
+pub fn write_local(cfg: &Config) -> Result<()> {
     let serialized = toml::to_string_pretty(cfg).context("Failed to serialize config")?;
     fs::write("config.toml", serialized).context("Failed to write config.toml")?;
     Ok(())

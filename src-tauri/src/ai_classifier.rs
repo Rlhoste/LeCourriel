@@ -47,6 +47,7 @@ struct ClassificationResult {
     meeting_link: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ClassifiedEmail {
     pub priority: Priority,
     pub summary: String,
@@ -54,6 +55,15 @@ pub struct ClassifiedEmail {
     pub deadline: Option<NaiveDate>,
     pub task: Option<String>,
     pub meeting_link: Option<String>,
+}
+
+const CLASSIFY_FAILED: &str = "Could not classify email.";
+const PARSE_FAILED: &str = "Unable to summarize email.";
+
+/// False for the placeholder results returned when the API call or parsing failed;
+/// those must not be stored and reused on other computers.
+pub fn is_real_result(c: &ClassifiedEmail) -> bool {
+    c.summary != CLASSIFY_FAILED && c.summary != PARSE_FAILED
 }
 
 fn build_system_prompt(projects: &[ProjectConfig]) -> String {
@@ -92,6 +102,11 @@ For the meeting_link field: if the email body contains a video meeting URL (Zoom
         prompt.push_str("\nFor the project field: always use null (no projects configured).\n");
     }
 
+
+    prompt.push_str(&format!(
+        "\nWrite the summary and the task in {}, whatever the language of the email.\n",
+        crate::i18n::ai_language_name(crate::i18n::lang())
+    ));
     prompt
 }
 
@@ -135,7 +150,7 @@ pub async fn classify(
         warn!("Claude API error {}: {}", status, body);
         return Ok(ClassifiedEmail {
             priority: Priority::Information,
-            summary: "Could not classify email.".to_string(),
+            summary: CLASSIFY_FAILED.to_string(),
             project: None,
             deadline: None,
             task: None,
@@ -174,7 +189,7 @@ pub async fn classify(
             warn!("Failed to parse Claude JSON response: {} — raw: {}", e, text);
             Ok(ClassifiedEmail {
                 priority: Priority::Information,
-                summary: "Unable to summarize email.".to_string(),
+                summary: PARSE_FAILED.to_string(),
                 project: None,
                 deadline: None,
                 task: None,

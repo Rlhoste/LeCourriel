@@ -39,6 +39,12 @@ max_tokens = 300
 [gifs]
 giphy_api_key = ""
 
+# Optional: sync tasks, preferences and AI results with your own PostgreSQL server.
+# Passwords and API keys are never sent to the database. See README → "Sync with your PostgreSQL".
+# [database]
+# url = "postgres://courriel:your-db-password@db.example.com:5432/courriel?sslmode=require"
+# accept_invalid_certs = false   # true for a self-signed certificate
+
 # Optional: projects the AI sorts your emails into.
 [[projects]]
 name = "Work"

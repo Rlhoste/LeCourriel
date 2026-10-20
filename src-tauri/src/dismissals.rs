@@ -42,6 +42,7 @@ impl Dismissals {
         let mut d = Self::load();
         let out = f(&mut d);
         d.save();
+        crate::pgsync::schedule_push(crate::pgsync::Doc::Dismissed);
         out
     }
 

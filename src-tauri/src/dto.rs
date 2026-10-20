@@ -102,8 +102,12 @@ pub struct AppStateDto {
 pub struct SettingsDto {
     pub display_name: String,
     pub font_scale: f32,
+    pub theme: String,
+    pub language: String,
     pub claude_key: String,
     pub claude_model: String,
     pub giphy_key: String,
+    pub database_url: String,
+    pub database_accept_invalid_certs: bool,
     pub accounts: Vec<AccountDto>,
 }

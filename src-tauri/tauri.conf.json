@@ -1,5 +1,5 @@
 {
-  "productName": "Courriel",
+  "productName": "Le courriel",
   "version": "0.1.0",
   "identifier": "io.courriel.app",
   "build": {
@@ -9,7 +9,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "Courriel",
+        "title": "Le courriel",
         "width": 1200,
         "height": 720,
         "minWidth": 900,

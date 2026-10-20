@@ -48,6 +48,7 @@ impl Overrides {
         let mut o = Self::load();
         let out = f(&mut o);
         o.save();
+        crate::pgsync::schedule_push(crate::pgsync::Doc::Overrides);
         out
     }
 

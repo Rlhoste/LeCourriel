@@ -30,6 +30,9 @@ fn system_prompt(action: &str, user_name: &str) -> Option<String> {
             the text has them.".to_string(),
         "translate_en" => "Translate the text into natural, fluent English. Keep the tone and \
             register of the original. If it is already in English, return it unchanged.".to_string(),
+        "translate_fr" => "Translate the text into natural, fluent French. Keep the tone and \
+            register of the original (tutoiement or vouvoiement as fits). If it is already in \
+            French, return it unchanged.".to_string(),
         "correct" => "Correct spelling, grammar, punctuation, accents and typos only. Keep the same \
             language, tone, wording and structure; do not rephrase sentences that are already \
             correct.".to_string(),
