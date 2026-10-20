@@ -72,7 +72,7 @@ pub struct Board {
 
 impl Board {
     pub fn load() -> Self {
-        match std::fs::read_to_string(TASKS_PATH) {
+        match std::fs::read_to_string(crate::paths::file(TASKS_PATH)) {
             Ok(s) => serde_json::from_str(&s).unwrap_or_else(|e| {
                 warn!("tasks.json parse error: {}", e);
                 Self::default()
@@ -84,7 +84,7 @@ impl Board {
     fn save(&self) {
         match serde_json::to_string_pretty(self) {
             Ok(json) => {
-                if let Err(e) = std::fs::write(TASKS_PATH, json) {
+                if let Err(e) = std::fs::write(crate::paths::file(TASKS_PATH), json) {
                     warn!("tasks.json write error: {}", e);
                 }
             }
@@ -98,7 +98,7 @@ impl Board {
         let mut b = Self::load();
         let out = f(&mut b);
         b.save();
-        crate::pgsync::schedule_push(crate::pgsync::Doc::Tasks);
+        crate::cloud::schedule_push(crate::cloud::Doc::Tasks);
         out
     }
 

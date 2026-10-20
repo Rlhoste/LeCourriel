@@ -19,7 +19,30 @@ It connects to any IMAP/SMTP mailbox and uses Claude to triage your inbox.
   GIFs (GIPHY), and AI tools (*make formal*, *translate to English*, *correct*, *auto answer*).
   Sent mail is saved to your IMAP Sent folder.
 
-## Requirements
+## Install
+
+Ready-made packages are built by GitHub Actions (**Actions → Build installers**, or the
+**Releases** page for tagged versions):
+
+- **Windows**: `Le courriel_x.y.z_x64-setup.exe`. Run it; no administrator rights needed.
+  Windows 10/11 already include the WebView2 runtime it uses (the installer fetches it otherwise).
+- **Linux**: `Le courriel_x.y.z_amd64.AppImage`. Make it executable and run it:
+
+  ```sh
+  chmod +x "Le courriel_0.1.0_amd64.AppImage"
+  ./"Le courriel_0.1.0_amd64.AppImage"
+  ```
+
+  (On Ubuntu 22.04+ install `libfuse2` if it complains about FUSE.)
+
+On first start the app opens **Settings → Accounts** so you can add your mailbox; no
+`config.toml` editing needed.
+
+## Build from source
+
+### Requirements
+
+
 
 - **Rust** (stable): <https://rustup.rs/>
 - **Tauri 2 system libraries**. On Debian/Ubuntu:
@@ -35,7 +58,7 @@ It connects to any IMAP/SMTP mailbox and uses Claude to triage your inbox.
 - An **Anthropic API key** for the AI features: <https://console.anthropic.com/>
 - *Optional:* a **GIPHY API key** for the GIF picker: <https://developers.giphy.com/>
 
-## Setup
+### Setup
 
 ```sh
 git clone https://github.com/Rlhoste/LeCourriel.git
@@ -48,7 +71,7 @@ You can change most of these later in the app under **⚙ Settings**.
 
 > `config.toml` holds your passwords and is git-ignored. Never commit it.
 
-## Build and run
+### Build and run
 
 From the repository root:
 
@@ -74,51 +97,73 @@ Run this from the repository root too.
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-## Sync with your PostgreSQL (optional)
+### Packages
 
-Le courriel can sync its data with **your own PostgreSQL server**, so a second computer gets
-your tasks, preferences and AI results without paying to re-classify every email.
-Local files remain the working copy: the app keeps working offline and syncs at the next start.
+```sh
+cd src-tauri
+cargo tauri build --bundles appimage   # Linux → target/release/bundle/appimage/
+cargo tauri build --bundles nsis       # on Windows → target/release/bundle/nsis/
+```
 
-1. On the server, create a database and a user:
+## Cloud sync with Supabase (optional)
 
-   ```sql
-   CREATE DATABASE courriel;
-   CREATE USER courriel WITH PASSWORD 'choose-a-password';
-   GRANT ALL PRIVILEGES ON DATABASE courriel TO courriel;
-   \c courriel
-   GRANT ALL ON SCHEMA public TO courriel;
-   ```
+Le courriel can sync its data with a [Supabase](https://supabase.com) project (PostgreSQL with
+user accounts). Each person signs in with their own account and **only ever sees their own
+data**: row-level security makes PostgreSQL itself refuse access to other users' rows, whatever
+client is used. A second computer gets your tasks, preferences and AI results without paying to
+re-classify every email. Local files remain the working copy: the app keeps working offline and
+syncs at the next start.
 
-2. In the app, open **⚙ Settings → Database**, paste the URL and press **Test connection**:
+### Set up the project (once)
 
-   ```
-   postgres://courriel:choose-a-password@db.example.com:5432/courriel?sslmode=require
-   ```
+1. Create a project at [supabase.com](https://supabase.com).
+2. Open **SQL Editor**, paste the contents of [`supabase/schema.sql`](supabase/schema.sql) and press **Run**.
+   It creates the tables, the row-level security policies and the sync functions (safe to run again).
+3. In **Project Settings → API**, copy the **Project URL** and the **anon public** key.
+4. *(Optional)* In **Authentication → Providers → Email**, keep "Confirm email" on if you want new
+   accounts to confirm their address first.
 
-   `sslmode` can be `disable`, `prefer` (default) or `require`. Tick **Accept self-signed
-   certificates** if your server uses one. Then press **Save**; the first sync runs at once.
+### In the app
 
-The app creates its two tables itself (`courriel_documents`, `courriel_ai_results`). Rows are keyed
-by your mailbox (`user@imap-host`), so several mailboxes can share one database.
+**⚙ Settings → Cloud**: paste the project URL and anon key, enter your email and password, then
+**Sign in** (or **Create account**). The first sync runs at once; after that, every change is
+uploaded in the background and the app syncs at each start.
 
-| Synced | Never synced |
+| Synced (your rows only) | Never leaves your computer |
 |---|---|
 | Task board, swipe dismissals, project tags | Mail passwords (IMAP/SMTP) |
 | Projects, display name, font size, theme, language, Claude model | Claude and GIPHY API keys |
-| AI results per email (priority, summary, project, deadline, task) — no email bodies | The database URL itself |
+| AI results per email (priority, summary, project, deadline, task) — no email bodies | The Supabase URL, key and your session (`session.json`) |
 
-When both sides changed, the most recent version wins (per document).
+When the same document changed on two computers, the most recent version wins.
 
-To check the sync against your server:
+The data lives in plain relational tables (`tasks`, `projects`, `email_insights`, `user_prefs`…),
+so a future company reporting system can query them — give it its own role and policies rather
+than weakening the per-user ones.
+
+### Tests
+
+`supabase/schema.sql` and the sync code are tested against PostgreSQL 16 and PostgREST 12 (the
+REST server Supabase uses). To run the end-to-end test against a project with the users
+`alice@example.com` / `alice-pw` and `bob@example.com` / `bob-pw`:
 
 ```sh
-TEST_DATABASE_URL='postgres://…' cargo test --manifest-path src-tauri/Cargo.toml -- --ignored
+CLOUD_TEST_URL=https://xxxx.supabase.co CLOUD_TEST_ANON=<anon key> \
+  cargo test --manifest-path src-tauri/Cargo.toml test_cloud_e2e -- --ignored
 ```
 
-## Files the app creates
+## Where your data lives
 
-These files are written next to `config.toml` and are git-ignored:
+| Platform | Folder |
+|---|---|
+| Linux | `~/.local/share/le-courriel` |
+| Windows | `%APPDATA%\LeCourriel` |
+| macOS | `~/Library/Application Support/LeCourriel` |
+
+If the folder you start the app from contains a `config.toml` (development, `./run.sh`), that
+folder is used instead. Set `COURRIEL_DATA_DIR` to choose another one.
+
+The app writes these files there:
 
 | File | Contents |
 |------|----------|
@@ -126,6 +171,7 @@ These files are written next to `config.toml` and are git-ignored:
 | `tasks.json` | The task board |
 | `dismissed.json` | Overview items you swiped away |
 | `overrides.json` | Projects you assigned by hand |
+| `session.json` | Your Supabase sign-in (only if cloud sync is used; private to your user) |
 
 Delete `cache-v2.json` to force a full re-classification.
 

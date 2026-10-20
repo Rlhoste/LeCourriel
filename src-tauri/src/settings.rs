@@ -14,8 +14,8 @@ pub fn config_to_dto(cfg: &Config) -> SettingsDto {
         claude_key: cfg.claude.api_key.clone(),
         claude_model: cfg.claude.model.clone(),
         giphy_key: cfg.gifs.giphy_api_key.clone(),
-        database_url: cfg.database.as_ref().map(|d| d.url.clone()).unwrap_or_default(),
-        database_accept_invalid_certs: cfg.database.as_ref().map_or(false, |d| d.accept_invalid_certs),
+        supabase_url: cfg.supabase.as_ref().map(|s| s.url.clone()).unwrap_or_default(),
+        supabase_anon_key: cfg.supabase.as_ref().map(|s| s.anon_key.clone()).unwrap_or_default(),
         accounts: cfg.accounts.iter().map(|a| AccountDto {
             label: a.name.clone(),
             imap_host: a.imap.host.clone(),

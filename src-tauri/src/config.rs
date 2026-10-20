@@ -2,35 +2,39 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct Config {
+    #[serde(default)]
     pub user: UserConfig,
-    /// Multiple email accounts. At least one required.
+    /// Email accounts. Empty on first start, until one is added in Settings.
     #[serde(default)]
     pub accounts: Vec<AccountConfig>,
+    #[serde(default)]
     pub claude: ClaudeConfig,
     #[serde(default)]
     pub projects: Vec<ProjectConfig>,
     #[serde(default)]
     pub gifs: GifConfig,
-    /// Optional PostgreSQL server to sync app data with. Local to this computer: never synced.
+    /// Optional Supabase project to sync app data with. Local to this computer: never synced.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub database: Option<DatabaseConfig>,
+    pub supabase: Option<SupabaseConfig>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct DatabaseConfig {
-    /// e.g. postgres://courriel:secret@db.example.com:5432/courriel?sslmode=require
+pub struct SupabaseConfig {
+    /// e.g. https://abcdefgh.supabase.co
     pub url: String,
-    /// Skip TLS certificate checks (self-signed certificates on a self-hosted server).
-    #[serde(default)]
-    pub accept_invalid_certs: bool,
+    /// The project's public "anon" key. Safe to store: row-level security limits each
+    /// signed-in user to their own rows.
+    pub anon_key: String,
 }
 
 impl Config {
-    /// The database URL, if one is configured and non-empty.
-    pub fn database_url(&self) -> Option<&str> {
-        self.database.as_ref().map(|d| d.url.trim()).filter(|u| !u.is_empty())
+    /// Supabase URL and anon key, when both are set.
+    pub fn supabase_settings(&self) -> Option<(&str, &str)> {
+        let s = self.supabase.as_ref()?;
+        let (url, key) = (s.url.trim(), s.anon_key.trim());
+        (!url.is_empty() && !key.is_empty()).then_some((url, key))
     }
 }
 
@@ -43,6 +47,7 @@ pub struct GifConfig {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct UserConfig {
+    #[serde(default)]
     pub display_name: String,
     #[serde(default = "default_font_scale")]
     pub font_scale: f32,
@@ -57,6 +62,17 @@ pub struct UserConfig {
 fn default_font_scale() -> f32 { 1.0 }
 fn default_theme() -> String { "midnight".to_string() }
 fn default_language() -> String { "en".to_string() }
+
+impl Default for UserConfig {
+    fn default() -> Self {
+        Self {
+            display_name: String::new(),
+            font_scale: default_font_scale(),
+            theme: default_theme(),
+            language: default_language(),
+        }
+    }
+}
 
 /// One email account (IMAP + SMTP pair).
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -88,9 +104,21 @@ pub struct SmtpConfig {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ClaudeConfig {
+    #[serde(default)]
     pub api_key: String,
+    #[serde(default = "default_model")]
     pub model: String,
+    #[serde(default = "default_max_tokens")]
     pub max_tokens: u32,
+}
+
+fn default_model() -> String { "claude-opus-4-6".to_string() }
+fn default_max_tokens() -> u32 { 300 }
+
+impl Default for ClaudeConfig {
+    fn default() -> Self {
+        Self { api_key: String::new(), model: default_model(), max_tokens: default_max_tokens() }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -118,12 +146,19 @@ struct LegacyConfig {
 
 impl Config {
     pub fn load() -> Result<Self> {
-        let content = fs::read_to_string("config.toml")
-            .context("Failed to read config.toml — copy config.toml.example and fill in credentials")?;
+        let content = match fs::read_to_string(crate::paths::file("config.toml")) {
+            Ok(c) => c,
+            // First start: no config yet. The app opens Settings so an account can be added.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Config::default()),
+            Err(e) => return Err(e).context("Failed to read config.toml"),
+        };
 
-        // Try new format first.
+        // Try new format first. Only a file with a top-level [imap] is the legacy format.
         if let Ok(cfg) = toml::from_str::<Config>(&content) {
-            if !cfg.accounts.is_empty() {
+            let legacy_shape = toml::from_str::<toml::Value>(&content)
+                .map(|v| v.get("imap").is_some())
+                .unwrap_or(false);
+            if !cfg.accounts.is_empty() || !legacy_shape {
                 return Ok(cfg);
             }
         }
@@ -148,7 +183,7 @@ impl Config {
             claude: legacy.claude,
             projects: legacy.projects,
             gifs: GifConfig::default(),
-            database: None,
+            supabase: None,
         })
     }
 }
@@ -156,14 +191,14 @@ impl Config {
 /// Persist the full config to config.toml and queue a push of the synced preferences.
 pub fn save_config(cfg: &Config) -> Result<()> {
     write_local(cfg)?;
-    crate::pgsync::schedule_push(crate::pgsync::Doc::Prefs);
+    crate::cloud::schedule_push(crate::cloud::Doc::Prefs);
     Ok(())
 }
 
 /// Write config.toml only (used when applying preferences pulled from the database).
 pub fn write_local(cfg: &Config) -> Result<()> {
     let serialized = toml::to_string_pretty(cfg).context("Failed to serialize config")?;
-    fs::write("config.toml", serialized).context("Failed to write config.toml")?;
+    fs::write(crate::paths::file("config.toml"), serialized).context("Failed to write config.toml")?;
     Ok(())
 }
 

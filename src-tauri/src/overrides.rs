@@ -22,7 +22,7 @@ pub struct Overrides {
 
 impl Overrides {
     pub fn load() -> Self {
-        match std::fs::read_to_string(OVERRIDES_PATH) {
+        match std::fs::read_to_string(crate::paths::file(OVERRIDES_PATH)) {
             Ok(s) => serde_json::from_str(&s).unwrap_or_else(|e| {
                 warn!("overrides.json parse error: {}", e);
                 Self::default()
@@ -34,7 +34,7 @@ impl Overrides {
     fn save(&self) {
         match serde_json::to_string_pretty(self) {
             Ok(json) => {
-                if let Err(e) = std::fs::write(OVERRIDES_PATH, json) {
+                if let Err(e) = std::fs::write(crate::paths::file(OVERRIDES_PATH), json) {
                     warn!("overrides.json write error: {}", e);
                 }
             }
@@ -48,7 +48,7 @@ impl Overrides {
         let mut o = Self::load();
         let out = f(&mut o);
         o.save();
-        crate::pgsync::schedule_push(crate::pgsync::Doc::Overrides);
+        crate::cloud::schedule_push(crate::cloud::Doc::Overrides);
         out
     }
 

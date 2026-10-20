@@ -24,9 +24,36 @@
     }
   },
   "bundle": {
-    "active": false,
+    "active": true,
     "targets": "all",
-    "icon": []
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "category": "Productivity",
+    "shortDescription": "AI-assisted email client",
+    "longDescription": "Le courriel is an AI-assisted desktop email client: it triages your inbox, extracts tasks and deadlines, and helps you search, summarise and write emails.",
+    "publisher": "Remi Lhoste",
+    "copyright": "Copyright (C) 2026 Remi Lhoste. GPL-3.0-or-later.",
+    "licenseFile": "../LICENSE",
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "English",
+          "French"
+        ],
+        "displayLanguageSelector": true
+      }
+    }
   },
   "plugins": {
     "shell": {

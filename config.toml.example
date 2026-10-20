@@ -39,11 +39,12 @@ max_tokens = 300
 [gifs]
 giphy_api_key = ""
 
-# Optional: sync tasks, preferences and AI results with your own PostgreSQL server.
-# Passwords and API keys are never sent to the database. See README → "Sync with your PostgreSQL".
-# [database]
-# url = "postgres://courriel:your-db-password@db.example.com:5432/courriel?sslmode=require"
-# accept_invalid_certs = false   # true for a self-signed certificate
+# Optional: sync tasks, preferences and AI results with Supabase (each account sees only its own data).
+# Easier to set from the app: Settings → Cloud. Passwords and API keys are never uploaded.
+# See README → "Cloud sync with Supabase".
+# [supabase]
+# url = "https://xxxxxxxx.supabase.co"
+# anon_key = "eyJ..."
 
 # Optional: projects the AI sorts your emails into.
 [[projects]]

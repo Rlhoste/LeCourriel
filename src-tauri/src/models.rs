@@ -109,6 +109,9 @@ pub struct EmailCard {
     /// Full local date and time, e.g. "Monday 19 October 2026, 15:29".
     #[serde(default)]
     pub date_full: String,
+    /// Unix timestamp of the Date header (0 when unknown); used by search.
+    #[serde(default)]
+    pub date_ts: i64,
     pub summary: String,
     pub priority: Priority,
     pub is_read: bool,

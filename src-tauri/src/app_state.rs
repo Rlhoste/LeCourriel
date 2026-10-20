@@ -35,7 +35,7 @@ pub async fn refresh(cfg: Arc<Config>, app: AppHandle, state: Arc<Mutex<AppState
     app.emit("loading", false).ok();
 }
 
-fn raw_to_card(raw: crate::models::RawEmail) -> EmailCard {
+pub fn raw_to_card(raw: crate::models::RawEmail) -> EmailCard {
     let (from_name, from_email) = parse_from(&raw.from);
     let date_str = raw.date.map(format_date).unwrap_or_else(|| i18n::unknown_date(i18n::lang()).to_string());
     let date_full = raw.date.map(format_date_full).unwrap_or_default();
@@ -51,6 +51,7 @@ fn raw_to_card(raw: crate::models::RawEmail) -> EmailCard {
         message_id: raw.message_id,
         date_str,
         date_full,
+        date_ts: raw.date.map(|d| d.timestamp()).unwrap_or(0),
         summary: String::new(),
         priority: Priority::Information,
         is_read: raw.seen,
@@ -134,6 +135,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
             c.bcc = raw.bcc.clone();
             c.message_id = raw.message_id.clone();
             c.date_full = raw.date.map(format_date_full).unwrap_or_default();
+            c.date_ts = raw.date.map(|d| d.timestamp()).unwrap_or(0);
             c.date_str = raw.date.map(format_date)
                 .unwrap_or_else(|| i18n::unknown_date(i18n::lang()).to_string());
             c.is_read = raw.seen;
@@ -164,7 +166,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
         // Emails already classified on another computer: reuse the stored result (no AI call).
         let ids: Vec<String> = new_raw.iter()
             .map(|r| r.message_id.clone()).filter(|id| !id.is_empty()).collect();
-        let stored = crate::pgsync::lookup_ai(&ids).await;
+        let stored = crate::cloud::lookup_ai(&ids).await;
         let classify_tasks: Vec<_> = new_raw.iter().map(|email| {
             if let Some(c) = stored.get(&email.message_id).cloned() {
                 return tokio::spawn(async move { anyhow::Ok((false, c)) });
@@ -204,6 +206,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
                 from_name, from_email,
                 to: raw.to, cc: raw.cc, reply_to: raw.reply_to, bcc: raw.bcc, message_id: raw.message_id,
                 date_str, date_full,
+                date_ts: raw.date.map(|d| d.timestamp()).unwrap_or(0),
                 summary: classified.summary,
                 priority: classified.priority,
                 is_read: raw.seen,
@@ -215,7 +218,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
                 meeting_link: classified.meeting_link,
             }
         }).collect();
-        crate::pgsync::store_ai(&to_store).await;
+        crate::cloud::store_ai(&to_store).await;
         cards
     };
 
@@ -252,7 +255,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
 }
 
 pub fn load_and_display_cache(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>) {
-    let json = match std::fs::read_to_string(CACHE_PATH) {
+    let json = match std::fs::read_to_string(crate::paths::file(CACHE_PATH)) {
         Ok(s) => s,
         Err(_) => return,
     };
@@ -364,6 +367,13 @@ fn populate(
         all.extend(drafts.clone());
         all.extend(trash.clone());
         s.emails = all;
+        use crate::search::Folder;
+        let tag = |f: Folder, v: &[EmailCard]| v.iter().cloned().map(move |c| (f, c)).collect::<Vec<_>>();
+        let mut index = tag(Folder::Inbox, &all_emails);
+        index.extend(tag(Folder::Sent, &sent));
+        index.extend(tag(Folder::Drafts, &drafts));
+        index.extend(tag(Folder::Trash, &trash));
+        s.search_index = index;
     }
 
     use chrono::Timelike;
@@ -398,7 +408,7 @@ fn populate(
     app.emit("state-updated", snapshot).ok();
 }
 
-fn to_dto_vec(cards: &[EmailCard]) -> Vec<EmailCardDto> {
+pub fn to_dto_vec(cards: &[EmailCard]) -> Vec<EmailCardDto> {
     cards.iter().map(|c| EmailCardDto {
         uid:          c.uid,
         subject:      c.subject.clone(),
@@ -486,7 +496,7 @@ fn render_body(plain: &str, html: &Option<String>) -> String {
 }
 
 fn load_cache() -> Vec<EmailCard> {
-    match std::fs::read_to_string(CACHE_PATH) {
+    match std::fs::read_to_string(crate::paths::file(CACHE_PATH)) {
         Ok(s) => serde_json::from_str(&s).unwrap_or_default(),
         Err(_) => vec![],
     }
@@ -494,7 +504,7 @@ fn load_cache() -> Vec<EmailCard> {
 
 fn save_cache(cards: &[EmailCard]) {
     match serde_json::to_string(cards) {
-        Ok(json) => { std::fs::write(CACHE_PATH, json).ok(); }
+        Ok(json) => { std::fs::write(crate::paths::file(CACHE_PATH), json).ok(); }
         Err(e) => warn!("Cache serialize error: {}", e),
     }
 }

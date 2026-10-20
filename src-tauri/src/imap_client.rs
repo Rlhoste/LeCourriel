@@ -138,6 +138,72 @@ pub async fn append_sent(cfg: &ImapConfig, folder: &str, raw: &[u8]) -> Result<(
     Ok(())
 }
 
+/// Quote a string for an IMAP SEARCH command.
+fn imap_quote(s: &str) -> String {
+    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+/// The IMAP SEARCH criteria for these words: every word must appear in the
+/// subject, the sender or the text; optionally only emails since a date.
+pub fn search_criteria(terms: &[String], since: Option<chrono::NaiveDate>) -> String {
+    let mut parts: Vec<String> = terms
+        .iter()
+        .take(4)
+        .map(|t| {
+            let q = imap_quote(t);
+            format!("OR OR SUBJECT {q} FROM {q} TEXT {q}")
+        })
+        .collect();
+    if let Some(d) = since {
+        parts.push(format!("SINCE {}", d.format("%d-%b-%Y")));
+    }
+    if parts.is_empty() {
+        parts.push("ALL".into());
+    }
+    let criteria = parts.join(" ");
+    if criteria.is_ascii() { criteria } else { format!("CHARSET UTF-8 {}", criteria) }
+}
+
+/// Search the whole mailbox on the server (not just the cached emails).
+/// Returns the newest `limit` matches, without marking them read.
+pub async fn search_server(
+    cfg: &ImapConfig,
+    terms: &[String],
+    since: Option<chrono::NaiveDate>,
+    limit: usize,
+) -> Result<Vec<RawEmail>> {
+    let mut session = connect(cfg).await?;
+    session
+        .select(&cfg.mailbox)
+        .await
+        .context("IMAP SELECT mailbox failed")?;
+    let mut uids: Vec<u32> = session
+        .uid_search(search_criteria(terms, since))
+        .await
+        .context("IMAP SEARCH failed")?
+        .into_iter()
+        .collect();
+    uids.sort_unstable_by(|a, b| b.cmp(a));
+    uids.truncate(limit);
+    let mut emails = Vec::new();
+    if !uids.is_empty() {
+        let set = uids.iter().map(|u| u.to_string()).collect::<Vec<_>>().join(",");
+        let stream = session
+            .uid_fetch(&set, "(UID FLAGS BODY.PEEK[])")
+            .await
+            .context("IMAP FETCH failed")?;
+        futures::pin_mut!(stream);
+        while let Some(item) = stream.next().await {
+            if let Some(email) = item.ok().as_ref().and_then(parse_fetch) {
+                emails.push(email);
+            }
+        }
+    }
+    session.logout().await.ok();
+    emails.sort_by(|a, b| b.date.cmp(&a.date));
+    Ok(emails)
+}
+
 pub async fn fetch_emails(cfg: &ImapConfig) -> Result<Vec<RawEmail>> {
     let mut session = connect(cfg).await?;
 

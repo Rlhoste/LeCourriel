@@ -35,6 +35,7 @@
 
     <div class="nav-spacer"></div>
 
+    <button class="nav-btn search-nav-btn" id="btn-search" title="Ctrl+K"><span data-i18n="nav.search">🔍 Search</span><kbd>Ctrl K</kbd></button>
     <button class="nav-btn" id="btn-report-bug" data-i18n="nav.reportBug">🐞 Report a bug</button>
     <button class="nav-btn" id="btn-refresh" data-i18n="nav.refresh">↻ Refresh</button>
     <button class="nav-btn" id="btn-settings" data-i18n="nav.settings">⚙ Settings</button>
@@ -291,6 +292,47 @@
   </div>
 </div>
 
+<!-- ── Search & AI assistant ──────────────────────────────────────────────── -->
+<div id="search-overlay" class="overlay hidden">
+  <div class="search-dialog" role="dialog" aria-modal="true">
+    <div class="search-top">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="search-input" autocomplete="off" spellcheck="false"
+             placeholder="Search, or ask the AI…" data-i18n-placeholder="search.placeholder" />
+      <button id="search-ai-btn" class="search-ai-btn" title="Ctrl+Enter" data-i18n-title="search.aiTitle"><span data-i18n="search.ask">✨ Ask AI</span></button>
+    </div>
+    <div class="search-chips">
+      <button class="search-chip active" data-mode="auto" data-i18n="search.mode.auto">Auto</button>
+      <button class="search-chip" data-mode="find" data-i18n="search.mode.find">🔎 Find</button>
+      <button class="search-chip" data-mode="compose" data-i18n="search.mode.compose">✉ Write</button>
+      <button class="search-chip" data-mode="summarize" data-i18n="search.mode.summarize">🧾 Summarise</button>
+      <button class="search-chip" data-mode="answer" data-i18n="search.mode.answer">❓ Question</button>
+      <label class="search-server"><input type="checkbox" id="search-server" /> <span data-i18n="search.server">Also search the server</span></label>
+    </div>
+    <div class="search-body">
+      <div class="search-results" id="search-results"></div>
+      <div class="search-side" id="search-side">
+        <div class="search-help" id="search-help">
+          <p data-i18n="search.help1">Type to search instantly. Press Enter to ask the AI: find, write an email, summarise or answer.</p>
+          <p class="search-examples" data-i18n="search.examples">Examples: “de:martin non lu” · “summarise the ADUM emails” · “write to Martin to confirm the defence date”</p>
+          <p class="search-filters" data-i18n="search.filters">Filters: de: à: projet: avant: après: dossier: non lu</p>
+        </div>
+        <div class="search-answer hidden" id="search-answer"></div>
+        <div class="search-preview hidden" id="search-preview">
+          <div class="rp-header"><div class="rp-subject"></div><div class="rp-meta"></div>
+            <div class="rp-actions"><button class="rp-btn" id="search-preview-reply" data-i18n="rp.reply">Reply</button></div></div>
+          <iframe class="rp-iframe" sandbox="allow-same-origin"></iframe>
+        </div>
+      </div>
+    </div>
+    <div class="search-footer">
+      <button id="search-summarize-sel" class="search-sel-btn" disabled></button>
+      <span id="search-status" class="search-status"></span>
+      <span class="search-keys" data-i18n="search.keys">↑↓ navigate · ↵ open · Ctrl+↵ AI · Esc close</span>
+    </div>
+  </div>
+</div>
+
 <!-- ── Settings Dialog ─────────────────────────────────────────────────────── -->
 <div id="settings-overlay" class="overlay hidden">
   <div class="dialog wide-dialog">
@@ -303,7 +345,7 @@
       <button class="tab active" data-tab="general" data-i18n="set.general">General</button>
       <button class="tab" data-tab="accounts" data-i18n="set.accounts">Accounts</button>
       <button class="tab" data-tab="ai" data-i18n="set.ai">AI</button>
-      <button class="tab" data-tab="database" data-i18n="set.database">Database</button>
+      <button class="tab" data-tab="cloud" data-i18n="set.cloud">Cloud</button>
     </div>
 
     <!-- General -->
@@ -339,16 +381,32 @@
       </div>
     </div>
 
-    <!-- Database (PostgreSQL sync) -->
-    <div class="tab-content" id="tab-database">
-      <label data-i18n="set.dbUrl">PostgreSQL URL</label>
-      <input type="password" id="s-db-url" placeholder="postgres://user:password@host:5432/courriel" autocomplete="off" />
-      <label class="checkbox-label"><input type="checkbox" id="s-db-insecure" /> <span data-i18n="set.dbInsecure">Accept self-signed certificates</span></label>
-      <div class="db-test-row">
-        <button id="s-db-test" class="secondary-btn" data-i18n="set.dbTest">Test connection</button>
-        <span id="s-db-status" class="db-status"></span>
+    <!-- Cloud (Supabase) -->
+    <div class="tab-content" id="tab-cloud">
+      <label data-i18n="set.cloudUrl">Supabase project URL</label>
+      <input type="text" id="s-cloud-url" placeholder="https://xxxxxxxx.supabase.co" autocomplete="off" />
+      <label data-i18n="set.cloudAnon">Anon (public) key</label>
+      <input type="password" id="s-cloud-anon" autocomplete="off" />
+
+      <div id="s-cloud-signed-out">
+        <label data-i18n="set.cloudEmail">Email</label>
+        <input type="text" id="s-cloud-email" autocomplete="off" />
+        <label data-i18n="set.cloudPassword">Password</label>
+        <input type="password" id="s-cloud-password" autocomplete="off" />
+        <div class="db-test-row">
+          <button id="s-cloud-signin" class="secondary-btn" data-i18n="set.cloudSignIn">Sign in</button>
+          <button id="s-cloud-signup" class="secondary-btn" data-i18n="set.cloudSignUp">Create account</button>
+        </div>
       </div>
-      <p class="settings-note" data-i18n="set.dbNote">Synced: tasks, swipes, project tags, projects, theme, language and AI results. Never synced: mail passwords, API keys and this URL.</p>
+      <div id="s-cloud-signed-in" class="hidden">
+        <p class="cloud-who"><span data-i18n="set.cloudSignedInAs">Signed in as</span> <b id="s-cloud-who"></b></p>
+        <div class="db-test-row">
+          <button id="s-cloud-sync" class="secondary-btn" data-i18n="set.cloudSync">Sync now</button>
+          <button id="s-cloud-signout" class="secondary-btn" data-i18n="set.cloudSignOut">Sign out</button>
+        </div>
+      </div>
+      <div id="s-cloud-status" class="db-status"></div>
+      <p class="settings-note" data-i18n="set.cloudNote">Each account only sees its own data (row-level security). Synced: tasks, swipes, project tags, projects, preferences and AI results. Never synced: mail passwords, API keys and these Supabase settings.</p>
     </div>
 
     <div class="dialog-actions">

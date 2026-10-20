@@ -21,6 +21,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, State};
 use tracing::info;
 
+mod ai_assistant;
 mod ai_classifier;
 mod ai_writer;
 mod app_state;
@@ -34,7 +35,9 @@ mod i18n;
 mod imap_client;
 mod models;
 mod overrides;
-mod pgsync;
+mod paths;
+mod search;
+mod cloud;
 mod settings;
 mod smtp_sender;
 mod state;
@@ -52,10 +55,22 @@ async fn app_ready(
     app: AppHandle,
     shared: State<'_, SharedState>,
 ) -> Result<(), String> {
-    let cfg = { shared.lock().unwrap().cfg.clone() };
+    use tauri::Emitter;
+    let (cfg, startup_error) = {
+        let s = shared.lock().unwrap();
+        (s.cfg.clone(), s.startup_error.clone())
+    };
     let shared_clone = shared.inner().clone();
+    if let Some(e) = startup_error {
+        app.emit("error", format!("config.toml: {}", e)).ok();
+    }
     // Send cache immediately (fast, synchronous read)
     app_state::load_and_display_cache(&cfg, &app, &shared_clone);
+    if cfg.accounts.is_empty() {
+        // First start: nothing to fetch until an account is added in Settings.
+        app.emit("loading", false).ok();
+        return Ok(());
+    }
     tauri::async_runtime::spawn(async move {
         let cfg = sync_from_database(&app, &shared_clone).await.unwrap_or(cfg);
         // Kick off live refresh in background
@@ -64,16 +79,16 @@ async fn app_ready(
     Ok(())
 }
 
-/// Startup sync with the user's PostgreSQL. Returns the reloaded config when
+/// Startup sync with Supabase. Returns the reloaded config when
 /// anything was pulled (preferences may have changed), None otherwise.
 async fn sync_from_database(app: &AppHandle, shared: &SharedState) -> Option<Arc<Config>> {
     use tauri::Emitter;
-    if !pgsync::is_configured() {
+    if !cloud::is_configured() {
         return None;
     }
-    match pgsync::pull_all().await {
+    match cloud::pull_all().await {
         Ok(summary) => {
-            info!("Database sync: {}", summary);
+            info!("Cloud sync: {}", summary);
             let cfg = Arc::new(Config::load().ok()?);
             i18n::set_lang(&cfg.user.language);
             shared.lock().unwrap().cfg = cfg.clone();
@@ -82,8 +97,8 @@ async fn sync_from_database(app: &AppHandle, shared: &SharedState) -> Option<Arc
             Some(cfg)
         }
         Err(e) => {
-            tracing::warn!("Database sync failed: {:#}", e);
-            app.emit("error", format!("Database sync failed: {:#}", e)).ok();
+            tracing::warn!("Cloud sync failed: {:#}", e);
+            app.emit("error", format!("Cloud sync failed: {:#}", e)).ok();
             None
         }
     }
@@ -181,7 +196,7 @@ fn save_settings(
     match Config::load() {
         Ok(new_cfg) => {
             i18n::set_lang(&new_cfg.user.language);
-            pgsync::configure(&new_cfg);
+            cloud::configure(&new_cfg);
             let mut s = shared.lock().unwrap();
             s.cfg = Arc::new(new_cfg);
         }
@@ -190,38 +205,168 @@ fn save_settings(
     Ok(())
 }
 
-// ── PostgreSQL sync ────────────────────────────────────────────────────────
+// ── Search & AI assistant ───────────────────────────────────────────────────
 
-/// Try a connection without saving anything. Returns e.g. "PostgreSQL 16.4".
+/// Instant local search (stage 1), over cached emails and the last server results.
 #[tauri::command]
-async fn test_database(url: String, accept_invalid_certs: bool) -> Result<String, String> {
-    if url.trim().is_empty() {
-        return Err("Enter a PostgreSQL URL first".into());
+fn search_local(query: String, shared: State<'_, SharedState>) -> Vec<search::SearchHit> {
+    let s = shared.lock().unwrap();
+    search::search_local(&s.search_index, &query, 40)
+}
+
+/// Search the whole mailbox on the IMAP server; results join the index so they can be opened.
+#[tauri::command]
+async fn search_server(query: String, shared: State<'_, SharedState>) -> Result<Vec<search::SearchHit>, String> {
+    let cfg = shared.lock().unwrap().cfg.clone();
+    let account = cfg.accounts.first().ok_or("No accounts configured")?;
+    let (terms, filters) = search::parse_query(&query);
+    if terms.is_empty() && filters.after.is_none() {
+        return Err("Type at least one word to search on the server".into());
     }
-    pgsync::test_connection(url.trim(), accept_invalid_certs)
+    let raws = imap_client::search_server(&account.imap, &terms, filters.after, 20)
+        .await
+        .map_err(|e| format!("{:#}", e))?;
+    let mut s = shared.lock().unwrap();
+    let cached: std::collections::HashSet<u32> = s.search_index.iter()
+        .filter(|(f, _)| *f == search::Folder::Inbox).map(|(_, c)| c.uid).collect();
+    s.search_index.retain(|(f, _)| *f != search::Folder::Server);
+    let mut hits = Vec::new();
+    for raw in raws {
+        if cached.contains(&raw.uid) {
+            continue;   // already in the local results
+        }
+        let card = app_state::raw_to_card(raw);
+        let (matched, score) = search::score(&card, &terms);
+        hits.push(search::make_hit(search::Folder::Server, &card, &terms, matched, score));
+        s.search_index.push((search::Folder::Server, card));
+    }
+    Ok(hits)
+}
+
+/// Any search result as a full email (inbox, sent, drafts, trash or server).
+#[tauri::command]
+fn get_search_email(id: String, shared: State<'_, SharedState>) -> Option<dto::EmailCardDto> {
+    let (folder, uid) = search::parse_id(&id)?;
+    let s = shared.lock().unwrap();
+    let (_, card) = s.search_index.iter().find(|(f, c)| *f == folder && c.uid == uid)?;
+    app_state::to_dto_vec(std::slice::from_ref(card)).pop()
+}
+
+/// Stage 2: the AI decides what the request means (find, compose, summarize, answer)
+/// using the best local candidates, or exactly the selected emails.
+#[tauri::command]
+async fn ai_assist(
+    query: String,
+    mode: String,
+    selected_ids: Vec<String>,
+    shared: State<'_, SharedState>,
+) -> Result<ai_assistant::AssistResult, String> {
+    let (cfg, index) = {
+        let s = shared.lock().unwrap();
+        (s.cfg.clone(), s.search_index.clone())
+    };
+    let find = |id: &str| {
+        let (folder, uid) = search::parse_id(id)?;
+        index.iter().find(|(f, c)| *f == folder && c.uid == uid)
+    };
+    let mut picked: Vec<&(search::Folder, models::EmailCard)> = Vec::new();
+    if !selected_ids.is_empty() {
+        picked.extend(selected_ids.iter().filter_map(|id| find(id)));
+    } else {
+        for hit in search::search_local(&index, &query, 25) {
+            if let Some(e) = find(&hit.id) { picked.push(e); }
+        }
+        // Few keyword matches (natural-language request): add the most recent emails.
+        if picked.len() < 8 {
+            let mut recent: Vec<&(search::Folder, models::EmailCard)> = index.iter()
+                .filter(|(f, _)| matches!(f, search::Folder::Inbox | search::Folder::Sent | search::Folder::Server))
+                .collect();
+            recent.sort_by(|a, b| b.1.date_ts.cmp(&a.1.date_ts));
+            for e in recent {
+                if picked.len() >= 25 { break; }
+                if !picked.iter().any(|p| p.0 == e.0 && p.1.uid == e.1.uid) { picked.push(e); }
+            }
+        }
+    }
+    let candidates: Vec<ai_assistant::Candidate> = picked.iter().map(|(f, c)| ai_assistant::Candidate {
+        id: search::make_id(*f, c.uid),
+        date: if c.date_full.is_empty() { c.date_str.clone() } else { c.date_full.clone() },
+        from: if c.from_email.is_empty() { c.from_name.clone() } else { format!("{} <{}>", c.from_name, c.from_email) },
+        to: c.to.clone(),
+        subject: c.subject.clone(),
+        summary: c.summary.clone(),
+        body: c.body_text.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(700).collect(),
+    }).collect();
+    let contacts = search::contacts(&index, 60);
+    let today = chrono::Local::now().format("%Y-%m-%d (%A)").to_string();
+    ai_assistant::assist(&cfg, &query, &mode, &candidates, &contacts, &today)
         .await
         .map_err(|e| format!("{:#}", e))
 }
 
-/// Save (or clear, with an empty URL) the database settings, then sync right away.
+// ── Cloud sync (Supabase) ──────────────────────────────────────────────────
+
 #[tauri::command]
-async fn set_database(
-    url: String,
-    accept_invalid_certs: bool,
-    app: AppHandle,
-    shared: State<'_, SharedState>,
-) -> Result<(), String> {
+fn cloud_status() -> cloud::CloudStatus {
+    cloud::status()
+}
+
+/// Save (or clear, with empty values) the Supabase project settings. Local only.
+#[tauri::command]
+fn set_cloud(url: String, anon_key: String, shared: State<'_, SharedState>) -> Result<cloud::CloudStatus, String> {
     let mut cfg = (*shared.lock().unwrap().cfg).clone();
-    let url = url.trim().to_string();
-    cfg.database = if url.is_empty() {
+    let (url, anon_key) = (url.trim().to_string(), anon_key.trim().to_string());
+    cfg.supabase = if url.is_empty() && anon_key.is_empty() {
         None
     } else {
-        Some(config::DatabaseConfig { url, accept_invalid_certs })
+        Some(config::SupabaseConfig { url, anon_key })
     };
-    // Local only: the database settings are never synced.
     config::write_local(&cfg).map_err(|e| e.to_string())?;
-    pgsync::configure(&cfg);
+    cloud::configure(&cfg);
     shared.lock().unwrap().cfg = Arc::new(cfg);
+    Ok(cloud::status())
+}
+
+/// Sign in, then sync right away.
+#[tauri::command]
+async fn cloud_sign_in(
+    email: String,
+    password: String,
+    app: AppHandle,
+    shared: State<'_, SharedState>,
+) -> Result<cloud::CloudStatus, String> {
+    cloud::sign_in(&email, &password).await.map_err(|e| format!("{:#}", e))?;
+    sync_from_database(&app, shared.inner()).await;
+    Ok(cloud::status())
+}
+
+/// Create an account. Returns true when signed in straight away, false when a
+/// confirmation email was sent (the user confirms, then signs in).
+#[tauri::command]
+async fn cloud_sign_up(
+    email: String,
+    password: String,
+    app: AppHandle,
+    shared: State<'_, SharedState>,
+) -> Result<bool, String> {
+    let signed_in = cloud::sign_up(&email, &password).await.map_err(|e| format!("{:#}", e))?;
+    if signed_in {
+        sync_from_database(&app, shared.inner()).await;
+    }
+    Ok(signed_in)
+}
+
+#[tauri::command]
+async fn cloud_sign_out() -> cloud::CloudStatus {
+    cloud::sign_out().await;
+    cloud::status()
+}
+
+#[tauri::command]
+async fn cloud_sync_now(app: AppHandle, shared: State<'_, SharedState>) -> Result<(), String> {
+    if !cloud::is_configured() {
+        return Err("Not signed in to Supabase".into());
+    }
     sync_from_database(&app, shared.inner()).await;
     Ok(())
 }
@@ -286,7 +431,11 @@ async fn move_email(shared: &SharedState, uid: u32, folder: String) -> Result<()
     imap_client::move_message(&account.imap, uid, &folder)
         .await
         .map_err(|e| format!("{:#}", e))?;
-    shared.lock().unwrap().emails.retain(|e| e.uid != uid);
+    {
+        let mut s = shared.lock().unwrap();
+        s.emails.retain(|e| e.uid != uid);
+        s.search_index.retain(|(f, e)| !(*f == search::Folder::Inbox && e.uid == uid));
+    }
     app_state::remove_from_cache(uid);
     Ok(())
 }
@@ -313,8 +462,14 @@ async fn set_read(uid: u32, read: bool, shared: State<'_, SharedState>) -> Resul
     imap_client::set_seen(&account.imap, uid, read)
         .await
         .map_err(|e| format!("{:#}", e))?;
-    if let Some(c) = shared.lock().unwrap().emails.iter_mut().find(|e| e.uid == uid) {
-        c.is_read = read;
+    {
+        let mut s = shared.lock().unwrap();
+        if let Some(c) = s.emails.iter_mut().find(|e| e.uid == uid) {
+            c.is_read = read;
+        }
+        if let Some((_, c)) = s.search_index.iter_mut().find(|(f, e)| *f == search::Folder::Inbox && e.uid == uid) {
+            c.is_read = read;
+        }
     }
     app_state::set_read_in_cache(uid, read);
     Ok(())
@@ -334,8 +489,14 @@ fn set_email_project(
         }
     }
     overrides::Overrides::update(|o| o.set_project(uid, project.clone()));
-    if let Some(c) = shared.lock().unwrap().emails.iter_mut().find(|e| e.uid == uid) {
-        c.project = project.clone();
+    {
+        let mut s = shared.lock().unwrap();
+        if let Some(c) = s.emails.iter_mut().find(|e| e.uid == uid) {
+            c.project = project.clone();
+        }
+        if let Some((_, c)) = s.search_index.iter_mut().find(|(f, e)| *f == search::Folder::Inbox && e.uid == uid) {
+            c.project = project.clone();
+        }
     }
     tasks::Board::update(|b| {
         for t in b.tasks.iter_mut().filter(|t| t.source_uid == Some(uid)) {
@@ -439,18 +600,31 @@ fn main() {
         .init();
 
     info!("Starting Le courriel (Tauri)");
+    match paths::init_data_dir() {
+        Ok(dir) => info!("Data directory: {}", dir.display()),
+        Err(e) => tracing::warn!("Could not use the data directory ({}); using the current one", e),
+    }
 
-    let cfg = Config::load().expect("Failed to load config");
+    // A broken config.toml must not stop the app from opening: start empty and show why.
+    let (cfg, config_error) = match Config::load() {
+        Ok(cfg) => (cfg, None),
+        Err(e) => {
+            tracing::error!("Could not load config.toml: {:#}", e);
+            (Config::default(), Some(format!("{:#}", e)))
+        }
+    };
     i18n::set_lang(&cfg.user.language);
-    pgsync::configure(&cfg);
+    cloud::configure(&cfg);
     let cfg = Arc::new(cfg);
 
     let shared: SharedState = Arc::new(Mutex::new(AppState {
         cfg: cfg.clone(),
         emails: vec![],
+        search_index: vec![],
         trash_folder: "Trash".into(),
         spam_folder: "Junk".into(),
         sent_folder: "Sent".into(),
+        startup_error: config_error,
     }));
 
     tauri::Builder::default()
@@ -472,8 +646,16 @@ fn main() {
             set_read,
             set_email_project,
             save_email,
-            test_database,
-            set_database,
+            search_local,
+            search_server,
+            get_search_email,
+            ai_assist,
+            cloud_status,
+            set_cloud,
+            cloud_sign_in,
+            cloud_sign_up,
+            cloud_sign_out,
+            cloud_sync_now,
             search_gifs,
             ai_compose,
             fetch_gif,

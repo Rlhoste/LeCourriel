@@ -27,7 +27,7 @@ pub struct Dismissals {
 
 impl Dismissals {
     pub fn load() -> Self {
-        match std::fs::read_to_string(DISMISSED_PATH) {
+        match std::fs::read_to_string(crate::paths::file(DISMISSED_PATH)) {
             Ok(s) => serde_json::from_str(&s).unwrap_or_else(|e| {
                 warn!("dismissed.json parse error: {}", e);
                 Self::default()
@@ -42,14 +42,14 @@ impl Dismissals {
         let mut d = Self::load();
         let out = f(&mut d);
         d.save();
-        crate::pgsync::schedule_push(crate::pgsync::Doc::Dismissed);
+        crate::cloud::schedule_push(crate::cloud::Doc::Dismissed);
         out
     }
 
     fn save(&self) {
         match serde_json::to_string_pretty(self) {
             Ok(json) => {
-                if let Err(e) = std::fs::write(DISMISSED_PATH, json) {
+                if let Err(e) = std::fs::write(crate::paths::file(DISMISSED_PATH), json) {
                     warn!("dismissed.json write error: {}", e);
                 }
             }

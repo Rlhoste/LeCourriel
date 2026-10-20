@@ -107,7 +107,7 @@ pub struct SettingsDto {
     pub claude_key: String,
     pub claude_model: String,
     pub giphy_key: String,
-    pub database_url: String,
-    pub database_accept_invalid_certs: bool,
+    pub supabase_url: String,
+    pub supabase_anon_key: String,
     pub accounts: Vec<AccountDto>,
 }

@@ -40,6 +40,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupCalendarNav();
   setupNewProject();
   setupKanban();
+  setupSearch();
 
   // Apply saved font scale and theme
   try {
@@ -48,6 +49,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.documentElement.style.fontSize = `${fontScale * 14}px`;
     applyTheme(s.theme);
     if (s.language && s.language !== LANG) applyLanguage(s.language);
+    // First start (or no account yet): open Settings on Accounts, with an empty account to fill in.
+    if (!s.accounts || !s.accounts.length) {
+      document.getElementById('ov-briefing').textContent = t('ov.noAccount');
+      await openSettings();
+      switchSettingsTab('accounts');
+      if (!settingsData.accounts.length) document.getElementById('s-add-account').click();
+    }
   } catch (_) {}
 
   // Tell backend we're ready — it will now send cache then start live refresh
@@ -625,11 +633,279 @@ function switchToEmail(uid) {
   }, 0);
 }
 
+function openEmailIn(panel, uid) {
+  switchPanel(panel);
+  setTimeout(() => {
+    const row = document.querySelector(`#panel-${panel} .email-row[data-uid="${uid}"]`);
+    if (row) { row.click(); row.scrollIntoView({ block: 'nearest' }); }
+  }, 0);
+}
+
 function panelForEmail(email) {
   if (appState.sent_emails.some(e => e.uid === email.uid))   return 'sent';
   if (appState.drafts_emails.some(e => e.uid === email.uid)) return 'drafts';
   if (appState.trash_emails.some(e => e.uid === email.uid))  return 'trash';
   return 'inbox';
+}
+
+// ── Search & AI assistant ───────────────────────────────────────────────────
+// Stage 1: instant local ranking on every keystroke (backend search_local).
+// Stage 2: Enter / Ctrl+Enter / ✨ asks the AI, which finds, drafts, summarises or answers.
+const search = { hits: [], active: -1, mode: 'auto', selected: new Set(), timer: null, seq: 0, aiSeq: 0 };
+const $s = id => document.getElementById(id);
+
+function setupSearch() {
+  $s('btn-search').addEventListener('click', openSearch);
+  document.addEventListener('keydown', e => {
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable;
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openSearch(); }
+    else if (e.key === '/' && !typing && $s('search-overlay').classList.contains('hidden')) { e.preventDefault(); openSearch(); }
+  });
+  $s('search-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeSearch(); });
+  $s('search-input').addEventListener('input', () => {
+    clearTimeout(search.timer);
+    search.timer = setTimeout(runLocalSearch, 80);
+  });
+  $s('search-input').addEventListener('keydown', onSearchKey);
+  $s('search-ai-btn').addEventListener('click', () => runAiSearch());
+  document.querySelectorAll('.search-chip').forEach(chip => chip.addEventListener('click', () => {
+    search.mode = chip.dataset.mode;
+    document.querySelectorAll('.search-chip').forEach(c => c.classList.toggle('active', c === chip));
+    $s('search-input').focus();
+  }));
+  $s('search-server').addEventListener('change', () => { if ($s('search-server').checked) runServerSearch(); });
+  $s('search-summarize-sel').addEventListener('click', () => runAiSearch([...search.selected], 'summarize'));
+  $s('search-preview-reply').addEventListener('click', () => {
+    if (search.previewEmail) { closeSearch(); openCompose({ mode: 'reply', email: search.previewEmail }); }
+  });
+}
+
+function openSearch() {
+  $s('search-overlay').classList.remove('hidden');
+  const input = $s('search-input');
+  input.focus();
+  input.select();
+  runLocalSearch();
+}
+
+function closeSearch() {
+  $s('search-overlay').classList.add('hidden');
+}
+
+function setSearchStatus(msg, isError = false) {
+  $s('search-status').textContent = msg;
+  $s('search-status').classList.toggle('error', isError);
+}
+
+function showSearchSide(which) {
+  $s('search-help').classList.toggle('hidden', which !== 'help');
+  $s('search-answer').classList.toggle('hidden', which !== 'answer');
+  $s('search-preview').classList.toggle('hidden', which !== 'preview');
+}
+
+async function runLocalSearch() {
+  const seq = ++search.seq;
+  const query = $s('search-input').value;
+  let hits = [];
+  try { hits = await cmd('search_local', { query }); } catch (_) {}
+  if (seq !== search.seq) return;   // a newer keystroke already answered
+  renderSearchHits(hits);
+  setSearchStatus(hits.length || !query.trim() ? '' : t('search.noResults'));
+  if (!query.trim()) showSearchSide('help');
+  if ($s('search-server').checked && query.trim()) runServerSearch();
+}
+
+async function runServerSearch() {
+  const query = $s('search-input').value;
+  if (!query.trim()) return;
+  setSearchStatus(t('search.serverSearching'));
+  try {
+    const serverHits = await cmd('search_server', { query });
+    if (query !== $s('search-input').value) return;
+    const known = new Set(search.hits.map(h => h.id));
+    renderSearchHits([...search.hits, ...serverHits.filter(h => !known.has(h.id))]);
+    setSearchStatus(tn('search.serverFound', serverHits.length));
+  } catch (e) {
+    setSearchStatus(String(e), true);
+  }
+}
+
+// Words to highlight: the query minus filters and short words.
+function searchTerms() {
+  return $s('search-input').value.split(/\s+/)
+    .filter(w => w && !w.includes(':') && w.length > 2)
+    .map(w => w.toLowerCase());
+}
+
+// Wrap matches in <mark>, accent-insensitive; every piece of text is escaped.
+function highlight(text, terms) {
+  text = text || '';
+  const fold = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const folded = fold(text);
+  if (!terms.length || folded.length !== text.length) return esc(text);
+  const ranges = [];
+  for (const term of terms.map(fold)) {
+    for (let i = folded.indexOf(term); i !== -1; i = folded.indexOf(term, i + term.length)) {
+      ranges.push([i, i + term.length]);
+    }
+  }
+  ranges.sort((a, b) => a[0] - b[0]);
+  let out = '', pos = 0;
+  for (const [a, b] of ranges) {
+    if (a < pos) continue;   // overlapping match
+    out += esc(text.slice(pos, a)) + '<mark>' + esc(text.slice(a, b)) + '</mark>';
+    pos = b;
+  }
+  return out + esc(text.slice(pos));
+}
+
+function renderSearchHits(hits) {
+  search.hits = hits;
+  search.active = hits.length ? 0 : -1;
+  const list = $s('search-results');
+  const terms = searchTerms();
+  list.innerHTML = '';
+  hits.forEach((h, i) => {
+    const row = document.createElement('div');
+    row.className = 'search-hit' + (h.is_read ? '' : ' unread') + (i === search.active ? ' active' : '');
+    row.dataset.index = i;
+    row.innerHTML = `
+      <input type="checkbox" class="search-hit-check" ${search.selected.has(h.id) ? 'checked' : ''} />
+      <div class="search-hit-main">
+        <div class="search-hit-top">
+          <span class="search-hit-from">${highlight(h.from_name, terms)}</span>
+          <span class="search-hit-folder f-${h.folder}">${esc(t('search.folder.' + h.folder))}</span>
+          <span class="search-hit-date">${esc(h.date_str)}</span>
+        </div>
+        <div class="search-hit-subject">${highlight(h.subject, terms)}</div>
+        <div class="search-hit-snippet">${highlight(h.summary || h.snippet, terms)}</div>
+      </div>`;
+    row.querySelector('.search-hit-check').addEventListener('click', e => {
+      e.stopPropagation();
+      if (e.target.checked) search.selected.add(h.id); else search.selected.delete(h.id);
+      updateSelectionButton();
+    });
+    row.addEventListener('click', () => openSearchHit(h));
+    row.addEventListener('mousemove', () => setActiveHit(i));
+    list.appendChild(row);
+  });
+  updateSelectionButton();
+}
+
+function setActiveHit(i) {
+  if (i === search.active) return;
+  search.active = i;
+  document.querySelectorAll('.search-hit').forEach(r => r.classList.toggle('active', +r.dataset.index === i));
+  document.querySelector('.search-hit.active')?.scrollIntoView({ block: 'nearest' });
+}
+
+function updateSelectionButton() {
+  const btn = $s('search-summarize-sel');
+  btn.disabled = search.selected.size === 0;
+  btn.textContent = t('search.summarizeSel', { n: search.selected.size });
+}
+
+function onSearchKey(e) {
+  if (e.key === 'Escape') { e.preventDefault(); closeSearch(); return; }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (!search.hits.length) return;
+    const d = e.key === 'ArrowDown' ? 1 : -1;
+    setActiveHit((search.active + d + search.hits.length) % search.hits.length);
+    return;
+  }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const askAi = e.ctrlKey || e.metaKey || search.mode !== 'auto' || !search.hits.length || looksLikeRequest();
+    if (askAi) runAiSearch();
+    else if (search.active >= 0) openSearchHit(search.hits[search.active]);
+  }
+}
+
+// A sentence rather than keywords: send it to the AI on Enter.
+function looksLikeRequest() {
+  const q = $s('search-input').value.trim().toLowerCase();
+  return q.split(/\s+/).length >= 4 || /^(r[ée]sum|synth|[ée]cri|r[ée]dig|r[ée]pond|qu|combien|quand|o[uù] |summar|write|draft|reply|what|when|who|how|which|find all)/.test(q);
+}
+
+async function openSearchHit(h) {
+  if (h.folder === 'server') {
+    // Older email, not in the panels: preview it inside the dialog.
+    const email = await cmd('get_search_email', { id: h.id });
+    if (!email) return;
+    search.previewEmail = email;
+    const pane = $s('search-preview');
+    pane.querySelector('.rp-subject').textContent = email.subject;
+    pane.querySelector('.rp-meta').innerHTML = metaHtml(email);
+    setIframeContent(pane.querySelector('.rp-iframe'), email);
+    showSearchSide('preview');
+    return;
+  }
+  closeSearch();
+  const panel = { inbox: 'inbox', sent: 'sent', drafts: 'drafts', trash: 'trash' }[h.folder] || 'inbox';
+  openEmailIn(panel, h.uid);
+}
+
+async function runAiSearch(selectedIds = [], forcedMode = null) {
+  const query = $s('search-input').value.trim();
+  if (!query && !selectedIds.length) { setSearchStatus(t('search.empty'), true); return; }
+  const mode = forcedMode || search.mode;
+  const seq = ++search.aiSeq;
+  setSearchStatus(t('search.thinking'));
+  $s('search-ai-btn').disabled = true;
+  let result;
+  try {
+    result = await cmd('ai_assist', { query: query || t('search.mode.summarize'), mode, selectedIds });
+  } catch (e) {
+    if (seq === search.aiSeq) setSearchStatus(String(e), true);
+    return;
+  } finally {
+    $s('search-ai-btn').disabled = false;
+  }
+  if (seq !== search.aiSeq) return;
+  setSearchStatus('');
+  await showAiResult(result);
+}
+
+async function showAiResult(r) {
+  if (r.intent === 'compose' && r.compose) {
+    const c = r.compose;
+    let inReplyTo = null;
+    if (c.reply_to_id) inReplyTo = (await cmd('get_search_email', { id: c.reply_to_id }))?.message_id || null;
+    closeSearch();
+    openCompose({
+      to: c.to, cc: c.cc, subject: c.subject,
+      html: sanitizeHtml(c.body_html || '') || '<div><br></div>', inReplyTo,
+    });
+    showToast(t('search.composeOpened'));
+    return;
+  }
+  // find: show the AI's picks in its order; summarize/answer: the text, with the emails cited.
+  const emails = (await Promise.all(r.email_ids.map(id => cmd('get_search_email', { id }).then(e => e && { id, e }))))
+    .filter(Boolean);
+  if (r.intent === 'find' && emails.length) {
+    renderSearchHits(emails.map(({ id, e }) => ({
+      id, folder: id.split(':')[0], uid: e.uid, subject: e.subject, from_name: e.from_name,
+      date_str: e.date_str, summary: e.summary, snippet: '', is_read: e.is_read,
+    })));
+  }
+  const box = $s('search-answer');
+  const paragraphs = (r.answer || '').split(/\n{2,}/).map(p =>
+    /^\s*[-•*] /m.test(p)
+      ? '<ul>' + p.split('\n').filter(l => l.trim()).map(l => `<li>${esc(l.replace(/^\s*[-•*]\s*/, ''))}</li>`).join('') + '</ul>'
+      : `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('');
+  box.innerHTML = `<div class="search-answer-title">✨ ${esc(t('search.mode.' + r.intent))}</div>${paragraphs}` +
+    (emails.length ? `<div class="search-cited-title">${esc(t('search.cited'))}</div><div class="search-cited"></div>` : '');
+  const cited = box.querySelector('.search-cited');
+  for (const { id, e } of emails) {
+    const chip = document.createElement('button');
+    chip.className = 'search-cited-chip';
+    chip.textContent = `${e.from_name} — ${e.subject}`;
+    chip.title = e.date_full || e.date_str;
+    chip.addEventListener('click', () => openSearchHit({ id, folder: id.split(':')[0], uid: e.uid }));
+    cited.appendChild(chip);
+  }
+  showSearchSide('answer');
 }
 
 // ── Calendar ───────────────────────────────────────────────────────────────
@@ -1450,9 +1726,10 @@ function senderLabel(email) {
 // openCompose()                         new message
 // openCompose({ mode: 'reply', email })  reply with the original quoted
 // openCompose({ mode: 'forward', email }) forward with the original below
-function openCompose({ mode = 'new', email = null, to: presetTo = '', subject: presetSubject = '' } = {}) {
-  let to = presetTo, subject = presetSubject, html = '<div><br></div>';
-  composeInReplyTo = null;
+function openCompose({ mode = 'new', email = null, to: presetTo = '', subject: presetSubject = '',
+                       cc: presetCc = '', html: presetHtml = '', inReplyTo: presetInReplyTo = null } = {}) {
+  let to = presetTo, subject = presetSubject, html = presetHtml || '<div><br></div>';
+  composeInReplyTo = presetInReplyTo;
 
   if (email && mode === 'reply') {
     to = email.reply_to || email.from_email || email.from_name;
@@ -1492,6 +1769,11 @@ function openCompose({ mode = 'new', email = null, to: presetTo = '', subject: p
     $c(`compose-${k}-row`).classList.add('hidden');
     $c(`compose-show-${k}`).classList.remove('hidden');
   });
+  if (presetCc) {
+    $c('compose-cc').value = presetCc;
+    $c('compose-cc-row').classList.remove('hidden');
+    $c('compose-show-cc').classList.add('hidden');
+  }
   $c('compose-subject').value = subject;
   $c('compose-body').innerHTML = html;
   $c('composer-title').textContent =
@@ -1652,9 +1934,11 @@ async function openSettings() {
   document.getElementById('s-claude-key').value = settingsData.claude_key;
   document.getElementById('s-claude-model').value = settingsData.claude_model;
   document.getElementById('s-giphy-key').value = settingsData.giphy_key || '';
-  document.getElementById('s-db-url').value = settingsData.database_url || '';
-  document.getElementById('s-db-insecure').checked = !!settingsData.database_accept_invalid_certs;
-  document.getElementById('s-db-status').textContent = '';
+  document.getElementById('s-cloud-url').value = settingsData.supabase_url || '';
+  document.getElementById('s-cloud-anon').value = settingsData.supabase_anon_key || '';
+  document.getElementById('s-cloud-password').value = '';
+  setCloudStatus('');
+  renderCloudStatus(await cmd('cloud_status'));
 
   renderAccountBlocks(settingsData.accounts);
   document.getElementById('settings-overlay').classList.remove('hidden');
@@ -1722,22 +2006,7 @@ function setupSettings() {
 
   document.getElementById('settings-save').addEventListener('click', saveSettings);
   document.getElementById('s-language').addEventListener('change', e => applyLanguage(e.target.value));   // live preview
-  document.getElementById('s-db-test').addEventListener('click', async () => {
-    const status = document.getElementById('s-db-status');
-    status.classList.remove('error', 'ok');
-    status.textContent = t('set.dbTesting');
-    try {
-      const version = await cmd('test_database', {
-        url: document.getElementById('s-db-url').value,
-        acceptInvalidCerts: document.getElementById('s-db-insecure').checked,
-      });
-      status.textContent = t('set.dbOk', { version });
-      status.classList.add('ok');
-    } catch (e) {
-      status.textContent = String(e);
-      status.classList.add('error');
-    }
-  });
+  setupCloudSettings();
 
   document.getElementById('s-show-qr').addEventListener('click', async () => {
     const qr = await cmd('get_qr');
@@ -1781,12 +2050,7 @@ async function saveSettings() {
       theme: document.documentElement.dataset.theme,
       language: LANG,
     });
-    // Database settings are local-only and need a reconnect + sync, so they have their own command.
-    const dbUrl = document.getElementById('s-db-url').value.trim();
-    const dbInsecure = document.getElementById('s-db-insecure').checked;
-    if (dbUrl !== (settingsData.database_url || '') || dbInsecure !== !!settingsData.database_accept_invalid_certs) {
-      await cmd('set_database', { url: dbUrl, acceptInvalidCerts: dbInsecure });
-    }
+    await saveCloudProject();   // Supabase settings are local-only: they have their own command
     const languageChanged = LANG !== savedLang;
     savedTheme = document.documentElement.dataset.theme;
     savedFontScale = fontScale;
@@ -1797,6 +2061,68 @@ async function saveSettings() {
   } catch (e) {
     alert(t('set.saveFailed', { err: e }));
   }
+}
+
+// ── Settings → Cloud (Supabase) ──
+function setCloudStatus(msg, kind = '') {
+  const el = document.getElementById('s-cloud-status');
+  el.textContent = msg;
+  el.classList.toggle('ok', kind === 'ok');
+  el.classList.toggle('error', kind === 'error');
+}
+
+function renderCloudStatus(status) {
+  document.getElementById('s-cloud-signed-out').classList.toggle('hidden', status.signed_in);
+  document.getElementById('s-cloud-signed-in').classList.toggle('hidden', !status.signed_in);
+  document.getElementById('s-cloud-who').textContent = status.email;
+}
+
+// Save the project URL/key if they changed (local only), before any account action.
+async function saveCloudProject() {
+  const url = document.getElementById('s-cloud-url').value.trim();
+  const anonKey = document.getElementById('s-cloud-anon').value.trim();
+  if (url === (settingsData.supabase_url || '') && anonKey === (settingsData.supabase_anon_key || '')) return;
+  renderCloudStatus(await cmd('set_cloud', { url, anonKey }));
+  settingsData.supabase_url = url;
+  settingsData.supabase_anon_key = anonKey;
+}
+
+function setupCloudSettings() {
+  const run = async (fn) => {
+    setCloudStatus(t('set.cloudWorking'));
+    try { await fn(); } catch (e) { setCloudStatus(String(e), 'error'); }
+  };
+  const creds = () => {
+    const email = document.getElementById('s-cloud-email').value.trim();
+    const password = document.getElementById('s-cloud-password').value;
+    if (!document.getElementById('s-cloud-url').value.trim() || !document.getElementById('s-cloud-anon').value.trim()) {
+      throw t('set.cloudNeedProject');
+    }
+    if (!email || !password) throw t('set.cloudNeedCreds');
+    return { email, password };
+  };
+  document.getElementById('s-cloud-signin').addEventListener('click', () => run(async () => {
+    const c = creds();
+    await saveCloudProject();
+    renderCloudStatus(await cmd('cloud_sign_in', c));
+    document.getElementById('s-cloud-password').value = '';
+    setCloudStatus(t('set.cloudSynced'), 'ok');
+  }));
+  document.getElementById('s-cloud-signup').addEventListener('click', () => run(async () => {
+    const c = creds();
+    await saveCloudProject();
+    const signedIn = await cmd('cloud_sign_up', c);
+    renderCloudStatus(await cmd('cloud_status'));
+    setCloudStatus(signedIn ? t('set.cloudSynced') : t('set.cloudConfirm'), 'ok');
+  }));
+  document.getElementById('s-cloud-sync').addEventListener('click', () => run(async () => {
+    await cmd('cloud_sync_now');
+    setCloudStatus(t('set.cloudSynced'), 'ok');
+  }));
+  document.getElementById('s-cloud-signout').addEventListener('click', () => run(async () => {
+    renderCloudStatus(await cmd('cloud_sign_out'));
+    setCloudStatus('');
+  }));
 }
 
 // Closing without saving undoes the live previews (theme, font size).

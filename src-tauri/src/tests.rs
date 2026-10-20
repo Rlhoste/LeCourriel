@@ -166,6 +166,7 @@ api_key = "k" model = "m" max_tokens = 100
             to: String::new(), cc: String::new(), reply_to: String::new(), bcc: String::new(), message_id: String::new(),
             date_str: "10:30".to_string(),
             date_full: String::new(),
+            date_ts: 0,
             summary: "A test email".to_string(),
             priority: Priority::Urgent,
             is_read: false,
@@ -281,7 +282,7 @@ api_key = "k" model = "m" max_tokens = 100
             },
             projects: vec![],
             gifs: Default::default(),
-            database: None,
+            supabase: None,
         }
     }
 
@@ -294,6 +295,7 @@ api_key = "k" model = "m" max_tokens = 100
             to: String::new(), cc: String::new(), reply_to: String::new(), bcc: String::new(), message_id: String::new(),
             date_str: "Mon".to_string(),
             date_full: String::new(),
+            date_ts: 0,
             summary: "Summary".to_string(),
             priority,
             is_read: false,
@@ -642,7 +644,7 @@ max_tokens = 10
     }
 
 
-    // ── PostgreSQL sync ───────────────────────────────────────────────────────
+    // ── Cloud sync (Supabase) ───────────────────────────────────────────────────────
 
     fn config_with_secrets() -> Config {
         let mut cfg = make_test_config();
@@ -655,15 +657,15 @@ max_tokens = 10
         }];
         cfg.claude.api_key = "CLAUDE-SECRET".into();
         cfg.gifs.giphy_api_key = "GIPHY-SECRET".into();
-        cfg.database = Some(DatabaseConfig { url: "postgres://u:DB-SECRET@h/db".into(), accept_invalid_certs: false });
+        cfg.supabase = Some(SupabaseConfig { url: "https://DB-SECRET.supabase.co".into(), anon_key: "ANON-SECRET".into() });
         cfg.user.theme = "aero".into();
         cfg.projects = vec![ProjectConfig { name: "Thesis".into(), description: "PhD".into(), urgency: "high".into() }];
         cfg
     }
 
     #[test]
-    fn test_pgsync_decide() {
-        use crate::pgsync::{decide, SyncAction};
+    fn test_cloud_decide() {
+        use crate::cloud::{decide, SyncAction};
         use chrono::{Duration, Utc};
         let now = Utc::now();
         assert_eq!(decide(None, None), SyncAction::Nothing);
@@ -676,18 +678,18 @@ max_tokens = 10
     }
 
     #[test]
-    fn test_pgsync_prefs_never_contain_secrets() {
-        use crate::pgsync::prefs_from_config;
+    fn test_cloud_prefs_never_contain_secrets() {
+        use crate::cloud::prefs_from_config;
         let json = prefs_from_config(&config_with_secrets()).to_string();
-        for secret in ["IMAP-SECRET", "SMTP-SECRET", "CLAUDE-SECRET", "GIPHY-SECRET", "DB-SECRET", "imap.example.com"] {
+        for secret in ["IMAP-SECRET", "SMTP-SECRET", "CLAUDE-SECRET", "GIPHY-SECRET", "DB-SECRET", "ANON-SECRET", "imap.example.com"] {
             assert!(!json.contains(secret), "prefs leak {}", secret);
         }
         assert!(json.contains("aero") && json.contains("Thesis"));
     }
 
     #[test]
-    fn test_pgsync_merge_prefs_keeps_local_secrets() {
-        use crate::pgsync::{merge_prefs, prefs_from_config};
+    fn test_cloud_merge_prefs_keeps_local_secrets() {
+        use crate::cloud::{merge_prefs, prefs_from_config};
         let mut remote_cfg = make_test_config();
         remote_cfg.user.theme = "brutalist".into();
         remote_cfg.user.language = "fr".into();
@@ -704,19 +706,19 @@ max_tokens = 10
         assert_eq!(local.accounts[0].imap.password, "IMAP-SECRET");
         assert_eq!(local.claude.api_key, "CLAUDE-SECRET");
         assert_eq!(local.gifs.giphy_api_key, "GIPHY-SECRET");
-        assert_eq!(local.database_url(), Some("postgres://u:DB-SECRET@h/db"));
+        assert_eq!(local.supabase_settings(), Some(("https://DB-SECRET.supabase.co", "ANON-SECRET")));
     }
 
     #[test]
-    fn test_pgsync_mailbox_key_and_url() {
-        use crate::pgsync::mailbox_key;
+    fn test_cloud_mailbox_key_and_url() {
+        use crate::cloud::mailbox_key;
         assert_eq!(mailbox_key(&config_with_secrets()), "remi@imap.example.com");
         let mut no_accounts = make_test_config();
         no_accounts.accounts.clear();
         assert_eq!(mailbox_key(&no_accounts), "default");
         let mut cfg = make_test_config();
-        cfg.database = Some(DatabaseConfig { url: "   ".into(), accept_invalid_certs: false });
-        assert_eq!(cfg.database_url(), None);
+        cfg.supabase = Some(SupabaseConfig { url: "https://x.supabase.co".into(), anon_key: "  ".into() });
+        assert_eq!(cfg.supabase_settings(), None);   // both values are required
     }
 
     #[test]
@@ -738,52 +740,328 @@ max_tokens = 10
     }
 
     #[tokio::test]
-    async fn test_pgsync_unreachable_server_fails_fast() {
-        // Port 1 on localhost: nothing listens there.
-        let started = std::time::Instant::now();
-        let err = crate::pgsync::test_connection("postgres://u:p@127.0.0.1:1/db?connect_timeout=3", false)
-            .await
-            .unwrap_err();
-        assert!(format!("{:#}", err).contains("Could not connect to PostgreSQL"), "{:#}", err);
-        assert!(started.elapsed() < std::time::Duration::from_secs(11));
-        // An invalid URL is reported, not a panic.
-        assert!(crate::pgsync::test_connection("not a url", false).await.is_err());
+    async fn test_cloud_off_without_supabase() {
+        crate::cloud::configure(&make_test_config());
+        assert!(!crate::cloud::is_configured());
+        assert!(!crate::cloud::status().configured);
+        assert!(crate::cloud::lookup_ai(&["<x@y>".into()]).await.is_empty());
+        crate::cloud::store_ai(&[]).await;   // no-op, must not try to connect
+        assert_eq!(crate::cloud::pull_all().await.unwrap(), "cloud sync off");
     }
 
-    #[tokio::test]
-    async fn test_pgsync_off_without_database() {
-        crate::pgsync::configure(&make_test_config());
-        assert!(!crate::pgsync::is_configured());
-        assert!(crate::pgsync::lookup_ai(&["<x@y>".into()]).await.is_empty());
-        crate::pgsync::store_ai(&[]).await;   // no-op, must not try to connect
-        assert_eq!(crate::pgsync::pull_all().await.unwrap(), "database sync off");
+    #[test]
+    fn test_cloud_parse_session() {
+        use crate::cloud::parse_session;
+        let v = serde_json::json!({
+            "access_token": "AT", "refresh_token": "RT", "expires_in": 3600, "token_type": "bearer",
+            "user": { "id": "11111111-1111-1111-1111-111111111111", "email": "remi@example.com" }
+        });
+        let s = parse_session(&v, 1_000).unwrap();
+        assert_eq!((s.access_token.as_str(), s.refresh_token.as_str()), ("AT", "RT"));
+        assert_eq!(s.expires_at, 4_600);
+        assert_eq!(s.email, "remi@example.com");
+        // An absolute expires_at wins over expires_in.
+        let mut v2 = v.clone();
+        v2["expires_at"] = serde_json::json!(9_999);
+        assert_eq!(parse_session(&v2, 1_000).unwrap().expires_at, 9_999);
+        // Sign-up waiting for email confirmation: no session.
+        assert!(parse_session(&serde_json::json!({ "id": "u", "email": "a@b" }), 0).is_none());
     }
 
-    /// Against a real server: TEST_DATABASE_URL=postgres://… cargo test -- --ignored
+    #[test]
+    fn test_cloud_error_messages() {
+        use crate::cloud::error_message;
+        use reqwest::StatusCode;
+        assert_eq!(error_message(StatusCode::BAD_REQUEST,
+            r#"{"error":"invalid_grant","error_description":"Invalid login credentials"}"#), "Invalid login credentials");
+        assert_eq!(error_message(StatusCode::UNPROCESSABLE_ENTITY,
+            r#"{"code":422,"error_code":"weak_password","msg":"Password should be at least 6 characters."}"#),
+            "Password should be at least 6 characters.");
+        assert_eq!(error_message(StatusCode::FORBIDDEN,
+            r#"{"code":"42501","details":null,"hint":null,"message":"not signed in"}"#), "not signed in");
+        assert!(error_message(StatusCode::BAD_GATEWAY, "<html>oops</html>").contains("502"));
+    }
+
+    #[test]
+    fn test_cloud_parse_pulled() {
+        use crate::cloud::parse_pulled;
+        let v = serde_json::json!({ "data": { "next_id": 3, "tasks": [] }, "updated_at": "2026-10-20T10:00:00+00:00" });
+        let (data, at) = parse_pulled(&v).unwrap();
+        assert_eq!(data["next_id"], 3);
+        assert_eq!(at.to_rfc3339(), "2026-10-20T10:00:00+00:00");
+        assert!(parse_pulled(&serde_json::Value::Null).is_none());
+    }
+
+
+    /// End to end against a Supabase project (or the local stand-in used in development):
+    /// CLOUD_TEST_URL=http://127.0.0.1:54330 CLOUD_TEST_ANON=… cargo test test_cloud_e2e -- --ignored
+    /// Needs users alice@example.com / alice-pw and bob@example.com / bob-pw.
     #[tokio::test]
     #[ignore]
-    async fn test_pgsync_integration() {
+    async fn test_cloud_e2e() {
         use crate::ai_classifier::ClassifiedEmail;
-        let url = std::env::var("TEST_DATABASE_URL").expect("set TEST_DATABASE_URL");
-        let version = crate::pgsync::test_connection(&url, false).await.unwrap();
-        assert!(version.starts_with("PostgreSQL"), "{}", version);
+        use crate::tasks::{Board, Status};
+        let url = std::env::var("CLOUD_TEST_URL").expect("set CLOUD_TEST_URL");
+        let anon = std::env::var("CLOUD_TEST_ANON").expect("set CLOUD_TEST_ANON");
+
+        // Work in a scratch directory: sync reads and writes the app files in the current directory.
+        let dir = std::env::temp_dir().join(format!("courriel-e2e-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::env::set_current_dir(&dir).unwrap();
 
         let mut cfg = config_with_secrets();
-        cfg.accounts[0].imap.username = format!("courriel-test-{}", std::process::id());
-        cfg.database = Some(DatabaseConfig { url, accept_invalid_certs: false });
-        crate::pgsync::configure(&cfg);
+        cfg.accounts[0].imap.username = format!("e2e-{}", std::process::id());   // fresh mailbox
+        cfg.supabase = Some(SupabaseConfig { url: url.clone(), anon_key: anon.clone() });
+        crate::config::write_local(&cfg).unwrap();
+        crate::cloud::configure(&cfg);
+        assert!(crate::cloud::status().configured && !crate::cloud::status().signed_in);
 
+        // Wrong password: Supabase's message comes through.
+        let err = crate::cloud::sign_in("alice@example.com", "nope").await.unwrap_err();
+        assert!(format!("{:#}", err).contains("Invalid login credentials"), "{:#}", err);
+
+        // Sign-up on a project with email confirmation: no session yet.
+        assert!(!crate::cloud::sign_up("new@example.com", "pw123456").await.unwrap());
+        assert!(!crate::cloud::is_configured());
+
+        // Alice signs in; the session is saved privately.
+        let st = crate::cloud::sign_in("alice@example.com", "alice-pw").await.unwrap();
+        assert!(st.signed_in && st.email == "alice@example.com");
+        assert!(crate::cloud::is_configured());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata("session.json").unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "session.json must be private");
+        }
+
+        // Local data to sync.
+        let mut board = Board::default();
+        board.add("Send manuscript".into(), Some("Thesis".into()));
+        let second = board.add("Book room".into(), None);
+        board.set_status(second, Status::InProgress).unwrap();
+        board.deleted_sources.insert(77);
+        std::fs::write("tasks.json", serde_json::to_string(&board).unwrap()).unwrap();
+        std::fs::write("dismissed.json", r#"{"tasks":[],"deadlines":[5],"meetings":[],"task_check":{}}"#).unwrap();
+
+        let summary = crate::cloud::pull_all().await.unwrap();
+        assert!(summary.contains("tasks") && summary.contains("dismissed") && summary.contains("prefs"), "{}", summary);
+        assert!(summary.starts_with("pulled []"), "first sync only pushes: {}", summary);
+
+        // AI results round trip.
         let c = ClassifiedEmail {
-            priority: Priority::Urgent, summary: "Integration test".into(), project: None,
-            deadline: None, task: Some("Check".into()), meeting_link: None,
+            priority: Priority::HighPriority, summary: "Jury asks".into(), project: Some("Thesis".into()),
+            deadline: chrono::NaiveDate::from_ymd_opt(2026, 11, 2), task: Some("Reply".into()), meeting_link: None,
         };
-        crate::pgsync::store_ai(&[("<it-1@example.com>".into(), c.clone())]).await;
-        let found = crate::pgsync::lookup_ai(&["<it-1@example.com>".into(), "<missing@x>".into()]).await;
+        crate::cloud::store_ai(&[("<e2e@x>".into(), c.clone())]).await;
+        let found = crate::cloud::lookup_ai(&["<e2e@x>".into(), "<missing@x>".into()]).await;
         assert_eq!(found.len(), 1);
-        assert_eq!(found["<it-1@example.com>"], c);
+        assert_eq!(found["<e2e@x>"], c);
 
-        crate::pgsync::delete_mailbox_rows().await.unwrap();
-        crate::pgsync::configure(&make_test_config());
+        // A second computer: no local tasks file → it comes back from the cloud, identical.
+        std::fs::remove_file("tasks.json").unwrap();
+        let summary = crate::cloud::pull_all().await.unwrap();
+        assert!(summary.contains("pulled [tasks]"), "{}", summary);
+        let restored: Board = serde_json::from_str(&std::fs::read_to_string("tasks.json").unwrap()).unwrap();
+        assert_eq!(restored.tasks.len(), 2);
+        assert_eq!(restored.next_id, board.next_id);
+        assert!(restored.deleted_sources.contains(&77));
+        assert_eq!(restored.tasks[1].status, Status::InProgress);
+        assert_eq!(restored.tasks[0].project.as_deref(), Some("Thesis"));
+        // Nothing changed since: the next sync does nothing.
+        assert_eq!(crate::cloud::pull_all().await.unwrap(), "pulled [], pushed []");
+
+        // Expired access token: refreshed automatically and transparently.
+        let mut s: crate::cloud::Session = serde_json::from_str(&std::fs::read_to_string("session.json").unwrap()).unwrap();
+        s.expires_at = 0;
+        std::fs::write("session.json", serde_json::to_string(&s).unwrap()).unwrap();
+        crate::cloud::configure(&cfg);   // reload the session from disk
+        assert_eq!(crate::cloud::lookup_ai(&["<e2e@x>".into()]).await.len(), 1);
+        let s2: crate::cloud::Session = serde_json::from_str(&std::fs::read_to_string("session.json").unwrap()).unwrap();
+        assert!(s2.expires_at > s.expires_at && s2.refresh_token != s.refresh_token);
+
+        // Bob, same mailbox name: sees none of Alice's data.
+        crate::cloud::sign_out().await;
+        assert!(!std::path::Path::new("session.json").exists());
+        crate::cloud::sign_in("bob@example.com", "bob-pw").await.unwrap();
+        assert!(crate::cloud::lookup_ai(&["<e2e@x>".into()]).await.is_empty());
+        std::fs::remove_file("tasks.json").unwrap();
+        std::fs::remove_file("dismissed.json").unwrap();
+        let summary = crate::cloud::pull_all().await.unwrap();
+        assert!(!summary.contains("pulled [tasks"), "bob must not receive alice's tasks: {}", summary);
+        assert!(!std::path::Path::new("tasks.json").exists());
+
+        crate::cloud::sign_out().await;
+        crate::cloud::configure(&make_test_config());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+
+    // ── Search ────────────────────────────────────────────────────────────────
+
+    fn search_card(uid: u32, from: &str, subject: &str, body: &str, ts: i64) -> EmailCard {
+        let mut c = make_test_card(uid, Priority::Information);
+        c.from_name = from.into();
+        c.from_email = format!("{}@univ.fr", from.to_lowercase().replace(' ', "."));
+        c.subject = subject.into();
+        c.body_text = body.into();
+        c.summary = String::new();
+        c.date_ts = ts;
+        c.is_read = true;
+        c
+    }
+
+    fn search_index() -> Vec<(crate::search::Folder, EmailCard)> {
+        use crate::search::Folder;
+        let mut unread = search_card(3, "ADUM", "Échéance du manuscrit", "Merci d'envoyer le manuscrit avant le 23.", 3_000);
+        unread.is_read = false;
+        unread.project = Some("Thesis".into());
+        vec![
+            (Folder::Inbox, search_card(1, "Prof Martin", "Defense date", "The jury agreed on the soutenance date.", 1_000)),
+            (Folder::Inbox, search_card(2, "Newsletter", "Weekly digest", "Some news about the manuscript market.", 2_000)),
+            (Folder::Inbox, unread),
+            (Folder::Sent, search_card(3, "Remi", "Re: manuscrit", "Je vous envoie le manuscrit.", 4_000)),
+        ]
+    }
+
+    #[test]
+    fn test_search_parse_query() {
+        use crate::search::{parse_query, Folder};
+        let (terms, f) = parse_query(r#"résume les mails de l'ADUM "date de soutenance" de:martin non lu après:2026-10-01 dossier:envoyés"#);
+        assert_eq!(terms, vec!["resume", "adum", "date de soutenance"]);
+        assert_eq!(f.from, vec!["martin"]);
+        assert!(f.unread);
+        assert_eq!(f.after, chrono::NaiveDate::from_ymd_opt(2026, 10, 1));
+        assert_eq!(f.folder, Some(Folder::Sent));
+        let (terms, f) = parse_query("from:ADUM project:thesis before:31/12/2026 unread deadline");
+        assert_eq!(terms, vec!["deadline"]);
+        assert_eq!((f.from[0].as_str(), f.project.as_deref(), f.unread), ("adum", Some("thesis"), true));
+        assert_eq!(f.before, chrono::NaiveDate::from_ymd_opt(2026, 12, 31));
+        // An unknown key stays a search word; an invalid date is not a filter.
+        let (terms, f) = parse_query("http://x avant:demain");
+        assert!(f.is_empty());
+        assert_eq!(terms.len(), 2);
+    }
+
+    #[test]
+    fn test_search_accents_and_ranking() {
+        use crate::search::search_local;
+        let index = search_index();
+        // Accent-insensitive: "echeance" finds "Échéance".
+        let hits = search_local(&index, "echeance", 10);
+        assert_eq!(hits.iter().map(|h| h.id.as_str()).collect::<Vec<_>>(), vec!["inbox:3"]);
+        // "manuscrit" (French) matches the ADUM email and the sent reply; most recent first on ties
+        // is not enough: the subject match in both outranks the body-only one.
+        let hits = search_local(&index, "manuscrit", 10);
+        let ids: Vec<&str> = hits.iter().map(|h| h.id.as_str()).collect();
+        assert_eq!(ids, vec!["sent:3", "inbox:3"]);
+        // Prefix match: "manus" also finds "manuscript" in the newsletter body (lower score).
+        let hits = search_local(&index, "manus", 10);
+        assert_eq!(hits.len(), 3);
+        assert_eq!(hits.last().unwrap().id, "inbox:2");
+        // Snippet is taken around the match.
+        let hit = search_local(&index, "jury", 10).remove(0);
+        assert!(hit.snippet.contains("jury"), "{}", hit.snippet);
+    }
+
+    #[test]
+    fn test_search_filters_and_ids() {
+        use crate::search::{make_id, parse_id, search_local, Folder};
+        let index = search_index();
+        let unread: Vec<String> = search_local(&index, "non lu", 10).into_iter().map(|h| h.id).collect();
+        assert_eq!(unread, vec!["inbox:3"]);
+        let from: Vec<String> = search_local(&index, "de:martin", 10).into_iter().map(|h| h.id).collect();
+        assert_eq!(from, vec!["inbox:1"]);
+        let sent: Vec<String> = search_local(&index, "dossier:envoyes", 10).into_iter().map(|h| h.id).collect();
+        assert_eq!(sent, vec!["sent:3"]);
+        // No words: the most recent first.
+        let all: Vec<String> = search_local(&index, "", 2).into_iter().map(|h| h.id).collect();
+        assert_eq!(all, vec!["sent:3", "inbox:3"]);
+        // Same UID in two folders stays two different results.
+        assert_eq!(parse_id(&make_id(Folder::Sent, 3)), Some((Folder::Sent, 3)));
+        assert_eq!(parse_id("bogus"), None);
+    }
+
+    #[test]
+    fn test_search_contacts() {
+        use crate::search::{contacts, Folder};
+        let mut a = search_card(1, "Prof Martin", "a", "", 1);
+        a.to = r#""Lhoste, Remi" <remi@example.com>"#.into();
+        let mut b = search_card(2, "Prof Martin", "b", "", 2);
+        b.cc = "Jury <jury@univ.fr>".into();
+        let c = contacts(&[(Folder::Inbox, a), (Folder::Inbox, b)], 10);
+        assert_eq!(c[0], "Prof Martin <prof.martin@univ.fr>");   // most frequent
+        assert!(c.contains(&"Jury <jury@univ.fr>".to_string()));   // display name preferred
+        assert!(c.contains(&r#""Lhoste, Remi" <remi@example.com>"#.to_string()));   // comma inside quotes
+        assert_eq!(c.len(), 3);
+    }
+
+    #[test]
+    fn test_imap_search_criteria() {
+        use crate::imap_client::search_criteria;
+        let c = search_criteria(&["adum".into(), "say \"hi\"".into()], chrono::NaiveDate::from_ymd_opt(2026, 10, 1));
+        assert_eq!(c, r#"OR OR SUBJECT "adum" FROM "adum" TEXT "adum" OR OR SUBJECT "say \"hi\"" FROM "say \"hi\"" TEXT "say \"hi\"" SINCE 01-Oct-2026"#);
+        assert!(search_criteria(&["échéance".into()], None).starts_with("CHARSET UTF-8 "));
+        assert_eq!(search_criteria(&[], None), "ALL");
+    }
+
+    #[test]
+    fn test_parse_assist() {
+        use crate::ai_assistant::parse_assist;
+        let allowed = vec!["inbox:1".to_string(), "sent:3".to_string()];
+        let r = parse_assist(r#"```json
+{"intent":"summarize","email_ids":["inbox:1","inbox:999","inbox:1","sent:3"],"answer":" Two emails. ","compose":null}
+```"#, &allowed, "auto").unwrap();
+        assert_eq!(r.intent, "summarize");
+        assert_eq!(r.email_ids, vec!["inbox:1", "sent:3"]);   // unknown and duplicate ids dropped
+        assert_eq!(r.answer, "Two emails.");
+        assert!(r.compose.is_none());
+
+        let r = parse_assist(r#"Sure! {"intent":"compose","compose":{"to":"Prof Martin <prof.martin@univ.fr>","subject":"Soutenance","body_html":"<p>Bonjour</p>","reply_to_id":"inbox:42"}}"#, &allowed, "auto").unwrap();
+        let c = r.compose.unwrap();
+        assert_eq!((c.to.as_str(), c.subject.as_str()), ("Prof Martin <prof.martin@univ.fr>", "Soutenance"));
+        assert_eq!(c.reply_to_id, None);   // not one of the given emails
+
+        // A forced mode wins; an unknown intent falls back to find.
+        assert_eq!(parse_assist(r#"{"intent":"answer"}"#, &allowed, "compose").unwrap().intent, "compose");
+        assert_eq!(parse_assist(r#"{"intent":"dance"}"#, &allowed, "auto").unwrap().intent, "find");
+        assert!(parse_assist("I cannot do that.", &allowed, "auto").is_err());
+    }
+
+
+    // ── Data directory ────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_choose_data_dir() {
+        use crate::paths::choose_data_dir;
+        use std::path::PathBuf;
+        let tmp = std::env::temp_dir().join(format!("courriel-paths-{}", std::process::id()));
+        let with_config = tmp.join("with");
+        let without = tmp.join("without");
+        std::fs::create_dir_all(&with_config).unwrap();
+        std::fs::create_dir_all(&without).unwrap();
+        std::fs::write(with_config.join("config.toml"), "").unwrap();
+        let platform = Some(PathBuf::from("/home/u/.local/share/le-courriel"));
+
+        // The environment variable wins.
+        assert_eq!(choose_data_dir(Some("/data".into()), Some(&with_config), platform.clone()), Some("/data".into()));
+        // An empty variable is ignored.
+        assert_eq!(choose_data_dir(Some("".into()), Some(&without), platform.clone()), platform);
+        // A config.toml in the launch folder keeps the old layout (run.sh, development).
+        assert_eq!(choose_data_dir(None, Some(&with_config), platform.clone()), Some(with_config.clone()));
+        // Packaged builds launched anywhere else use the per-user folder.
+        assert_eq!(choose_data_dir(None, Some(&without), platform.clone()), platform);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_config_defaults_on_empty_file() {
+        let cfg: Config = toml::from_str("").unwrap();
+        assert!(cfg.accounts.is_empty());
+        assert_eq!(cfg.user.theme, "midnight");
+        assert_eq!(cfg.user.font_scale, 1.0);
+        assert_eq!(cfg.claude.max_tokens, 300);
+        assert!(!cfg.claude.model.is_empty());
     }
 
 }

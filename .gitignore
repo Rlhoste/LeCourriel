@@ -14,6 +14,7 @@ cache-v2.json
 dismissed.json
 tasks.json
 overrides.json
+session.json
 *.eml
 
 # Local tooling / scratch
