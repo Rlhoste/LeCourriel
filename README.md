@@ -1,5 +1,7 @@
 <p align="center"><img src="assets/logo-ceres.png" alt="Le courriel logo" width="160"></p>
 
+<p align="center"><a href="https://github.com/sponsors/Rlhoste"><img alt="Sponsor on GitHub" src="https://img.shields.io/badge/Sponsor-%E2%9D%A4-db61a2?logo=githubsponsors&amp;logoColor=white"></a></p>
+
 # Le courriel
 
 An AI-assisted desktop email client built with [Tauri 2](https://tauri.app/) (Rust backend, HTML/JS UI).
@@ -190,6 +192,12 @@ src-tauri/   Rust backend (Tauri app): IMAP, SMTP, AI, storage
 ui/          Front end: index.html, app.js, styles.css
 src/, ui/*.slint, Cargo.toml (root)   Earlier Slint prototype, not used by the Tauri app
 ```
+
+## Support the project
+
+Le courriel is free and open source. If it saves you time, you can support its development on
+**[GitHub Sponsors](https://github.com/sponsors/Rlhoste)**, monthly or one-time. You can also
+use **❤ Sponsor** in the app's sidebar. Thank you!
 
 ## License
 

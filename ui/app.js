@@ -3,6 +3,7 @@ const invoke = window.__TAURI__.core.invoke;
 const { listen } = window.__TAURI__.event;
 
 const BUG_REPORT_TO = 'remi.lhoste@o2game.com';
+const SPONSOR_URL = 'https://github.com/sponsors/Rlhoste';
 
 // ── State ──────────────────────────────────────────────────────────────────
 let appState = null;
@@ -78,6 +79,9 @@ function setupSidebar() {
 
   document.getElementById('btn-settings').addEventListener('click', openSettings);
   document.getElementById('btn-compose').addEventListener('click', () => openCompose());
+  // Opens in the system browser (Tauri shell plugin), not inside the app window.
+  document.getElementById('btn-sponsor').addEventListener('click', () =>
+    window.__TAURI__.shell.open(SPONSOR_URL).catch(e => console.error('open sponsor page', e)));
   document.getElementById('btn-report-bug').addEventListener('click', () => openCompose({
     to: BUG_REPORT_TO,
     subject: 'Sorry Remi, a new bug in your list',
