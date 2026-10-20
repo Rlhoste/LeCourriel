@@ -76,7 +76,8 @@ api_key = "k" model = "m" max_tokens = 100
         let restored: Config = toml::from_str(&serialized).unwrap();
         assert_eq!(restored.user.display_name, cfg.user.display_name);
         assert_eq!(restored.accounts[0].imap.host, cfg.accounts[0].imap.host);
-        assert_eq!(restored.claude.api_key, cfg.claude.api_key);
+        assert_eq!(restored.ai.key(), "sk-test");   // [claude] was migrated into [ai]
+        assert!(!serialized.contains("[claude]"), "the legacy section is not written back");
     }
 
     // ── Priority ──────────────────────────────────────────────────────────────
@@ -117,7 +118,8 @@ api_key = "k" model = "m" max_tokens = 100
         assert_eq!(dto.accounts[0].label, "Work");
         assert_eq!(dto.accounts[0].imap_port, "993");
         assert_eq!(dto.accounts[0].smtp_port, "587");
-        assert_eq!(dto.claude_key, "sk-test");
+        assert_eq!(dto.ai.provider, "anthropic");
+        assert_eq!(dto.ai.keys.get("anthropic").map(String::as_str), Some("sk-test"));
     }
 
     #[test]
@@ -280,10 +282,13 @@ api_key = "k" model = "m" max_tokens = 100
                 model: "claude-sonnet-4-6".to_string(),
                 max_tokens: 1024,
             },
+            ai: Default::default(),
             projects: vec![],
             gifs: Default::default(),
+            signature: Default::default(),
             supabase: None,
         }
+        .migrated()
     }
 
     fn make_test_card(uid: u32, priority: Priority) -> EmailCard {
@@ -552,11 +557,11 @@ model = "m"
 max_tokens = 10
 "#;
         let mut cfg: Config = toml::from_str(toml_str).unwrap();
-        assert_eq!(cfg.user.theme, "midnight");
-        cfg.user.theme = "brutalist".into();
+        assert_eq!(cfg.user.theme, "brutalist");
+        cfg.user.theme = "aero".into();
         let back: Config = toml::from_str(&toml::to_string_pretty(&cfg).unwrap()).unwrap();
-        assert_eq!(back.user.theme, "brutalist");
-        assert_eq!(config_to_dto(&back).theme, "brutalist");
+        assert_eq!(back.user.theme, "aero");
+        assert_eq!(config_to_dto(&back).theme, "aero");
     }
 
 
@@ -655,7 +660,9 @@ max_tokens = 10
             smtp: SmtpConfig { host: "smtp.example.com".into(), port: 465, username: "remi".into(),
                 password: "SMTP-SECRET".into(), from_address: "Remi <remi@example.com>".into() },
         }];
-        cfg.claude.api_key = "CLAUDE-SECRET".into();
+        cfg.ai.keys.insert("anthropic".into(), "CLAUDE-SECRET".into());
+        cfg.ai.keys.insert("openai".into(), "OPENAI-SECRET".into());
+        cfg.ai.base_url = "http://my-private-host:11434/v1".into();
         cfg.gifs.giphy_api_key = "GIPHY-SECRET".into();
         cfg.supabase = Some(SupabaseConfig { url: "https://DB-SECRET.supabase.co".into(), anon_key: "ANON-SECRET".into() });
         cfg.user.theme = "aero".into();
@@ -681,7 +688,7 @@ max_tokens = 10
     fn test_cloud_prefs_never_contain_secrets() {
         use crate::cloud::prefs_from_config;
         let json = prefs_from_config(&config_with_secrets()).to_string();
-        for secret in ["IMAP-SECRET", "SMTP-SECRET", "CLAUDE-SECRET", "GIPHY-SECRET", "DB-SECRET", "ANON-SECRET", "imap.example.com"] {
+        for secret in ["IMAP-SECRET", "SMTP-SECRET", "CLAUDE-SECRET", "OPENAI-SECRET", "my-private-host", "GIPHY-SECRET", "DB-SECRET", "ANON-SECRET", "imap.example.com"] {
             assert!(!json.contains(secret), "prefs leak {}", secret);
         }
         assert!(json.contains("aero") && json.contains("Thesis"));
@@ -704,7 +711,7 @@ max_tokens = 10
         assert_eq!(local.projects[0].name, "Work");
         // Untouched: accounts, keys, database.
         assert_eq!(local.accounts[0].imap.password, "IMAP-SECRET");
-        assert_eq!(local.claude.api_key, "CLAUDE-SECRET");
+        assert_eq!(local.ai.keys.get("anthropic").map(String::as_str), Some("CLAUDE-SECRET"));
         assert_eq!(local.gifs.giphy_api_key, "GIPHY-SECRET");
         assert_eq!(local.supabase_settings(), Some(("https://DB-SECRET.supabase.co", "ANON-SECRET")));
     }
@@ -1058,10 +1065,306 @@ max_tokens = 10
     fn test_config_defaults_on_empty_file() {
         let cfg: Config = toml::from_str("").unwrap();
         assert!(cfg.accounts.is_empty());
-        assert_eq!(cfg.user.theme, "midnight");
+        assert_eq!(cfg.user.theme, "brutalist");
         assert_eq!(cfg.user.font_scale, 1.0);
         assert_eq!(cfg.claude.max_tokens, 300);
         assert!(!cfg.claude.model.is_empty());
+    }
+
+
+    // ── Special folders ───────────────────────────────────────────────────────
+
+    #[test]
+    fn test_choose_folders_real_server_without_junk() {
+        use crate::app_state::choose_folders;
+        // The LIST of the user's server: roles on Trash/Sent/Drafts, no junk folder at all.
+        let list: Vec<(String, Vec<&'static str>)> = vec![
+            ("Trash".into(), vec!["trash"]),
+            ("Messages envoy&AOk-s".into(), vec![]),
+            ("Archives".into(), vec![]),
+            ("Drafts".into(), vec!["drafts"]),
+            ("Sent".into(), vec!["sent"]),
+            ("projets/Cannel&AOk-s".into(), vec![]),
+            ("General/these".into(), vec![]),
+            ("INBOX".into(), vec![]),
+        ];
+        let f = choose_folders(&list);
+        assert_eq!((f.sent.as_str(), f.drafts.as_str(), f.trash.as_str()), ("Sent", "Drafts", "Trash"));
+        assert_eq!(f.spam, None, "no spam folder: it must be created, not guessed");
+    }
+
+    #[test]
+    fn test_choose_folders_roles_and_names() {
+        use crate::app_state::choose_folders;
+        // The declared role wins over the name.
+        let f = choose_folders(&[
+            ("[Gmail]/Spam".into(), vec!["junk"]),
+            ("[Gmail]/Sent Mail".into(), vec!["sent"]),
+            ("Junk".into(), vec![]),
+        ]);
+        assert_eq!(f.spam.as_deref(), Some("[Gmail]/Spam"));
+        assert_eq!(f.sent, "[Gmail]/Sent Mail");
+        // No roles: names, also as the last segment ("INBOX.Junk") and in modified UTF-7.
+        let f = choose_folders(&[("INBOX.Junk".into(), vec![]), ("INBOX.Sent".into(), vec![])]);
+        assert_eq!(f.spam.as_deref(), Some("INBOX.Junk"));
+        assert_eq!(f.sent, "INBOX.Sent");
+        let f = choose_folders(&[("Courrier ind&AOk-sirable".into(), vec![]), ("Corbeille".into(), vec![])]);
+        assert_eq!(f.spam.as_deref(), Some("Courrier ind&AOk-sirable"));
+        assert_eq!(f.trash, "Corbeille");
+    }
+
+
+    #[test]
+    fn test_ai_language_for_all_ui_languages() {
+        use crate::i18n::{ai_language, is_supported, set_lang, LANGUAGES};
+        assert_eq!(LANGUAGES.len(), 13);
+        for (code, name) in LANGUAGES {
+            assert!(is_supported(code));
+            set_lang(code);
+            assert_eq!(ai_language(), name);
+        }
+        set_lang("xx");   // unknown: English
+        assert_eq!(ai_language(), "English");
+        assert!(!is_supported("xx"));
+        set_lang("en");
+    }
+
+
+    // ── AI providers ──────────────────────────────────────────────────────────
+
+    fn ai_cfg(provider: &str, model: &str, key: &str, base: &str) -> AiConfig {
+        let mut ai = AiConfig { provider: provider.into(), model: model.into(), base_url: base.into(), ..Default::default() };
+        if !key.is_empty() {
+            ai.keys.insert(provider.into(), key.into());
+        }
+        ai
+    }
+
+    #[test]
+    fn test_ai_defaults_and_migration() {
+        assert_eq!(ai_cfg("openai", "m", "", "").base_url(), "https://api.openai.com/v1");
+        assert_eq!(ai_cfg("mistral", "m", "", "").base_url(), "https://api.mistral.ai/v1");
+        assert_eq!(ai_cfg("ollama", "m", "", "").base_url(), "http://localhost:11434/v1");
+        assert_eq!(ai_cfg("", "m", "", "").base_url(), "https://api.anthropic.com/v1");
+        assert_eq!(ai_cfg("custom", "m", "", "").base_url(), "");
+        assert_eq!(ai_cfg("custom", "m", "", "https://api.groq.com/openai/v1/").base_url(), "https://api.groq.com/openai/v1");
+        // A config with only the old [claude] section becomes Anthropic in [ai].
+        let cfg: Config = toml::from_str("[claude]\napi_key = \"sk-old\"\nmodel = \"claude-x\"\nmax_tokens = 222\n").unwrap();
+        let cfg = cfg.migrated();
+        assert_eq!((cfg.ai.provider(), cfg.ai.model.as_str(), cfg.ai.key(), cfg.ai.max_tokens), ("anthropic", "claude-x", "sk-old", 222));
+        // An existing [ai] section is left alone.
+        let cfg: Config = toml::from_str("[claude]\napi_key = \"sk-old\"\n[ai]\nprovider = \"ollama\"\nmodel = \"qwen\"\n").unwrap();
+        let cfg = cfg.migrated();
+        assert_eq!((cfg.ai.provider(), cfg.ai.model.as_str(), cfg.ai.key()), ("ollama", "qwen", ""));
+    }
+
+    #[test]
+    fn test_ai_encode_per_provider() {
+        use crate::ai::{encode, Request};
+        let req = Request { system: "SYS", user: "USER", max_tokens: 42, json: true };
+
+        let e = encode(&ai_cfg("anthropic", "claude-x", "sk-a", ""), &req);
+        assert_eq!(e.path, "/messages");
+        assert!(e.headers.contains(&("x-api-key".into(), "sk-a".into())));
+        assert!(e.headers.iter().any(|(k, _)| k == "anthropic-version"));
+        assert_eq!(e.body["system"], "SYS");
+        assert_eq!(e.body["messages"][0]["content"], "USER");
+        assert_eq!(e.body["max_tokens"], 42);
+        assert!(e.body.get("response_format").is_none(), "Anthropic has no JSON mode flag");
+
+        let e = encode(&ai_cfg("openai", "gpt-x", "sk-o", ""), &req);
+        assert_eq!(e.path, "/chat/completions");
+        assert!(e.headers.contains(&("Authorization".into(), "Bearer sk-o".into())));
+        assert_eq!(e.body["messages"][0]["role"], "system");
+        assert_eq!(e.body["messages"][1]["content"], "USER");
+        assert_eq!(e.body["max_completion_tokens"], 42);
+        assert!(e.body.get("max_tokens").is_none());
+        assert_eq!(e.body["response_format"]["type"], "json_object");
+
+        let e = encode(&ai_cfg("mistral", "mistral-small-latest", "k", ""), &req);
+        assert_eq!(e.body["max_tokens"], 42);
+
+        // Ollama: no key, no Authorization header.
+        let e = encode(&ai_cfg("ollama", "llava:7b", "", ""), &Request { json: false, ..req.clone() });
+        assert!(e.headers.is_empty());
+        assert!(e.body.get("response_format").is_none());
+    }
+
+    #[test]
+    fn test_ai_decode_and_errors() {
+        use crate::ai::{decode, error_message, extract_json};
+        let anthropic = ai_cfg("anthropic", "m", "k", "");
+        let v = serde_json::json!({"content": [{"type": "thinking", "thinking": "…"}, {"type": "text", "text": "Hello"}]});
+        assert_eq!(decode(&anthropic, &v).unwrap(), "Hello");
+        let openai = ai_cfg("openai", "m", "k", "");
+        let v = serde_json::json!({"choices": [{"message": {"role": "assistant", "content": "Bonjour"}}]});
+        assert_eq!(decode(&openai, &v).unwrap(), "Bonjour");
+        assert!(decode(&openai, &serde_json::json!({"choices": []})).is_err());
+
+        assert_eq!(error_message(401, r#"{"error":{"message":"Incorrect API key provided","type":"invalid_request_error"}}"#),
+                   "Incorrect API key provided (401)");
+        assert_eq!(error_message(404, r#"{"error":"model 'nope' not found"}"#), "model 'nope' not found (404)");
+        assert_eq!(error_message(422, r#"{"message":"Invalid model"}"#), "Invalid model (422)");
+        assert!(error_message(502, "<html>bad gateway</html>").contains("502"));
+
+        assert_eq!(extract_json("Sure! Here it is:\n```json\n{\"a\": 1}\n```"), "{\"a\": 1}");
+        assert_eq!(extract_json("  {\"a\": {\"b\": 2}} trailing"), "{\"a\": {\"b\": 2}}");
+    }
+
+    /// A one-request HTTP server that records what it receives and answers `reply`.
+    async fn fake_ai_server(status: u16, reply: &'static str) -> (String, tokio::task::JoinHandle<(String, String)>) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = format!("http://{}", listener.local_addr().unwrap());
+        let handle = tokio::spawn(async move {
+            let (mut sock, _) = listener.accept().await.unwrap();
+            let mut buf = Vec::new();
+            let mut chunk = [0u8; 4096];
+            loop {
+                let n = sock.read(&mut chunk).await.unwrap();
+                buf.extend_from_slice(&chunk[..n]);
+                let text = String::from_utf8_lossy(&buf).to_string();
+                if let Some(h) = text.find("\r\n\r\n") {
+                    let len = text[..h].lines()
+                        .find_map(|l| l.to_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap()))
+                        .unwrap_or(0);
+                    if buf.len() >= h + 4 + len { break; }
+                }
+                if n == 0 { break; }
+            }
+            let text = String::from_utf8_lossy(&buf).to_string();
+            let (head, body) = text.split_once("\r\n\r\n").unwrap();
+            let resp = format!("HTTP/1.1 {} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", status, reply.len(), reply);
+            sock.write_all(resp.as_bytes()).await.unwrap();
+            (head.to_string(), body.to_string())
+        });
+        (addr, handle)
+    }
+
+    #[tokio::test]
+    async fn test_ai_complete_over_http() {
+        use crate::ai::{complete, Request};
+        let req = Request { system: "SYS", user: "Classify this", max_tokens: 50, json: true };
+
+        // OpenAI-compatible (as used by Mistral, Ollama, Groq…) through a custom base URL.
+        let (base, server) = fake_ai_server(200, r#"{"choices":[{"message":{"content":"{\"priority\":\"urgent\"}"}}]}"#).await;
+        let ai = ai_cfg("custom", "local-model", "tok-123", &format!("{}/v1", base));
+        assert_eq!(complete(&ai, req.clone()).await.unwrap(), r#"{"priority":"urgent"}"#);
+        let (head, body) = server.await.unwrap();
+        assert!(head.starts_with("POST /v1/chat/completions "), "{}", head);
+        assert!(head.to_lowercase().contains("authorization: bearer tok-123"));
+        let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(body["model"], "local-model");
+        assert_eq!(body["messages"][1]["content"], "Classify this");
+
+        // Anthropic format, pointed at the fake server.
+        let (base, server) = fake_ai_server(200, r#"{"content":[{"type":"text","text":"OK"}]}"#).await;
+        let ai = ai_cfg("anthropic", "claude-x", "sk-ant", &base);
+        assert_eq!(complete(&ai, req.clone()).await.unwrap(), "OK");
+        let (head, _) = server.await.unwrap();
+        assert!(head.starts_with("POST /messages "), "{}", head);
+        assert!(head.to_lowercase().contains("x-api-key: sk-ant"));
+
+        // Provider errors come back readable.
+        let (base, _server) = fake_ai_server(401, r#"{"error":{"message":"Incorrect API key provided"}}"#).await;
+        let err = complete(&ai_cfg("custom", "m", "bad", &base), req.clone()).await.unwrap_err();
+        assert_eq!(format!("{:#}", err), "Incorrect API key provided (401)");
+
+        // Missing settings are caught before any request.
+        assert!(format!("{:#}", complete(&ai_cfg("openai", "gpt-x", "", ""), req.clone()).await.unwrap_err()).contains("API key"));
+        assert!(format!("{:#}", complete(&ai_cfg("ollama", "", "", ""), req.clone()).await.unwrap_err()).contains("model"));
+
+        // Ollama not running: a clear hint (port 1 is closed).
+        let err = complete(&ai_cfg("ollama", "llava:7b", "", "http://127.0.0.1:1/v1"), req.clone()).await.unwrap_err();
+        assert!(format!("{:#}", err).contains("Is it running?"), "{:#}", err);
+    }
+
+    /// Live, against the local Ollama: cargo test test_ai_ollama_live -- --ignored
+    #[tokio::test]
+    #[ignore]
+    async fn test_ai_ollama_live() {
+        use crate::ai::{complete, list_models, Request};
+        let probe = ai_cfg("ollama", "", "", "");
+        let models = list_models(&probe).await.expect("is Ollama running?");
+        assert!(!models.is_empty(), "no local model: ollama pull <model>");
+        let ai = ai_cfg("ollama", &models[0], "", "");
+        let answer = complete(&ai, Request { system: "Reply with the single word OK.", user: "Reply with OK.", max_tokens: 20, json: false })
+            .await
+            .unwrap();
+        assert!(!answer.trim().is_empty());
+
+        // A real classification through the OpenAI-compatible path.
+        let email = crate::models::RawEmail {
+            uid: 1, subject: "Defense date confirmation".into(), from: "Prof Martin <martin@univ.fr>".into(),
+            to: String::new(), cc: String::new(), reply_to: String::new(), bcc: String::new(),
+            message_id: String::new(), seen: false, deleted: false, date: None,
+            body_text: "Dear Remi, please confirm by Friday 23 October that the PhD defense can take place on 27 October.".into(),
+            body_html: None,
+        };
+        let projects = vec![ProjectConfig { name: "Thesis".into(), description: "PhD thesis, defense, jury".into(), urgency: "high".into() }];
+        let c = crate::ai_classifier::classify(&ai, &email, &projects).await.unwrap();
+        println!("model {} → {:?}", models[0], c);
+        assert!(crate::ai_classifier::is_real_result(&c), "the local model's answer could not be used: {:?}", c);
+    }
+
+
+    // ── Signature ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_signature_decode_and_body() {
+        use crate::signature::{body_inner, decode_html};
+        // Windows-1252 bytes for "Rémi — Thèse" without a declared charset (Outlook style).
+        let bytes = b"<html><body><p>R\xe9mi \x97 Th\xe8se</p></body></html>";
+        let html = decode_html(bytes);
+        assert!(html.contains("Rémi — Thèse"), "{}", html);
+        // A declared charset is honoured.
+        let latin1 = b"<meta http-equiv=\"Content-Type\" content=\"text/html; charset=iso-8859-1\"><p>D\xe9partement</p>";
+        assert!(decode_html(latin1).contains("Département"));
+        // UTF-8 (with BOM) stays as is.
+        assert_eq!(decode_html("\u{feff}<b>Ça va</b>".as_bytes()), "<b>Ça va</b>");
+        assert_eq!(body_inner("<HTML><HEAD><style>x</style></HEAD><BODY lang=FR>\n<p>Sig</p>\n</BODY></HTML>"), "<p>Sig</p>");
+        assert_eq!(body_inner("<p>Just a snippet</p>"), "<p>Just a snippet</p>");
+    }
+
+    #[test]
+    fn test_signature_outlook_import() {
+        use crate::signature::{embed_local_images, import, load, remove};
+        let dir = std::env::temp_dir().join(format!("courriel-sig-{}", std::process::id()));
+        let files = dir.join("Sig_files");
+        std::fs::create_dir_all(&files).unwrap();
+        let png = [0x89u8, b'P', b'N', b'G', 1, 2, 3];
+        std::fs::write(files.join("image001.png"), png).unwrap();
+        std::fs::write(dir.join("big.png"), vec![0u8; 3 * 1024 * 1024]).unwrap();
+        std::fs::write(dir.join("logo.svg"), "<svg/>").unwrap();
+        let abs = dir.join("abs logo.png");
+        std::fs::write(&abs, png).unwrap();
+        let file_url = format!("file://{}", abs.display().to_string().replace(' ', "%20"));
+        // Windows-1252 file with Outlook's relative image folder.
+        let mut html = b"<html><head><meta name=Generator content=\"Microsoft Word\"></head><body>\
+<p>R\xe9mi Lhoste<br>Doctorant</p><img src=\"Sig_files/image001.png\" width=80>".to_vec();
+        html.extend_from_slice(format!("<img src='{}'><img src=\"https://example.com/logo.png\">\
+<img src=\"big.png\"><img src=\"logo.svg\"><img src=\"missing.png\"></body></html>", file_url).as_bytes());
+        let sig_path = dir.join("Sig.htm");
+        std::fs::write(&sig_path, &html).unwrap();
+
+        let _ = remove();
+        let out = import(&sig_path).unwrap();
+        assert!(out.starts_with("<p>Rémi Lhoste<br>Doctorant</p>"), "{}", out);
+        assert_eq!(out.matches("data:image/png;base64,").count(), 2, "relative and file:// images embedded");
+        assert!(out.contains("https://example.com/logo.png"), "remote image kept");
+        assert!(out.contains("\"big.png\""), "oversized image left as is");
+        assert!(out.contains("\"logo.svg\""), "svg not embedded");
+        assert!(out.contains("\"missing.png\""), "missing file left as is");
+        assert!(!out.contains("<html") && !out.contains("Generator"));
+        assert_eq!(load(), out, "stored as signature.html");
+        remove().unwrap();
+        assert_eq!(load(), "");
+
+        // Quote styles and an unquoted src are handled without breaking the HTML.
+        let mixed = embed_local_images("<img src=Sig_files/image001.png><img src=\"Sig_files/image001.png\">", &dir, 1024);
+        assert!(mixed.starts_with("<img src=Sig_files/image001.png>"));
+        assert!(mixed.contains("data:image/png;base64,"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
 }

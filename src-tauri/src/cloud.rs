@@ -358,7 +358,8 @@ pub fn prefs_from_config(cfg: &Config) -> Value {
             "theme": cfg.user.theme,
             "language": cfg.user.language,
         },
-        "claude_model": cfg.claude.model,
+        "ai_provider": cfg.ai.provider(),
+        "ai_model": cfg.ai.model,
         "projects": cfg.projects,
     })
 }
@@ -370,7 +371,13 @@ pub fn merge_prefs(cfg: &mut Config, prefs: &Value) {
     if let Some(v) = user["font_scale"].as_f64() { cfg.user.font_scale = v as f32; }
     if let Some(v) = user["theme"].as_str() { cfg.user.theme = v.to_string(); }
     if let Some(v) = user["language"].as_str() { cfg.user.language = v.to_string(); }
-    if let Some(v) = prefs["claude_model"].as_str() { cfg.claude.model = v.to_string(); }
+    // The provider and model sync; keys and the server URL stay on each computer.
+    if let Some(v) = prefs["ai_provider"].as_str().filter(|p| crate::config::AI_PROVIDERS.contains(p)) {
+        cfg.ai.provider = v.to_string();
+    }
+    if let Some(v) = prefs["ai_model"].as_str().or(prefs["claude_model"].as_str()).filter(|m| !m.is_empty()) {
+        cfg.ai.model = v.to_string();
+    }
     if let Ok(projects) = serde_json::from_value(prefs["projects"].clone()) {
         cfg.projects = projects;
     }

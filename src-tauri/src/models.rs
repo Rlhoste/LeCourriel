@@ -81,6 +81,8 @@ pub struct RawEmail {
     pub message_id: String,
     /// \Seen flag on the server.
     pub seen: bool,
+    /// \Deleted flag: moved away and waiting for a purge, so not shown.
+    pub deleted: bool,
     pub date: Option<DateTime<Utc>>,
     pub body_text: String,
     pub body_html: Option<String>,

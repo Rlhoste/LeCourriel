@@ -1475,15 +1475,6 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .cloud-who { font-size: 0.85rem; }
 
 /* ── Search & AI assistant ─────────────────────────────────────────────────── */
-.search-nav-btn { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.search-nav-btn kbd {
-  font-family: var(--font-ui);
-  font-size: 0.65rem;
-  color: var(--text-faint);
-  border: var(--border-w) solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 0 4px;
-}
 #search-overlay { align-items: flex-start; padding-top: 8vh; }
 .search-dialog {
   width: min(980px, calc(100vw - 48px));
@@ -1641,3 +1632,78 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .sponsor-btn { color: #db61a2 !important; }
 .sponsor-btn:hover { background: rgba(219, 97, 162, 0.12) !important; }
 [data-theme="terminal"] .sponsor-btn { color: #ff79c6 !important; }
+
+/* ── Right-to-left languages (Arabic, Urdu): <html dir="rtl"> ─────────────────
+   Flexbox and grid mirror by themselves; these rules flip the physical sides. */
+[dir="rtl"] #sidebar,
+[dir="rtl"] .week-day,
+[dir="rtl"] .email-list-col,
+[dir="rtl"] #projects-sidebar,
+[dir="rtl"] #projects-detail,
+[dir="rtl"] .search-results {
+  border-right: none;
+  border-left: var(--border-w) solid var(--border);
+}
+[dir="rtl"] .week-day:last-child { border-left: none; }
+[dir="rtl"] .nav-btn,
+[dir="rtl"] .rp-menu button,
+[dir="rtl"] .composer-toolbar .tb-ai-pop button,
+[dir="rtl"] .theme-card { text-align: right; }
+[dir="rtl"] .email-row.active,
+[dir="rtl"] .project-row.active {
+  border-left: none;
+  border-right: 3px solid var(--accent);
+}
+[dir="rtl"][data-theme="brutalist"] .email-row.active { border-right-width: 6px; border-right-color: #000; }
+[dir="rtl"] .cal-dl-pill { border-left: none; border-right: 3px solid var(--accent); }
+[dir="rtl"] .cal-dl-pill.high { border-right-color: var(--high); }
+[dir="rtl"] .priority-dot { margin-right: 0; margin-left: 5px; }
+[dir="rtl"] .row-read-toggle { margin: 0 0 0 3px; }
+[dir="rtl"] .rp-more,
+[dir="rtl"] .search-server { margin-left: 0; margin-right: auto; }
+[dir="rtl"] .rp-menu { right: auto; left: 0; }
+[dir="rtl"] .kanban-board-count,
+[dir="rtl"] .kanban-count { margin-left: 0; margin-right: 4px; }
+[dir="rtl"] .search-hit.active { box-shadow: inset -3px 0 0 var(--accent); }
+/* The composer docks bottom-left, its resize corner is top-right. */
+[dir="rtl"] .composer { right: auto; left: 24px; }
+[dir="rtl"] .composer.expanded { left: 50%; right: auto; transform: translate(-50%, 50%); }
+[dir="rtl"] .composer-resize { left: auto; right: 0; cursor: nesw-resize; }
+[dir="rtl"] .tb-pop { left: auto; right: 0; }
+[dir="rtl"] .tb-gif-pop,
+[dir="rtl"] .tb-ai-pop { right: auto; left: 0; }
+[dir="rtl"] #toast { left: auto; right: 24px; }
+/* What the user types and quotes keeps its own direction. */
+[dir="rtl"] .composer-body blockquote { margin: 0 0.8ex 0 0; border-left: none; border-right: var(--border-w) solid var(--paper-border); padding: 0 1ex 0 0; }
+[dir="rtl"] #compose-to, [dir="rtl"] #compose-cc, [dir="rtl"] #compose-bcc,
+[dir="rtl"] #s-cloud-url, [dir="rtl"] #s-db-url, [dir="rtl"] .a-imap-host, [dir="rtl"] .a-smtp-host { direction: ltr; text-align: right; }
+
+/* ── Fonts per script: the theme's font first, then one that covers the script ── */
+:lang(zh) body { font-family: var(--font-ui), "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", sans-serif; }
+:lang(ja) body { font-family: var(--font-ui), "Noto Sans CJK JP", "Yu Gothic UI", "Meiryo", "Hiragino Sans", sans-serif; }
+:lang(hi) body { font-family: var(--font-ui), "Noto Sans Devanagari", "Nirmala UI", "Mangal", sans-serif; }
+:lang(bn) body { font-family: var(--font-ui), "Noto Sans Bengali", "Nirmala UI", "Vrinda", sans-serif; }
+:lang(ar) body { font-family: var(--font-ui), "Noto Sans Arabic", "Noto Naskh Arabic", "Segoe UI", "Tahoma", sans-serif; }
+/* Naskh rather than the much taller Nastaliq: compact enough for buttons and lists. */
+:lang(ur) body { font-family: var(--font-ui), "Noto Naskh Arabic", "Noto Sans Arabic", "Segoe UI", sans-serif; }
+
+/* Email content (subjects, summaries, names, quoted mail) takes its direction from its own
+   text, so English mail reads correctly inside an Arabic or Urdu interface and vice versa. */
+.email-from, .email-subject, .email-summary, .rp-subject, .rp-person,
+.search-hit-from, .search-hit-subject, .search-hit-snippet, .search-cited-chip,
+.kanban-card-title, .kanban-source, .cal-dl-pill, .week-dl-pill,
+.composer-body, .composer-body *, .search-answer p, .search-answer li {
+  unicode-bidi: plaintext;
+}
+
+/* Settings → AI */
+.settings-group { display: flex; flex-direction: column; gap: 6px; }
+.settings-group.hidden { display: none; }
+.ai-model-row { display: flex; gap: 8px; align-items: center; }
+.ai-model-row input { flex: 1; min-width: 0; }
+.ai-model-row button { white-space: nowrap; }
+
+/* Settings → Accounts → Signature */
+.signature-section { margin-top: 18px; padding-top: 14px; border-top: var(--border-w) solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+.sig-preview { width: 100%; height: 150px; border: var(--border-w) solid var(--border); border-radius: var(--radius-sm); background: #fff; }
+.sig-preview.hidden, #s-sig-hint.hidden, #s-sig-remove.hidden { display: none; }

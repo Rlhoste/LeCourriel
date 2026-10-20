@@ -1,6 +1,6 @@
 [package]
 name = "courriel"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "GPL-3.0-or-later"
 
@@ -29,3 +29,4 @@ html2text = "0.6"
 qrcode = "0.14"
 tauri-plugin-dialog = "2"
 base64 = "0.22"
+encoding_rs = "0.8"

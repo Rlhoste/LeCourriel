@@ -6,7 +6,7 @@
   <title>Le courriel</title>
   <script>
     // Apply the last theme before the first paint (config.toml is applied again by app.js).
-    try { document.documentElement.dataset.theme = localStorage.getItem('theme') || 'midnight'; } catch (_) {}
+    try { document.documentElement.dataset.theme = localStorage.getItem('theme') || 'brutalist'; } catch (_) {}
   </script>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -36,7 +36,7 @@
     <div class="nav-spacer"></div>
 
     <button class="nav-btn sponsor-btn" id="btn-sponsor" title="github.com/sponsors/Rlhoste" data-i18n="nav.sponsor">❤ Sponsor</button>
-    <button class="nav-btn search-nav-btn" id="btn-search" title="Ctrl+K"><span data-i18n="nav.search">🔍 Search</span><kbd>Ctrl K</kbd></button>
+    <button class="nav-btn" id="btn-search" title="Ctrl+K" data-i18n="nav.search">🔍 Search</button>
     <button class="nav-btn" id="btn-report-bug" data-i18n="nav.reportBug">🐞 Report a bug</button>
     <button class="nav-btn" id="btn-refresh" data-i18n="nav.refresh">↻ Refresh</button>
     <button class="nav-btn" id="btn-settings" data-i18n="nav.settings">⚙ Settings</button>
@@ -199,10 +199,10 @@
       <input type="text" id="compose-bcc" autocomplete="off" />
     </div>
     <div class="composer-field">
-      <input type="text" id="compose-subject" placeholder="Subject" data-i18n-placeholder="cmp.subject" />
+      <input type="text" id="compose-subject" dir="auto" placeholder="Subject" data-i18n-placeholder="cmp.subject" />
     </div>
 
-    <div id="compose-body" class="composer-body" contenteditable="true" spellcheck="true"></div>
+    <div id="compose-body" class="composer-body" contenteditable="true" spellcheck="true" dir="auto"></div>
 
     <div class="composer-toolbar" id="composer-toolbar">
       <select data-cmd="fontName" title="Font" data-i18n-title="cmp.font">
@@ -273,7 +273,7 @@
         <div class="tb-pop tb-ai-pop hidden" id="tb-ai-pop">
           <button data-ai="formal" data-i18n="ai.formal">Make it formal</button>
           <button data-ai="translate_en" data-i18n="ai.translateEn">Translate to English</button>
-          <button data-ai="translate_fr" data-i18n="ai.translateFr">Translate to French</button>
+          <button data-ai="translate_fr" id="tb-ai-translate-ui">Translate to French</button>
           <button data-ai="correct" data-i18n="ai.correct">Correct spelling &amp; grammar</button>
           <button data-ai="auto_reply" id="tb-ai-auto" data-i18n="ai.auto">Auto answer</button>
           <div class="tb-ai-hint" data-i18n="ai.hint">Works on the selected text, or on your whole message.</div>
@@ -298,7 +298,7 @@
   <div class="search-dialog" role="dialog" aria-modal="true">
     <div class="search-top">
       <span class="search-icon">🔍</span>
-      <input type="text" id="search-input" autocomplete="off" spellcheck="false"
+      <input type="text" id="search-input" dir="auto" autocomplete="off" spellcheck="false"
              placeholder="Search, or ask the AI…" data-i18n-placeholder="search.placeholder" />
       <button id="search-ai-btn" class="search-ai-btn" title="Ctrl+Enter" data-i18n-title="search.aiTitle"><span data-i18n="search.ask">✨ Ask AI</span></button>
     </div>
@@ -366,14 +366,50 @@
     <div class="tab-content" id="tab-accounts">
       <div id="s-accounts-container"></div>
       <button id="s-add-account" class="secondary-btn" data-i18n="set.addAccount">+ Add Account</button>
+
+      <div class="signature-section">
+        <label data-i18n="set.signature">Signature</label>
+        <iframe id="s-sig-preview" class="sig-preview" sandbox="" title="Signature"></iframe>
+        <p id="s-sig-hint" class="settings-note" data-i18n="set.sigHint">No signature yet. Export it from your mail client (Outlook, Gmail…) as an HTML file, or create one with any signature generator.</p>
+        <div class="db-test-row">
+          <button id="s-sig-choose" class="secondary-btn" data-i18n="set.sigChoose">📄 Choose an HTML file…</button>
+          <button id="s-sig-remove" class="secondary-btn" data-i18n="set.sigRemove">Remove</button>
+          <span id="s-sig-status" class="db-status"></span>
+        </div>
+        <label class="checkbox-label"><input type="checkbox" id="s-sig-on-new" /> <span data-i18n="set.sigOnNew">Add to new messages</span></label>
+        <label class="checkbox-label"><input type="checkbox" id="s-sig-on-reply" /> <span data-i18n="set.sigOnReply">Add to replies and forwards</span></label>
+      </div>
     </div>
 
     <!-- AI -->
     <div class="tab-content" id="tab-ai">
-      <label data-i18n="set.claudeKey">Claude API Key</label>
-      <input type="password" id="s-claude-key" />
+      <label data-i18n="set.aiProvider">AI provider</label>
+      <select id="s-ai-provider" class="settings-select">
+        <option value="anthropic" data-i18n="ai.prov.anthropic">Claude (Anthropic)</option>
+        <option value="openai">OpenAI</option>
+        <option value="mistral">Mistral</option>
+        <option value="ollama" data-i18n="ai.prov.ollama">Ollama (local, free)</option>
+        <option value="custom" data-i18n="ai.prov.custom">Other (OpenAI-compatible)</option>
+      </select>
+      <div id="s-ai-key-row" class="settings-group">
+        <label data-i18n="set.aiKey">API key</label>
+        <input type="password" id="s-ai-key" autocomplete="off" />
+      </div>
+      <div id="s-ai-url-row" class="settings-group">
+        <label data-i18n="set.aiUrl">Server URL</label>
+        <input type="text" id="s-ai-url" autocomplete="off" spellcheck="false" />
+      </div>
       <label data-i18n="set.model">Model</label>
-      <input type="text" id="s-claude-model" placeholder="claude-sonnet-4-6" />
+      <div class="ai-model-row">
+        <input type="text" id="s-ai-model" list="s-ai-models" autocomplete="off" spellcheck="false" />
+        <datalist id="s-ai-models"></datalist>
+        <button id="s-ai-load" class="secondary-btn" data-i18n="set.aiLoad">⟳ Load models</button>
+      </div>
+      <div class="db-test-row">
+        <button id="s-ai-test" class="secondary-btn" data-i18n="set.aiTest">Test</button>
+        <span id="s-ai-status" class="db-status"></span>
+      </div>
+      <p class="settings-note" id="s-ai-note"></p>
       <label><span data-i18n="set.giphyKey">GIPHY API Key</span> <span style="opacity:.7" data-i18n="set.giphyHint">(for the GIF picker — free at developers.giphy.com)</span></label>
       <input type="password" id="s-giphy-key" />
       <div style="margin-top:16px">
@@ -439,6 +475,19 @@
 </template>
 
 <script src="i18n.js"></script>
+<script src="locales/en.js"></script>
+<script src="locales/fr.js"></script>
+<script src="locales/zh.js"></script>
+<script src="locales/hi.js"></script>
+<script src="locales/es.js"></script>
+<script src="locales/ar.js"></script>
+<script src="locales/bn.js"></script>
+<script src="locales/ru.js"></script>
+<script src="locales/pt.js"></script>
+<script src="locales/ur.js"></script>
+<script src="locales/id.js"></script>
+<script src="locales/de.js"></script>
+<script src="locales/ja.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

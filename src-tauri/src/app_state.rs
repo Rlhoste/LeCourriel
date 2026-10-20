@@ -1,8 +1,6 @@
 use anyhow::Result;
 use chrono::{Local, NaiveDate, Utc};
-use futures::future::join_all;
 use html2text;
-use reqwest::Client;
 use std::sync::{Arc, Mutex};
 use tauri::AppHandle;
 use tauri::Emitter;
@@ -72,11 +70,13 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     let mut inbox_ok = false;
 
     for account in &cfg.accounts {
-        let (sent_name, drafts_name, trash_name, spam_name) = guess_folder_names(&account.imap).await;
+        let folders = guess_folder_names(&account.imap).await;
+        let (sent_name, drafts_name, trash_name) = (folders.sent.clone(), folders.drafts.clone(), folders.trash.clone());
         if std::ptr::eq(account, &cfg.accounts[0]) {
             let mut s = state.lock().unwrap();
             s.trash_folder = trash_name.clone();
-            s.spam_folder = spam_name;
+            // No spam folder on the server: "Junk" is created when first needed.
+            s.spam_folder = folders.spam.unwrap_or_else(|| "Junk".into());
             s.sent_folder = sent_name.clone();
         }
         let (inbox_res, sent_res, drafts_res, trash_res) = tokio::join!(
@@ -151,9 +151,9 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     pre_cards.extend(new_raw_cards);
     let new_count = new_raw.len();
     let briefing_pre = if new_count > 0 {
-        i18n::classifying(new_count, i18n::lang())
+        Briefing { kind: "classifying", hour: 0, minute: 0, count: new_count }
     } else {
-        i18n::up_to_date(i18n::lang()).to_string()
+        Briefing { kind: "up_to_date", hour: 0, minute: 0, count: 0 }
     };
     populate(cfg, app, state, pre_cards, sent_cards_pre.clone(), drafts_cards_pre.clone(), trash_cards_pre.clone(), Some(briefing_pre));
 
@@ -161,30 +161,34 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     let new_cards: Vec<EmailCard> = if new_raw.is_empty() {
         vec![]
     } else {
-        let http_client = Client::builder().timeout(std::time::Duration::from_secs(30)).build()?;
         let projects = cfg.projects.clone();
         // Emails already classified on another computer: reuse the stored result (no AI call).
         let ids: Vec<String> = new_raw.iter()
             .map(|r| r.message_id.clone()).filter(|id| !id.is_empty()).collect();
         let stored = crate::cloud::lookup_ai(&ids).await;
-        let classify_tasks: Vec<_> = new_raw.iter().map(|email| {
-            if let Some(c) = stored.get(&email.message_id).cloned() {
-                return tokio::spawn(async move { anyhow::Ok((false, c)) });
-            }
-            let client = http_client.clone();
-            let claude_cfg = cfg.claude.clone();
-            let email = email.clone();
-            let projects = projects.clone();
-            tokio::spawn(async move {
-                let c = crate::ai_classifier::classify(&client, &claude_cfg, &email, &projects).await?;
-                anyhow::Ok((true, c))
-            })
-        }).collect();
-        let results = join_all(classify_tasks).await;
+        // A local model answers one request at a time; cloud APIs take several in parallel.
+        let concurrency = if cfg.ai.provider() == "ollama" { 1 } else { 6 };
+        use futures::StreamExt;
+        // Owned jobs first: the stream must not borrow from this function across awaits.
+        let jobs: Vec<_> = new_raw.iter()
+            .map(|email| (stored.get(&email.message_id).cloned(), cfg.ai.clone(), email.clone(), projects.clone()))
+            .collect();
+        let results: Vec<anyhow::Result<(bool, crate::ai_classifier::ClassifiedEmail)>> =
+            futures::stream::iter(jobs)
+                .map(|(reused, ai_cfg, email, projects)| async move {
+                    if let Some(c) = reused {
+                        return anyhow::Ok((false, c));
+                    }
+                    let c = crate::ai_classifier::classify(&ai_cfg, &email, &projects).await?;
+                    anyhow::Ok((true, c))
+                })
+                .buffered(concurrency)
+                .collect()
+                .await;
         let mut to_store: Vec<(String, crate::ai_classifier::ClassifiedEmail)> = Vec::new();
         let cards: Vec<EmailCard> = new_raw.into_iter().zip(results).map(|(raw, result)| {
             let classified = match result {
-                Ok(Ok((fresh, c))) => {
+                Ok((fresh, c)) => {
                     if fresh && !raw.message_id.is_empty() && crate::ai_classifier::is_real_result(&c) {
                         to_store.push((raw.message_id.clone(), c.clone()));
                     }
@@ -248,7 +252,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     let attention = urgent_count + high_count;
     use chrono::Timelike;
     let now = Local::now();
-    let live_briefing = i18n::briefing_live(now.hour(), now.minute(), attention, i18n::lang());
+    let live_briefing = Briefing { kind: "live", hour: now.hour(), minute: now.minute(), count: attention };
 
     populate(cfg, app, state, cards, sent_cards, drafts_cards, trash_cards, Some(live_briefing));
     Ok(())
@@ -275,7 +279,7 @@ fn populate(
     sent: Vec<EmailCard>,
     drafts: Vec<EmailCard>,
     trash: Vec<EmailCard>,
-    briefing_override: Option<String>,
+    briefing_override: Option<Briefing>,
 ) {
     // Projects the user re-tagged by hand win over the AI's choice.
     let overrides = crate::overrides::Overrides::load();
@@ -346,7 +350,15 @@ fn populate(
     }).collect();
 
     let attention = urgent.len() + high.len();
-    let briefing = briefing_override.unwrap_or_else(|| i18n::briefing_cached(attention, i18n::lang()));
+    let briefing = briefing_override.unwrap_or(Briefing { kind: "cached", hour: 0, minute: 0, count: attention });
+    // English/French text kept as a fallback for older front ends.
+    let l = i18n::lang();
+    let briefing_text = match briefing.kind {
+        "live" => i18n::briefing_live(briefing.hour, briefing.minute, briefing.count, l),
+        "classifying" => i18n::classifying(briefing.count, l),
+        "up_to_date" => i18n::up_to_date(l).to_string(),
+        _ => i18n::briefing_cached(briefing.count, l),
+    };
 
     use chrono::Datelike;
     let now = Local::now();
@@ -382,7 +394,10 @@ fn populate(
 
     let snapshot = AppStateDto {
         greeting,
-        briefing_time: briefing,
+        briefing_time: briefing_text,
+        user_name: cfg.user.display_name.clone(),
+        hour,
+        briefing,
         loading: false,
         urgent_emails:        to_dto_vec(&urgent),
         high_emails:          to_dto_vec(&high),
@@ -421,6 +436,7 @@ pub fn to_dto_vec(cards: &[EmailCard]) -> Vec<EmailCardDto> {
         message_id:   c.message_id.clone(),
         date_str:     c.date_str.clone(),
         date_full:    c.date_full.clone(),
+        date_ts:      c.date_ts,
         summary:      c.summary.clone(),
         priority:     c.priority.as_str().to_string(),
         is_read:      c.is_read,
@@ -446,6 +462,7 @@ pub fn build_week_days(today: NaiveDate, deadlines: &[(NaiveDate, EmailCard)]) -
         let (s1, u1) = get(0); let (s2, u2) = get(1); let (s3, u3) = get(2);
         WeekDayDto {
             day_name: i18n::short_day(&day, i18n::lang()),
+            date_iso: day.format("%Y-%m-%d").to_string(),
             day_number: day.day(),
             is_today: day == today,
             dl1_subject: s1, dl1_uid: u1,
@@ -509,46 +526,83 @@ fn save_cache(cards: &[EmailCard]) {
     }
 }
 
-async fn guess_folder_names(cfg: &ImapConfig) -> (String, String, String, String) {
+/// The special folders found on the server. `spam` is None when the mailbox has none
+/// (it is then created the first time an email is marked as spam).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpecialFolders {
+    pub sent: String,
+    pub drafts: String,
+    pub trash: String,
+    pub spam: Option<String>,
+}
+
+/// Pick the special folders from a LIST result: the role the server declares
+/// (RFC 6154 \Sent, \Drafts, \Trash, \Junk) first, then well-known names. Names are
+/// as the server sends them, so accented ones are in modified UTF-7 ("&AOk-" = "é").
+pub fn choose_folders(list: &[(String, Vec<&'static str>)]) -> SpecialFolders {
+    let by_role = |role: &str| list.iter().find(|(_, roles)| roles.contains(&role)).map(|(n, _)| n.clone());
+    let by_name = |candidates: &[&str]| -> Option<String> {
+        for c in candidates {
+            if let Some((n, _)) = list.iter().find(|(n, _)| n.eq_ignore_ascii_case(c)) {
+                return Some(n.clone());
+            }
+        }
+        // Also as the last path segment: "INBOX.Junk", "[Gmail]/Spam"…
+        for c in candidates {
+            if let Some((n, _)) = list.iter().find(|(n, _)| {
+                n.rsplit(|ch| ch == '/' || ch == '.').next().map_or(false, |last| last.eq_ignore_ascii_case(c))
+            }) {
+                return Some(n.clone());
+            }
+        }
+        None
+    };
+    SpecialFolders {
+        sent: by_role("sent")
+            .or_else(|| by_name(&["Sent", "Sent Items", "Sent Messages", "Messages envoy&AOk-s", "Envoy&AOk-s"]))
+            .unwrap_or_else(|| "Sent".into()),
+        drafts: by_role("drafts")
+            .or_else(|| by_name(&["Drafts", "Draft", "Brouillons"]))
+            .unwrap_or_else(|| "Drafts".into()),
+        trash: by_role("trash")
+            .or_else(|| by_name(&["Trash", "Deleted Items", "Deleted Messages", "Corbeille"]))
+            .unwrap_or_else(|| "Trash".into()),
+        spam: by_role("junk").or_else(|| by_name(&[
+            "Junk", "Spam", "Junk E-mail", "Junk Email", "Bulk Mail",
+            "Courrier ind&AOk-sirable", "Ind&AOk-sirables", "Pourriel", "Pourriels",
+        ])),
+    }
+}
+
+async fn guess_folder_names(cfg: &ImapConfig) -> SpecialFolders {
+    use async_imap::types::NameAttribute;
     use futures::StreamExt;
 
+    let fallback = SpecialFolders { sent: "Sent".into(), drafts: "Drafts".into(), trash: "Trash".into(), spam: None };
     let mut session = match connect(cfg).await {
         Ok(s) => s,
-        Err(_) => return ("Sent".into(), "Drafts".into(), "Trash".into(), "Junk".into()),
+        Err(_) => return fallback,
     };
-    let names: Vec<String> = match session.list(Some(""), Some("*")).await {
-        Ok(stream) => {
-            futures::pin_mut!(stream);
-            let mut out = Vec::new();
-            while let Some(item) = stream.next().await {
-                if let Ok(n) = item { out.push(n.name().to_string()); }
+    let mut list: Vec<(String, Vec<&'static str>)> = Vec::new();
+    if let Ok(stream) = session.list(Some(""), Some("*")).await {
+        futures::pin_mut!(stream);
+        while let Some(item) = stream.next().await {
+            if let Ok(n) = item {
+                let roles = n.attributes().iter().filter_map(|a| match a {
+                    NameAttribute::Sent => Some("sent"),
+                    NameAttribute::Drafts => Some("drafts"),
+                    NameAttribute::Trash => Some("trash"),
+                    NameAttribute::Junk => Some("junk"),
+                    _ => None,
+                }).collect();
+                list.push((n.name().to_string(), roles));
             }
-            out
         }
-        Err(_) => vec![],
-    };
+    }
     session.logout().await.ok();
-
-    let pick = |candidates: &[&str]| -> String {
-        for c in candidates {
-            if let Some(n) = names.iter().find(|n| n.to_lowercase() == c.to_lowercase()) {
-                return n.clone();
-            }
-        }
-        for c in candidates {
-            if let Some(n) = names.iter().find(|n| n.to_lowercase().contains(&c.to_lowercase())) {
-                return n.clone();
-            }
-        }
-        candidates[0].to_string()
-    };
-
-    let sent   = pick(&["Sent", "Sent Items", "Sent Messages"]);
-    let drafts = pick(&["Drafts", "Draft"]);
-    let trash  = pick(&["Trash", "Deleted Items", "Deleted Messages"]);
-    let spam   = pick(&["Junk", "Spam", "Junk E-mail", "Courrier indésirable"]);
-    info!("Folders: sent={} drafts={} trash={} spam={}", sent, drafts, trash, spam);
-    (sent, drafts, trash, spam)
+    let folders = choose_folders(&list);
+    info!("Folders: sent={} drafts={} trash={} spam={:?}", folders.sent, folders.drafts, folders.trash, folders.spam);
+    folders
 }
 
 fn to_recent_mail(folder: &'static str, raw: &crate::models::RawEmail) -> RecentMail {
@@ -612,8 +666,7 @@ async fn check_open_tasks(
     }
 
     info!("Checking {} open task(s) against {} recent email(s)", open.len(), recent.len());
-    let client = Client::builder().timeout(std::time::Duration::from_secs(60)).build()?;
-    let verdicts = crate::ai_classifier::check_tasks(&client, &cfg.claude, &open, &recent).await?;
+    let verdicts = crate::ai_classifier::check_tasks(&cfg.ai, &open, &recent).await?;
     if verdicts.is_empty() {
         return Ok(());
     }

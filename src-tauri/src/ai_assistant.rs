@@ -4,10 +4,8 @@
 //! opens the composer for the user to review.
 
 use anyhow::{Context, Result};
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
-use crate::ai_classifier::call_claude;
 use crate::config::Config;
 
 /// An email given to the AI as context.
@@ -125,7 +123,7 @@ pub async fn assist(
     contacts: &[String],
     today: &str,
 ) -> Result<AssistResult> {
-    let lang = crate::i18n::ai_language_name(crate::i18n::lang());
+    let lang = crate::i18n::ai_language();
     let mut user = format!(
         "REQUEST: {}\nMODE: {}\nTODAY: {}\n\nCONTACTS:\n",
         request.trim(),
@@ -142,8 +140,13 @@ pub async fn assist(
             c.id, c.date, c.from, c.to, c.subject, c.summary, c.body
         ));
     }
-    let client = Client::builder().timeout(std::time::Duration::from_secs(90)).build()?;
-    let text = call_claude(&client, &cfg.claude, &system_prompt(&cfg.user.display_name, lang), &user, 2000).await?;
+    let text = crate::ai::complete(&cfg.ai, crate::ai::Request {
+        system: &system_prompt(&cfg.user.display_name, lang),
+        user: &user,
+        max_tokens: 2000,
+        json: true,
+    })
+    .await?;
     let ids: Vec<String> = candidates.iter().map(|c| c.id.clone()).collect();
     parse_assist(&text, &ids, mode)
 }

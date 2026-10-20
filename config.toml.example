@@ -29,11 +29,20 @@ username = "you@gmail.com"
 password = "your-app-password"
 from_address = "Your Name <you@gmail.com>"
 
-[claude]
-# Get a key at https://console.anthropic.com/
-api_key = "sk-ant-api03-..."
+# AI provider: anthropic | openai | mistral | ollama | custom (any OpenAI-compatible API).
+# Easier to set from the app: Settings → AI (with "Load models" and "Test").
+[ai]
+provider = "anthropic"
 model = "claude-opus-4-6"
 max_tokens = 300
+# base_url = "http://localhost:11434/v1"   # only for ollama (default shown) or custom
+
+# One key per provider (Ollama needs none).
+[ai.keys]
+anthropic = "sk-ant-api03-..."
+# openai = "sk-..."
+# mistral = "..."
+
 
 # Optional: GIF picker in the composer (free key at https://developers.giphy.com/)
 [gifs]

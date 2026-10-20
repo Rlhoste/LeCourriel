@@ -15,6 +15,7 @@ dismissed.json
 tasks.json
 overrides.json
 session.json
+signature.html
 *.eml
 
 # Local tooling / scratch

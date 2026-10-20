@@ -281,6 +281,8 @@ pub struct SearchHit {
     pub subject: String,
     pub from_name: String,
     pub date_str: String,
+    /// Unix time (0 when unknown): the UI formats it in its language.
+    pub date_ts: i64,
     pub summary: String,
     /// A short excerpt around the first match in the body (plain text).
     pub snippet: String,
@@ -319,6 +321,7 @@ pub fn make_hit(folder: Folder, card: &EmailCard, terms: &[String], matched: usi
         subject: card.subject.clone(),
         from_name: card.from_name.clone(),
         date_str: card.date_str.clone(),
+        date_ts: card.date_ts,
         summary: card.summary.clone(),
         snippet: snippet(card, terms),
         is_read: card.is_read,

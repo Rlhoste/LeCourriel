@@ -12,10 +12,31 @@ pub enum Lang {
 }
 
 static LANG: AtomicU8 = AtomicU8::new(0);
+static LANG_CODE: std::sync::RwLock<String> = std::sync::RwLock::new(String::new());
 
-/// "fr" selects French; anything else is English.
+/// UI languages: code and English name (the name is what the AI is asked to write in).
+pub const LANGUAGES: [(&str, &str); 13] = [
+    ("en", "English"), ("fr", "French"), ("zh", "Simplified Chinese"), ("hi", "Hindi"),
+    ("es", "Spanish"), ("ar", "Modern Standard Arabic"), ("bn", "Bengali"), ("ru", "Russian"),
+    ("pt", "Portuguese"), ("ur", "Urdu"), ("id", "Indonesian"), ("de", "German"), ("ja", "Japanese"),
+];
+
+pub fn is_supported(code: &str) -> bool {
+    LANGUAGES.iter().any(|(c, _)| *c == code)
+}
+
+/// Set the UI language. The backend's own fallback texts exist in English and French;
+/// every supported code is kept for the AI.
 pub fn set_lang(code: &str) {
     LANG.store(if code == "fr" { 1 } else { 0 }, Ordering::Relaxed);
+    let code = if is_supported(code) { code } else { "en" };
+    *LANG_CODE.write().unwrap_or_else(|e| e.into_inner()) = code.to_string();
+}
+
+/// Language the AI should write summaries, tasks and answers in.
+pub fn ai_language() -> &'static str {
+    let code = LANG_CODE.read().unwrap_or_else(|e| e.into_inner()).clone();
+    LANGUAGES.iter().find(|(c, _)| *c == code).map_or("English", |(_, name)| name)
 }
 
 pub fn lang() -> Lang {
@@ -128,7 +149,3 @@ pub fn unknown_date(l: Lang) -> &'static str {
     match l { Lang::En => "Unknown", Lang::Fr => "Inconnue" }
 }
 
-/// Language name for AI prompts.
-pub fn ai_language_name(l: Lang) -> &'static str {
-    match l { Lang::En => "English", Lang::Fr => "French" }
-}

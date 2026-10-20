@@ -60,7 +60,7 @@ pub async fn move_message(cfg: &ImapConfig, uid: u32, folder: &str) -> Result<()
         session
             .uid_copy(&uid_set, folder)
             .await
-            .context("IMAP COPY failed")?;
+            .with_context(|| format!("Could not move the email to {} (MOVE: {})", folder, e))?;
         {
             let stream = session
                 .uid_store(&uid_set, "+FLAGS (\\Deleted)")
@@ -69,10 +69,17 @@ pub async fn move_message(cfg: &ImapConfig, uid: u32, folder: &str) -> Result<()
             futures::pin_mut!(stream);
             while stream.next().await.is_some() {}
         }
-        {
-            let stream = session.expunge().await.context("IMAP EXPUNGE failed")?;
+        // A plain EXPUNGE would permanently erase *every* message flagged \Deleted in the
+        // mailbox (including ones another client flagged). Only purge this one, with UID
+        // EXPUNGE (UIDPLUS); otherwise leave it flagged — it is already copied, and flagged
+        // messages are hidden by the app and by other clients.
+        let uidplus = session.capabilities().await.map_or(false, |c| c.has_str("UIDPLUS"));
+        if uidplus {
+            let stream = session.uid_expunge(&uid_set).await.context("IMAP UID EXPUNGE failed")?;
             futures::pin_mut!(stream);
             while stream.next().await.is_some() {}
+        } else {
+            info!("Server has no UIDPLUS: uid {} left flagged \\Deleted instead of expunging the mailbox", uid);
         }
     }
 
@@ -195,13 +202,38 @@ pub async fn search_server(
         futures::pin_mut!(stream);
         while let Some(item) = stream.next().await {
             if let Some(email) = item.ok().as_ref().and_then(parse_fetch) {
-                emails.push(email);
+                if !email.deleted {
+                    emails.push(email);
+                }
             }
         }
     }
     session.logout().await.ok();
     emails.sort_by(|a, b| b.date.cmp(&a.date));
     Ok(emails)
+}
+
+/// Make sure a folder exists, creating (and subscribing to) it if needed.
+pub async fn ensure_folder(cfg: &ImapConfig, folder: &str) -> Result<()> {
+    let mut session = connect(cfg).await?;
+    let exists = {
+        let stream = session.list(Some(""), Some(folder)).await.context("IMAP LIST failed")?;
+        futures::pin_mut!(stream);
+        let mut found = false;
+        while let Some(item) = stream.next().await {
+            if item.map_or(false, |n| n.name() == folder) {
+                found = true;
+            }
+        }
+        found
+    };
+    if !exists {
+        info!("Creating folder {}", folder);
+        session.create(folder).await.with_context(|| format!("Could not create the folder {}", folder))?;
+        session.subscribe(folder).await.ok();
+    }
+    session.logout().await.ok();
+    Ok(())
 }
 
 pub async fn fetch_emails(cfg: &ImapConfig) -> Result<Vec<RawEmail>> {
@@ -247,6 +279,8 @@ pub async fn fetch_emails(cfg: &ImapConfig) -> Result<Vec<RawEmail>> {
     let mut emails: Vec<RawEmail> = messages
         .iter()
         .filter_map(|fetch| parse_fetch(fetch))
+        // Flagged \Deleted (moved away, waiting for a purge): not in this folder any more.
+        .filter(|e: &RawEmail| !e.deleted)
         .collect();
 
     emails.sort_by(|a, b| match (&b.date, &a.date) {
@@ -267,6 +301,7 @@ fn parse_fetch(fetch: &Fetch) -> Option<RawEmail> {
 
     let uid = fetch.uid.unwrap_or(fetch.message);
     let seen = fetch.flags().any(|f| matches!(f, async_imap::types::Flag::Seen));
+    let deleted = fetch.flags().any(|f| matches!(f, async_imap::types::Flag::Deleted));
 
     let subject = parsed
         .headers
@@ -309,6 +344,7 @@ fn parse_fetch(fetch: &Fetch) -> Option<RawEmail> {
         bcc,
         message_id,
         seen,
+        deleted,
         date,
         body_text,
         body_html,

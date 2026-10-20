@@ -17,11 +17,13 @@ create table if not exists public.user_prefs (
   user_id      uuid primary key default auth.uid() references auth.users (id) on delete cascade,
   display_name text not null default '',
   font_scale   real not null default 1.0,
-  theme        text not null default 'midnight',
+  theme        text not null default 'brutalist',
   language     text not null default 'en',
-  claude_model text not null default '',
+  claude_model text not null default '',   -- the AI model (name kept for compatibility)
   updated_at   timestamptz not null default now()
 );
+-- Added with the choice of AI provider (anthropic, openai, mistral, ollama, custom).
+alter table public.user_prefs add column if not exists ai_provider text not null default 'anthropic';
 
 -- Projects the AI sorts emails into.
 create table if not exists public.projects (
@@ -139,17 +141,19 @@ begin
     on conflict (user_id, mailbox, doc) do update set updated_at = excluded.updated_at, meta = excluded.meta;
 
   elsif p_doc = 'prefs' then
-    insert into user_prefs (user_id, display_name, font_scale, theme, language, claude_model, updated_at)
+    insert into user_prefs (user_id, display_name, font_scale, theme, language, claude_model, ai_provider, updated_at)
     values (uid,
             coalesce(p_data #>> '{user,display_name}', ''),
             coalesce((p_data #>> '{user,font_scale}')::real, 1.0),
-            coalesce(p_data #>> '{user,theme}', 'midnight'),
+            coalesce(p_data #>> '{user,theme}', 'brutalist'),
             coalesce(p_data #>> '{user,language}', 'en'),
-            coalesce(p_data ->> 'claude_model', ''),
+            coalesce(p_data ->> 'ai_model', p_data ->> 'claude_model', ''),
+            coalesce(p_data ->> 'ai_provider', 'anthropic'),
             p_updated_at)
     on conflict (user_id) do update set
       display_name = excluded.display_name, font_scale = excluded.font_scale, theme = excluded.theme,
-      language = excluded.language, claude_model = excluded.claude_model, updated_at = excluded.updated_at;
+      language = excluded.language, claude_model = excluded.claude_model, ai_provider = excluded.ai_provider,
+      updated_at = excluded.updated_at;
     delete from projects where user_id = uid;
     insert into projects (user_id, name, description, urgency)
     select uid, p.name, coalesce(p.description, ''), coalesce(p.urgency, 'normal')
@@ -202,7 +206,8 @@ begin
     select jsonb_build_object(
       'user', jsonb_build_object('display_name', u.display_name, 'font_scale', u.font_scale,
                                  'theme', u.theme, 'language', u.language),
-      'claude_model', u.claude_model,
+      'ai_provider', u.ai_provider,
+      'ai_model', u.claude_model,
       'projects', coalesce((select jsonb_agg(jsonb_build_object('name', p.name, 'description', p.description,
                                                                 'urgency', p.urgency) order by p.name)
                             from projects p where p.user_id = uid), '[]'::jsonb))

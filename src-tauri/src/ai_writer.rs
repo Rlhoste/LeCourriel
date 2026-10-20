@@ -3,9 +3,7 @@
 //! the editor; the UI swaps images for placeholders before sending them here.
 
 use anyhow::Result;
-use reqwest::Client;
 
-use crate::ai_classifier::call_claude;
 use crate::config::Config;
 
 /// Context of the email being answered, for the auto-reply.
@@ -33,6 +31,11 @@ fn system_prompt(action: &str, user_name: &str) -> Option<String> {
         "translate_fr" => "Translate the text into natural, fluent French. Keep the tone and \
             register of the original (tutoiement or vouvoiement as fits). If it is already in \
             French, return it unchanged.".to_string(),
+        "translate_ui" => format!(
+            "Translate the text into natural, fluent {lang}. Keep the tone and register of the \
+            original. If it is already in {lang}, return it unchanged.",
+            lang = crate::i18n::ai_language()
+        ),
         "correct" => "Correct spelling, grammar, punctuation, accents and typos only. Keep the same \
             language, tone, wording and structure; do not rephrase sentences that are already \
             correct.".to_string(),
@@ -78,8 +81,13 @@ pub async fn run(cfg: &Config, action: &str, html: &str, original: Option<Origin
         html.to_string()
     };
 
-    let client = Client::builder().timeout(std::time::Duration::from_secs(90)).build()?;
-    let text = call_claude(&client, &cfg.claude, &system, &user_content, 4000).await?;
+    let text = crate::ai::complete(&cfg.ai, crate::ai::Request {
+        system: &system,
+        user: &user_content,
+        max_tokens: 4000,
+        json: false,
+    })
+    .await?;
     let out = strip_fences(&text);
     if out.is_empty() {
         anyhow::bail!("The AI returned an empty answer");

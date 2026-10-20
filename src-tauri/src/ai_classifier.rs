@@ -1,37 +1,14 @@
 use anyhow::Result;
 use chrono::NaiveDate;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
-use crate::config::{ClaudeConfig, ProjectConfig};
+use crate::config::{AiConfig, ProjectConfig};
 use crate::models::{Priority, RawEmail};
 
-#[derive(Serialize)]
-struct ClaudeRequest {
-    model: String,
-    max_tokens: u32,
-    system: String,
-    messages: Vec<Message>,
-}
 
-#[derive(Serialize)]
-struct Message {
-    role: String,
-    content: String,
-}
 
-#[derive(Deserialize)]
-struct ClaudeResponse {
-    content: Vec<ContentBlock>,
-}
 
-#[derive(Deserialize)]
-struct ContentBlock {
-    #[serde(rename = "type")]
-    block_type: String,
-    text: Option<String>,
-}
 
 #[derive(Deserialize)]
 struct ClassificationResult {
@@ -105,71 +82,48 @@ For the meeting_link field: if the email body contains a video meeting URL (Zoom
 
     prompt.push_str(&format!(
         "\nWrite the summary and the task in {}, whatever the language of the email.\n",
-        crate::i18n::ai_language_name(crate::i18n::lang())
+        crate::i18n::ai_language()
     ));
     prompt
 }
 
 pub async fn classify(
-    client: &Client,
-    cfg: &ClaudeConfig,
+    ai: &AiConfig,
     email: &RawEmail,
     projects: &[ProjectConfig],
 ) -> Result<ClassifiedEmail> {
     let body_snippet: String = email.body_text.chars().take(800).collect();
-
     let user_content = format!(
         "Subject: {}\nFrom: {}\nBody:\n{}",
         email.subject, email.from, body_snippet
     );
-
     let system_prompt = build_system_prompt(projects);
-
-    let request = ClaudeRequest {
-        model: cfg.model.clone(),
-        max_tokens: cfg.max_tokens,
-        system: system_prompt,
-        messages: vec![Message {
-            role: "user".to_string(),
-            content: user_content,
-        }],
+    let placeholder = |summary: &str| ClassifiedEmail {
+        priority: Priority::Information,
+        summary: summary.to_string(),
+        project: None,
+        deadline: None,
+        task: None,
+        meeting_link: None,
     };
 
-    let response = client
-        .post("https://api.anthropic.com/v1/messages")
-        .header("x-api-key", &cfg.api_key)
-        .header("anthropic-version", "2023-06-01")
-        .header("content-type", "application/json")
-        .json(&request)
-        .send()
-        .await?;
+    let text = match crate::ai::complete(ai, crate::ai::Request {
+        system: &system_prompt,
+        user: &user_content,
+        max_tokens: ai.max_tokens,
+        json: true,
+    })
+    .await
+    {
+        Ok(t) => t,
+        Err(e) => {
+            warn!("AI classification failed: {:#}", e);
+            return Ok(placeholder(CLASSIFY_FAILED));
+        }
+    };
+    debug!("AI raw response: {}", text);
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        warn!("Claude API error {}: {}", status, body);
-        return Ok(ClassifiedEmail {
-            priority: Priority::Information,
-            summary: CLASSIFY_FAILED.to_string(),
-            project: None,
-            deadline: None,
-            task: None,
-            meeting_link: None,
-        });
-    }
-
-    let claude_resp: ClaudeResponse = response.json().await?;
-
-    let text = claude_resp
-        .content
-        .into_iter()
-        .find(|b| b.block_type == "text")
-        .and_then(|b| b.text)
-        .unwrap_or_default();
-
-    debug!("Claude raw response: {}", text);
-
-    match serde_json::from_str::<ClassificationResult>(&text) {
+    match serde_json::from_str::<ClassificationResult>(crate::ai::extract_json(&text)) {
         Ok(result) => {
             let priority = Priority::from_str(&result.priority);
             let deadline = result
@@ -186,15 +140,8 @@ pub async fn classify(
             })
         }
         Err(e) => {
-            warn!("Failed to parse Claude JSON response: {} — raw: {}", e, text);
-            Ok(ClassifiedEmail {
-                priority: Priority::Information,
-                summary: PARSE_FAILED.to_string(),
-                project: None,
-                deadline: None,
-                task: None,
-                meeting_link: None,
-            })
+            warn!("Failed to parse the AI's JSON answer: {} — raw: {}", e, text);
+            Ok(placeholder(PARSE_FAILED))
         }
     }
 }
@@ -269,8 +216,7 @@ pub fn parse_task_check(text: &str, open_uids: &[u32]) -> Vec<(u32, &'static str
 
 /// Ask Claude which open tasks are already done or no longer relevant.
 pub async fn check_tasks(
-    client: &Client,
-    cfg: &ClaudeConfig,
+    ai: &AiConfig,
     tasks: &[OpenTask],
     recent: &[RecentMail],
 ) -> Result<Vec<(u32, &'static str)>> {
@@ -293,51 +239,15 @@ pub async fn check_tasks(
         ));
     }
 
-    let text = call_claude(client, cfg, TASK_CHECK_PROMPT, &user_content, 500).await?;
+    let text = crate::ai::complete(ai, crate::ai::Request {
+        system: TASK_CHECK_PROMPT,
+        user: &user_content,
+        max_tokens: 500,
+        json: true,
+    })
+    .await?;
     debug!("Task check raw response: {}", text);
 
     let open_uids: Vec<u32> = tasks.iter().map(|t| t.uid).collect();
     Ok(parse_task_check(&text, &open_uids))
-}
-
-/// One system + user message to Claude; returns the first text block.
-pub async fn call_claude(
-    client: &Client,
-    cfg: &ClaudeConfig,
-    system: &str,
-    user_content: &str,
-    max_tokens: u32,
-) -> Result<String> {
-    let request = ClaudeRequest {
-        model: cfg.model.clone(),
-        max_tokens,
-        system: system.to_string(),
-        messages: vec![Message {
-            role: "user".to_string(),
-            content: user_content.to_string(),
-        }],
-    };
-
-    let response = client
-        .post("https://api.anthropic.com/v1/messages")
-        .header("x-api-key", &cfg.api_key)
-        .header("anthropic-version", "2023-06-01")
-        .header("content-type", "application/json")
-        .json(&request)
-        .send()
-        .await?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        anyhow::bail!("Claude API error {}: {}", status, body);
-    }
-
-    let claude_resp: ClaudeResponse = response.json().await?;
-    Ok(claude_resp
-        .content
-        .into_iter()
-        .find(|b| b.block_type == "text")
-        .and_then(|b| b.text)
-        .unwrap_or_default())
 }

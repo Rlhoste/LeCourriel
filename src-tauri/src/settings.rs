@@ -2,8 +2,8 @@ use anyhow::Result;
 use qrcode::QrCode;
 use qrcode::render::unicode;
 
-use crate::config::{AccountConfig, ClaudeConfig, Config, ImapConfig, SmtpConfig, UserConfig};
-use crate::dto::{AccountDto, SettingsDto};
+use crate::config::{AccountConfig, Config, ImapConfig, SmtpConfig, UserConfig, AI_PROVIDERS};
+use crate::dto::{AccountDto, AiSettingsDto, SettingsDto};
 
 pub fn config_to_dto(cfg: &Config) -> SettingsDto {
     SettingsDto {
@@ -11,9 +11,14 @@ pub fn config_to_dto(cfg: &Config) -> SettingsDto {
         font_scale: cfg.user.font_scale,
         theme: cfg.user.theme.clone(),
         language: cfg.user.language.clone(),
-        claude_key: cfg.claude.api_key.clone(),
-        claude_model: cfg.claude.model.clone(),
+        ai: AiSettingsDto {
+            provider: cfg.ai.provider().to_string(),
+            model: cfg.ai.model.clone(),
+            base_url: cfg.ai.base_url.clone(),
+            keys: cfg.ai.keys.clone(),
+        },
         giphy_key: cfg.gifs.giphy_api_key.clone(),
+        signature: cfg.signature.clone(),
         supabase_url: cfg.supabase.as_ref().map(|s| s.url.clone()).unwrap_or_default(),
         supabase_anon_key: cfg.supabase.as_ref().map(|s| s.anon_key.clone()).unwrap_or_default(),
         accounts: cfg.accounts.iter().map(|a| AccountDto {
@@ -36,9 +41,9 @@ pub fn config_to_dto(cfg: &Config) -> SettingsDto {
 pub fn save_config(
     display_name: &str,
     accounts: &[AccountDto],
-    claude_key: &str,
-    claude_model: &str,
+    ai: &AiSettingsDto,
     giphy_key: &str,
+    signature: Option<&crate::config::SignatureConfig>,
     font_scale: f32,
     theme: Option<&str>,
     language: Option<&str>,
@@ -50,7 +55,7 @@ pub fn save_config(
         font_scale,
         theme: theme.map(str::to_string).unwrap_or_else(|| cfg.user.theme.clone()),
         language: language
-            .filter(|l| *l == "en" || *l == "fr")
+            .filter(|l| crate::i18n::is_supported(l))
             .map(str::to_string)
             .unwrap_or_else(|| cfg.user.language.clone()),
     };
@@ -74,12 +79,19 @@ pub fn save_config(
         },
     }).collect();
 
-    cfg.claude = ClaudeConfig {
-        api_key: claude_key.to_string(),
-        model: claude_model.to_string(),
-        max_tokens: cfg.claude.max_tokens,
-    };
+    if AI_PROVIDERS.contains(&ai.provider.as_str()) {
+        cfg.ai.provider = ai.provider.clone();
+    }
+    cfg.ai.model = ai.model.trim().to_string();
+    cfg.ai.base_url = ai.base_url.trim().to_string();
+    cfg.ai.keys = ai.keys.iter()
+        .map(|(p, k)| (p.clone(), k.trim().to_string()))
+        .filter(|(p, k)| AI_PROVIDERS.contains(&p.as_str()) && !k.is_empty())
+        .collect();
     cfg.gifs.giphy_api_key = giphy_key.trim().to_string();
+    if let Some(sig) = signature {
+        cfg.signature = sig.clone();
+    }
 
     crate::config::save_config(&cfg)
 }

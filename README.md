@@ -5,10 +5,14 @@
 # Le courriel
 
 An AI-assisted desktop email client built with [Tauri 2](https://tauri.app/) (Rust backend, HTML/JS UI).
-It connects to any IMAP/SMTP mailbox and uses Claude to triage your inbox.
+It connects to any IMAP/SMTP mailbox and uses AI to triage your inbox — **Claude, OpenAI, Mistral,
+a local Ollama model, or any OpenAI-compatible API**, your choice.
 
 ## Features
 
+- **13 languages**: English, Français, 中文, हिन्दी, Español, العربية (right-to-left), বাংলা, Русский,
+  Português, اردو (right-to-left), Bahasa Indonesia, Deutsch, 日本語. Translations live in
+  `ui/locales/`; corrections from native speakers are welcome (check them with `node ui/locales/check.js`).
 - **Overview**: a morning brief with unread urgent and high-priority emails, deadlines, tasks and meetings.
   Swipe a row right to move an email to the trash or dismiss an item.
 - **AI triage**: each new email is classified (urgent, high, task, information, threat…), summarised,
@@ -57,7 +61,8 @@ On first start the app opens **Settings → Accounts** so you can add your mailb
 
   For other systems, see <https://tauri.app/start/prerequisites/>.
 - An **IMAP/SMTP** email account. Gmail needs an [App Password](https://myaccount.google.com/apppasswords).
-- An **Anthropic API key** for the AI features: <https://console.anthropic.com/>
+- For the AI features, either an API key (Claude, OpenAI, Mistral…) or [Ollama](https://ollama.com)
+  running locally — see [Choose your AI](#choose-your-ai).
 - *Optional:* a **GIPHY API key** for the GIF picker: <https://developers.giphy.com/>
 
 ### Setup
@@ -107,6 +112,23 @@ cargo tauri build --bundles appimage   # Linux → target/release/bundle/appimag
 cargo tauri build --bundles nsis       # on Windows → target/release/bundle/nsis/
 ```
 
+## Choose your AI
+
+**⚙ Settings → AI** lets you pick the provider, enter its API key, load its list of models and
+**Test** the connection.
+
+| Provider | What you need | Where your emails go |
+|---|---|---|
+| **Claude** (Anthropic) | API key from <https://console.anthropic.com/> | Anthropic |
+| **OpenAI** | API key from <https://platform.openai.com/> | OpenAI |
+| **Mistral** | API key from <https://console.mistral.ai/> | Mistral (EU) |
+| **Ollama** (local, free) | [Ollama](https://ollama.com) installed, then e.g. `ollama pull qwen2.5` | **Nowhere: everything stays on your computer** |
+| **Other** | Any OpenAI-compatible API (Groq, OpenRouter, LM Studio, DeepSeek…): its URL, key and model | That provider |
+
+Small local models are slower and classify less reliably than large cloud models; a 7–8B text
+model (`qwen2.5`, `llama3.1`) is a good start. Keys are stored per provider in `config.toml`,
+so you can switch back and forth.
+
 ## Cloud sync with Supabase (optional)
 
 Le courriel can sync its data with a [Supabase](https://supabase.com) project (PostgreSQL with
@@ -134,7 +156,7 @@ uploaded in the background and the app syncs at each start.
 | Synced (your rows only) | Never leaves your computer |
 |---|---|
 | Task board, swipe dismissals, project tags | Mail passwords (IMAP/SMTP) |
-| Projects, display name, font size, theme, language, Claude model | Claude and GIPHY API keys |
+| Projects, display name, font size, theme, language, AI provider and model | AI and GIPHY API keys, the AI server URL |
 | AI results per email (priority, summary, project, deadline, task) — no email bodies | The Supabase URL, key and your session (`session.json`) |
 
 When the same document changed on two computers, the most recent version wins.
@@ -179,11 +201,13 @@ Delete `cache-v2.json` to force a full re-classification.
 
 ## Privacy
 
-Email content is sent to the Anthropic API to be classified:
-- each **new** email: subject, sender and the first 800 characters;
-- the task check and the composer's AI tools, when used.
+Email content is sent to the AI provider you choose (see [Choose your AI](#choose-your-ai)) — or
+stays on your computer with Ollama:
+- each **new** email: subject, sender and the first 800 characters, to classify it;
+- the task check, the search assistant and the composer's AI tools, when used.
 
-Nothing else leaves your machine except normal IMAP/SMTP traffic and GIPHY searches.
+Nothing else leaves your machine except normal IMAP/SMTP traffic, GIPHY searches and, if you
+enable it, the Supabase sync (never your passwords or keys).
 
 ## Project layout
 

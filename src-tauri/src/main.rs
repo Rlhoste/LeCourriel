@@ -21,6 +21,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, State};
 use tracing::info;
 
+mod ai;
 mod ai_assistant;
 mod ai_classifier;
 mod ai_writer;
@@ -39,6 +40,7 @@ mod paths;
 mod search;
 mod cloud;
 mod settings;
+mod signature;
 mod smtp_sender;
 mod state;
 mod tasks;
@@ -133,6 +135,7 @@ fn get_email(uid: u32, shared: State<'_, SharedState>) -> Option<dto::EmailCardD
         message_id: c.message_id.clone(),
         date_str: c.date_str.clone(),
         date_full: c.date_full.clone(),
+        date_ts: c.date_ts,
         summary: c.summary.clone(),
         priority: c.priority.as_str().to_string(),
         is_read: c.is_read,
@@ -181,16 +184,16 @@ fn get_settings(shared: State<'_, SharedState>) -> dto::SettingsDto {
 fn save_settings(
     display_name: String,
     accounts: Vec<dto::AccountDto>,
-    claude_key: String,
-    claude_model: String,
+    ai: dto::AiSettingsDto,
     giphy_key: Option<String>,
+    signature: Option<config::SignatureConfig>,
     font_scale: f32,
     theme: Option<String>,
     language: Option<String>,
     shared: State<'_, SharedState>,
 ) -> Result<(), String> {
     let giphy_key = giphy_key.unwrap_or_default();
-    settings::save_config(&display_name, &accounts, &claude_key, &claude_model, &giphy_key, font_scale, theme.as_deref(), language.as_deref())
+    settings::save_config(&display_name, &accounts, &ai, &giphy_key, signature.as_ref(), font_scale, theme.as_deref(), language.as_deref())
         .map_err(|e| e.to_string())?;
     // Reload config into shared state.
     match Config::load() {
@@ -203,6 +206,63 @@ fn save_settings(
         Err(e) => return Err(e.to_string()),
     }
     Ok(())
+}
+
+// ── Signature ──────────────────────────────────────────────────────────────
+
+/// Import an HTML signature file (local images are embedded). Returns the HTML.
+#[tauri::command]
+fn signature_import(path: String) -> Result<String, String> {
+    signature::import(std::path::Path::new(&path)).map_err(|e| format!("{:#}", e))
+}
+
+#[tauri::command]
+fn signature_get() -> String {
+    signature::load()
+}
+
+#[tauri::command]
+fn signature_remove() -> Result<(), String> {
+    signature::remove().map_err(|e| format!("{:#}", e))
+}
+
+// ── AI provider ────────────────────────────────────────────────────────────
+
+/// An AiConfig from the values currently typed in Settings (not saved yet).
+fn ai_config_from(provider: &str, model: &str, base_url: &str, api_key: &str) -> config::AiConfig {
+    let mut ai = config::AiConfig {
+        provider: provider.to_string(),
+        model: model.trim().to_string(),
+        base_url: base_url.trim().to_string(),
+        ..Default::default()
+    };
+    if !api_key.trim().is_empty() {
+        ai.keys.insert(ai.provider().to_string(), api_key.trim().to_string());
+    }
+    ai
+}
+
+#[tauri::command]
+async fn ai_list_models(provider: String, base_url: String, api_key: String) -> Result<Vec<String>, String> {
+    ai::list_models(&ai_config_from(&provider, "", &base_url, &api_key))
+        .await
+        .map_err(|e| format!("{:#}", e))
+}
+
+/// Send a tiny request; returns the answer and how long it took.
+#[tauri::command]
+async fn ai_test(provider: String, model: String, base_url: String, api_key: String) -> Result<(String, u64), String> {
+    let cfg = ai_config_from(&provider, &model, &base_url, &api_key);
+    let started = std::time::Instant::now();
+    let answer = ai::complete(&cfg, ai::Request {
+        system: "You are a connectivity check. Reply with the single word OK.",
+        user: "Reply with OK.",
+        max_tokens: 20,
+        json: false,
+    })
+    .await
+    .map_err(|e| format!("{:#}", e))?;
+    Ok((answer.trim().chars().take(60).collect(), started.elapsed().as_millis() as u64))
 }
 
 // ── Search & AI assistant ───────────────────────────────────────────────────
@@ -450,7 +510,15 @@ async fn trash_email(uid: u32, shared: State<'_, SharedState>) -> Result<(), Str
 /// Move an inbox email to the Spam/Junk folder on the server.
 #[tauri::command]
 async fn spam_email(uid: u32, shared: State<'_, SharedState>) -> Result<(), String> {
-    let folder = shared.lock().unwrap().spam_folder.clone();
+    let (cfg, folder) = {
+        let s = shared.lock().unwrap();
+        (s.cfg.clone(), s.spam_folder.clone())
+    };
+    // Many mailboxes have no spam folder: create it the first time, like other mail clients.
+    let account = cfg.accounts.first().ok_or("No accounts configured")?;
+    imap_client::ensure_folder(&account.imap, &folder)
+        .await
+        .map_err(|e| format!("{:#}", e))?;
     move_email(shared.inner(), uid, folder).await
 }
 
@@ -646,6 +714,11 @@ fn main() {
             set_read,
             set_email_project,
             save_email,
+            signature_import,
+            signature_get,
+            signature_remove,
+            ai_list_models,
+            ai_test,
             search_local,
             search_server,
             get_search_email,

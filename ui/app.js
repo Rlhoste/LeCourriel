@@ -33,7 +33,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('ov-briefing').textContent = e.payload;
   });
 
-  applyStaticI18n();   // language from the last session (i18n.js), until settings arrive
+  initLang();          // language from the last session, until settings arrive
+  applyStaticI18n();
+  updateTranslateButton();
   setupSidebar();
   setupSplitPanels();
   setupCompose();
@@ -50,6 +52,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.documentElement.style.fontSize = `${fontScale * 14}px`;
     applyTheme(s.theme);
     if (s.language && s.language !== LANG) applyLanguage(s.language);
+    sig.opts = s.signature || sig.opts;
+    sig.html = await invoke('signature_get');
     // First start (or no account yet): open Settings on Accounts, with an empty account to fill in.
     if (!s.accounts || !s.accounts.length) {
       document.getElementById('ov-briefing').textContent = t('ov.noAccount');
@@ -139,8 +143,8 @@ function renderPanel(panel) {
 // ── Overview ────────────────────────────────────────────────────────────────
 function renderOverview() {
   if (!appState) return;
-  document.getElementById('ov-greeting').textContent = appState.greeting;
-  document.getElementById('ov-briefing').textContent = appState.briefing_time;
+  document.getElementById('ov-greeting').textContent = appState.user_name !== undefined ? greetingText(appState) : appState.greeting;
+  document.getElementById('ov-briefing').textContent = appState.briefing ? briefingText(appState.briefing) : appState.briefing_time;
 
   // Urgent + High
   const urgent = [...appState.urgent_emails, ...appState.high_emails].filter(e => !e.is_read);
@@ -154,7 +158,7 @@ function renderOverview() {
   for (const d of appState.deadlines) {
     const row = document.createElement('div');
     row.className = 'email-row';
-    row.innerHTML = `<div class="email-row-top"><span class="email-from">${esc(d.subject)}</span><span class="email-date">${esc(d.deadline_str)}</span></div><div class="email-summary">${esc(d.project)} · ${d.days_until >= 0 ? t('ov.inDays', { n: d.days_until }) : t('ov.daysAgo', { n: -d.days_until })}</div>`;
+    row.innerHTML = `<div class="email-row-top"><span class="email-from">${esc(d.subject)}</span><span class="email-date">${esc(d.date_iso ? fmtDayMonth(d.date_iso) : d.deadline_str)}</span></div><div class="email-summary">${esc(d.project)} · ${d.days_until >= 0 ? t('ov.inDays', { n: d.days_until }) : t('ov.daysAgo', { n: -d.days_until })}</div>`;
     row.addEventListener('click', () => switchToEmail(d.uid));
     dl.appendChild(row);
   }
@@ -340,7 +344,7 @@ function renderWeekStrip() {
       [day.dl2_subject, day.dl2_uid],
       [day.dl3_subject, day.dl3_uid],
     ].filter(([s]) => s);
-    col.innerHTML = `<div class="week-day-header"><span class="week-day-name">${esc(day.day_name)}</span><span class="week-day-num">${day.day_number}</span></div>` +
+    col.innerHTML = `<div class="week-day-header"><span class="week-day-name">${esc(day.date_iso ? fmtWeekday(day.date_iso) : day.day_name)}</span><span class="week-day-num">${day.day_number}</span></div>` +
       slots.map(([s, uid]) => `<div class="week-dl-pill" data-uid="${uid}">${esc(s)}</div>`).join('');
     col.querySelectorAll('.week-dl-pill').forEach(p =>
       p.addEventListener('click', () => switchToEmail(+p.dataset.uid))
@@ -554,7 +558,7 @@ function printEmail(email) {
 
 // Full date + everyone involved (From / To / Cc / Bcc / Reply-To) for the reading pane header.
 function metaHtml(email) {
-  const date = email.date_full || email.date_str;
+  const date = emailDateFull(email);
   let html = `<div class="rp-date">${esc(date)}</div>`;
 
   const from = email.from_email && email.from_email !== email.from_name
@@ -779,7 +783,7 @@ function renderSearchHits(hits) {
         <div class="search-hit-top">
           <span class="search-hit-from">${highlight(h.from_name, terms)}</span>
           <span class="search-hit-folder f-${h.folder}">${esc(t('search.folder.' + h.folder))}</span>
-          <span class="search-hit-date">${esc(h.date_str)}</span>
+          <span class="search-hit-date">${esc(h.date_ts ? fmtShort(h.date_ts) : h.date_str)}</span>
         </div>
         <div class="search-hit-subject">${highlight(h.subject, terms)}</div>
         <div class="search-hit-snippet">${highlight(h.summary || h.snippet, terms)}</div>
@@ -890,7 +894,7 @@ async function showAiResult(r) {
   if (r.intent === 'find' && emails.length) {
     renderSearchHits(emails.map(({ id, e }) => ({
       id, folder: id.split(':')[0], uid: e.uid, subject: e.subject, from_name: e.from_name,
-      date_str: e.date_str, summary: e.summary, snippet: '', is_read: e.is_read,
+      date_str: e.date_str, date_ts: e.date_ts, summary: e.summary, snippet: '', is_read: e.is_read,
     })));
   }
   const box = $s('search-answer');
@@ -905,7 +909,7 @@ async function showAiResult(r) {
     const chip = document.createElement('button');
     chip.className = 'search-cited-chip';
     chip.textContent = `${e.from_name} — ${e.subject}`;
-    chip.title = e.date_full || e.date_str;
+    chip.title = emailDateFull(e);
     chip.addEventListener('click', () => openSearchHit({ id, folder: id.split(':')[0], uid: e.uid }));
     cited.appendChild(chip);
   }
@@ -932,13 +936,13 @@ function renderCalendar() {
   if (!appState) return;
   if (!calYear) { calYear = appState.calendar_year; calMonth = appState.calendar_month; }
 
-  document.getElementById('cal-title').textContent = `${MONTH_NAMES[LANG][calMonth - 1]} ${calYear}`;
+  document.getElementById('cal-title').textContent = fmtMonthYear(calYear, calMonth);
 
   const grid = document.getElementById('cal-grid');
   grid.innerHTML = '';
 
   // Day labels
-  for (const d of WEEKDAY_SHORT[LANG]) {
+  for (const d of weekdayNames()) {
     const cell = document.createElement('div');
     cell.className = 'cal-day-label';
     cell.textContent = d;
@@ -1576,15 +1580,18 @@ function setupComposeAi() {
 // (outside the quoted original), otherwise everything above the quote.
 function composeAiRange(action) {
   const body = $c('compose-body');
+  // The AI only touches what the user wrote: never the signature or the quoted original.
   const quoted = body.querySelector('.compose-quoted');
+  const signature = body.querySelector('.compose-signature');
+  const inside = el => el && el.contains(composeRange.commonAncestorContainer);
   if (action !== 'auto_reply' && composeRange && !composeRange.collapsed &&
-      body.contains(composeRange.commonAncestorContainer) &&
-      !(quoted && quoted.contains(composeRange.commonAncestorContainer))) {
+      body.contains(composeRange.commonAncestorContainer) && !inside(quoted) && !inside(signature)) {
     return composeRange.cloneRange();
   }
   const range = document.createRange();
   range.setStart(body, 0);
-  if (quoted) range.setEndBefore(quoted);
+  const stop = signature || quoted;   // the signature sits above the quote
+  if (stop) range.setEndBefore(stop);
   else range.setEnd(body, body.childNodes.length);
   return range;
 }
@@ -1680,7 +1687,9 @@ function setupComposeResize() {
   });
   handle.addEventListener('pointermove', e => {
     if (!start) return;
-    const w = Math.min(window.innerWidth - 40, Math.max(380, start.w + (start.x - e.clientX)));
+    // The handle is on the outer top corner: top-left, or top-right in right-to-left languages.
+    const dx = document.documentElement.dir === 'rtl' ? e.clientX - start.x : start.x - e.clientX;
+    const w = Math.min(window.innerWidth - 40, Math.max(380, start.w + dx));
     const h = Math.min(window.innerHeight - 40, Math.max(320, start.h + (start.y - e.clientY)));
     win.style.width = `${w}px`;
     win.style.height = `${h}px`;
@@ -1720,6 +1729,15 @@ function quotedOriginal(email) {
     : esc(email.body_text || '').replace(/\n/g, '<br>');
 }
 
+// "On {date}, {from} wrote:" with the date and sender isolated (<bdi>), so an address
+// like "Name <a@b>" keeps its order inside a right-to-left sentence.
+function quoteIntro(email) {
+  const text = esc(t('cmp.wrote', { date: '\u0001', from: '\u0002' }));
+  return text
+    .replace('\u0001', `<bdi>${esc(emailDateFull(email))}</bdi>`)
+    .replace('\u0002', `<bdi>${esc(senderLabel(email))}</bdi>`);
+}
+
 function senderLabel(email) {
   return email.from_email && email.from_email !== email.from_name
     ? `${email.from_name} <${email.from_email}>`
@@ -1741,14 +1759,14 @@ function openCompose({ mode = 'new', email = null, to: presetTo = '', subject: p
     composeInReplyTo = email.message_id || null;
     html = `<div><br></div><div><br></div>
       <div class="compose-quoted">
-      <div class="quote-intro">${esc(t('cmp.wrote', { date: email.date_full || email.date_str, from: senderLabel(email) }))}</div>
+      <div class="quote-intro">${quoteIntro(email)}</div>
       <blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">${quotedOriginal(email)}</blockquote>
       </div>`;
   } else if (email && mode === 'forward') {
     subject = /^(fwd?|tr):/i.test(email.subject) ? email.subject : `Fwd: ${email.subject}`;
     const rows = [
       [t('meta.from'), senderLabel(email)],
-      [t('meta.date'), email.date_full || email.date_str],
+      [t('meta.date'), emailDateFull(email)],
       [t('meta.subject'), email.subject],
       [t('meta.to'), email.to],
       [t('meta.cc'), email.cc],
@@ -1758,6 +1776,13 @@ function openCompose({ mode = 'new', email = null, to: presetTo = '', subject: p
       <div>${t('cmp.forwarded')}<br>${rows}</div><br>
       <div>${quotedOriginal(email)}</div>
       </div>`;
+  }
+
+  // Signature: above the quoted original in replies/forwards, at the end of new messages.
+  const sigHtml = signatureBlock(email ? 'reply' : 'new');
+  if (sigHtml) {
+    const quoteStart = html.indexOf('<div class="compose-quoted">');
+    html = quoteStart < 0 ? html + sigHtml : html.slice(0, quoteStart) + sigHtml + html.slice(quoteStart);
   }
 
   composeOriginal = email;
@@ -1875,11 +1900,11 @@ const THEMES = [
   { id: 'aero',      name: 'Frutiger Aero' },
   { id: 'terminal',  name: 'Terminal' },
 ];
-let savedTheme = 'midnight';      // last saved; restored if Settings closes without saving
+let savedTheme = 'brutalist';      // last saved; restored if Settings closes without saving
 let savedFontScale = 1.0;
 
 function applyTheme(id) {
-  if (!THEMES.some(t => t.id === id)) id = 'midnight';
+  if (!THEMES.some(t => t.id === id)) id = 'brutalist';
   document.documentElement.dataset.theme = id;
   try { localStorage.setItem('theme', id); } catch (_) {}
   document.querySelectorAll('.theme-card').forEach(c =>
@@ -1908,12 +1933,28 @@ function renderThemePicker() {
 }
 
 // Switch the UI language: static texts, then everything rendered from data.
+// The composer's second translate option targets the UI language (French when the UI is English).
+function updateTranslateButton() {
+  const btn = document.getElementById('tb-ai-translate-ui');
+  if (!btn) return;
+  if (LANG === 'en') {
+    btn.dataset.ai = 'translate_fr';
+    btn.textContent = t('ai.translateFr');
+  } else {
+    btn.dataset.ai = 'translate_ui';
+    btn.textContent = t('ai.translateUi', { lang: languageName() });
+  }
+}
+
 function applyLanguage(code) {
   setLang(code);
   applyStaticI18n();
+  updateTranslateButton();
   if (appState) renderAll();
   if (!document.getElementById('settings-overlay').classList.contains('hidden')) {
     renderThemePicker();
+    stashAiFields();
+    showAiProvider();
     settingsData.accounts = collectAccounts();   // keep unsaved edits while re-rendering labels
     renderAccountBlocks(settingsData.accounts);
   }
@@ -1923,7 +1964,7 @@ let savedLang = 'en';   // last saved; restored if Settings closes without savin
 
 async function openSettings() {
   settingsData = await cmd('get_settings');
-  savedTheme = settingsData.theme || 'midnight';
+  savedTheme = settingsData.theme || 'brutalist';
   savedLang = settingsData.language || 'en';
   const langSelect = document.getElementById('s-language');
   langSelect.innerHTML = LANGUAGES.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
@@ -1935,8 +1976,8 @@ async function openSettings() {
   const slider = document.getElementById('s-font-scale');
   slider.value = fontScale;
   document.getElementById('s-font-scale-val').textContent = fontScale.toFixed(2) + '×';
-  document.getElementById('s-claude-key').value = settingsData.claude_key;
-  document.getElementById('s-claude-model').value = settingsData.claude_model;
+  loadAiSettings(settingsData.ai);
+  loadSignatureSettings(settingsData.signature);
   document.getElementById('s-giphy-key').value = settingsData.giphy_key || '';
   document.getElementById('s-cloud-url').value = settingsData.supabase_url || '';
   document.getElementById('s-cloud-anon').value = settingsData.supabase_anon_key || '';
@@ -2011,6 +2052,8 @@ function setupSettings() {
   document.getElementById('settings-save').addEventListener('click', saveSettings);
   document.getElementById('s-language').addEventListener('change', e => applyLanguage(e.target.value));   // live preview
   setupCloudSettings();
+  setupAiSettings();
+  setupSignatureSettings();
 
   document.getElementById('s-show-qr').addEventListener('click', async () => {
     const qr = await cmd('get_qr');
@@ -2044,27 +2087,190 @@ function collectAccounts() {
 
 async function saveSettings() {
   const displayName  = document.getElementById('s-display-name').value;
-  const claudeKey    = document.getElementById('s-claude-key').value;
-  const claudeModel  = document.getElementById('s-claude-model').value;
   const giphyKey     = document.getElementById('s-giphy-key').value;
   const accounts     = collectAccounts();
   try {
     await cmd('save_settings', {
-      displayName, accounts, claudeKey, claudeModel, giphyKey, fontScale,
+      displayName, accounts, ai: collectAiSettings(), giphyKey, fontScale,
+      signature: collectSignatureSettings(),
       theme: document.documentElement.dataset.theme,
       language: LANG,
     });
     await saveCloudProject();   // Supabase settings are local-only: they have their own command
-    const languageChanged = LANG !== savedLang;
     savedTheme = document.documentElement.dataset.theme;
     savedFontScale = fontScale;
     savedLang = LANG;
+    sig.opts = collectSignatureSettings();
     closeSettings();
-    // Dates, greeting and briefing are built by the backend: rebuild them in the new language.
-    if (languageChanged) document.getElementById('btn-refresh').click();
   } catch (e) {
     alert(t('set.saveFailed', { err: e }));
   }
+}
+
+// ── Signature ──
+// The HTML comes from signature.html (imported from a file in Settings → Accounts).
+const sig = { html: '', opts: { on_new: true, on_reply: true } };
+
+// The block inserted in the composer, or '' when there is none / it is off for this kind.
+function signatureBlock(kind) {
+  if (!sig.html.trim()) return '';
+  if (kind === 'new' ? !sig.opts.on_new : !sig.opts.on_reply) return '';
+  return `<div class="compose-signature"><br>-- <br>${sanitizeHtml(sig.html)}</div>`;
+}
+
+function showSignaturePreview() {
+  const frame = document.getElementById('s-sig-preview');
+  const has = !!sig.html.trim();
+  frame.classList.toggle('hidden', !has);
+  document.getElementById('s-sig-hint').classList.toggle('hidden', has);
+  document.getElementById('s-sig-remove').classList.toggle('hidden', !has);
+  frame.srcdoc = has
+    ? `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:10px;font-family:Arial,sans-serif;font-size:14px;color:#222;background:#fff">${sanitizeHtml(sig.html)}</body></html>`
+    : '';
+}
+
+function setSigStatus(msg, kind = '') {
+  const el = document.getElementById('s-sig-status');
+  el.textContent = msg;
+  el.classList.toggle('ok', kind === 'ok');
+  el.classList.toggle('error', kind === 'error');
+}
+
+function loadSignatureSettings(opts) {
+  sig.opts = opts || sig.opts;
+  document.getElementById('s-sig-on-new').checked = sig.opts.on_new;
+  document.getElementById('s-sig-on-reply').checked = sig.opts.on_reply;
+  setSigStatus('');
+  showSignaturePreview();
+}
+
+function collectSignatureSettings() {
+  return {
+    on_new: document.getElementById('s-sig-on-new').checked,
+    on_reply: document.getElementById('s-sig-on-reply').checked,
+  };
+}
+
+function setupSignatureSettings() {
+  document.getElementById('s-sig-choose').addEventListener('click', async () => {
+    try {
+      const path = await window.__TAURI__.dialog.open({
+        multiple: false,
+        filters: [{ name: t('set.sigFileFilter'), extensions: ['html', 'htm'] }],
+      });
+      if (!path) return;
+      sig.html = await cmd('signature_import', { path });
+      showSignaturePreview();
+      setSigStatus(t('set.sigImported'), 'ok');
+    } catch (e) {
+      setSigStatus(String(e), 'error');
+    }
+  });
+  document.getElementById('s-sig-remove').addEventListener('click', async () => {
+    try {
+      await cmd('signature_remove');
+      sig.html = '';
+      showSignaturePreview();
+      setSigStatus(t('set.sigRemoved'), 'ok');
+    } catch (e) {
+      setSigStatus(String(e), 'error');
+    }
+  });
+}
+
+// ── Settings → AI provider ──
+// Keys and models are remembered per provider while the dialog is open, so switching
+// back and forth doesn't lose what was typed.
+const AI_DEFAULT_URL = {
+  anthropic: 'https://api.anthropic.com/v1', openai: 'https://api.openai.com/v1',
+  mistral: 'https://api.mistral.ai/v1', ollama: 'http://localhost:11434/v1', custom: '',
+};
+const AI_DEFAULT_MODEL = { anthropic: 'claude-opus-4-6', mistral: 'mistral-small-latest' };
+const ai = { provider: 'anthropic', keys: {}, models: {}, urls: {} };
+const $ai = id => document.getElementById(id);
+
+function loadAiSettings(s) {
+  ai.provider = s?.provider || 'anthropic';
+  ai.keys = { ...(s?.keys || {}) };
+  ai.models = { [ai.provider]: s?.model || '' };
+  ai.urls = { [ai.provider]: s?.base_url || '' };
+  $ai('s-ai-provider').value = ai.provider;
+  showAiProvider();
+}
+
+// Store what is typed for the current provider.
+function stashAiFields() {
+  ai.keys[ai.provider] = $ai('s-ai-key').value.trim();
+  ai.models[ai.provider] = $ai('s-ai-model').value.trim();
+  ai.urls[ai.provider] = $ai('s-ai-url').value.trim();
+}
+
+function showAiProvider() {
+  const p = ai.provider;
+  $ai('s-ai-key').value = ai.keys[p] || '';
+  $ai('s-ai-model').value = ai.models[p] ?? AI_DEFAULT_MODEL[p] ?? '';
+  $ai('s-ai-url').value = ai.urls[p] || '';
+  $ai('s-ai-url').placeholder = AI_DEFAULT_URL[p] || 'https://api.example.com/v1';
+  $ai('s-ai-key-row').classList.toggle('hidden', p === 'ollama');
+  $ai('s-ai-url-row').classList.toggle('hidden', !['ollama', 'custom'].includes(p));
+  $ai('s-ai-models').innerHTML = '';
+  setAiStatus('');
+  const label = $ai('s-ai-provider').selectedOptions[0]?.textContent || p;
+  $ai('s-ai-note').textContent = p === 'ollama' ? t('set.aiNoteLocal') : t('set.aiNoteCloud', { provider: label });
+}
+
+function setAiStatus(msg, kind = '') {
+  const el = $ai('s-ai-status');
+  el.textContent = msg;
+  el.classList.toggle('ok', kind === 'ok');
+  el.classList.toggle('error', kind === 'error');
+}
+
+function aiFields() {
+  stashAiFields();
+  return { provider: ai.provider, model: ai.models[ai.provider] || '', baseUrl: ai.urls[ai.provider] || '', apiKey: ai.keys[ai.provider] || '' };
+}
+
+function collectAiSettings() {
+  stashAiFields();
+  return { provider: ai.provider, model: ai.models[ai.provider] || '', base_url: ai.urls[ai.provider] || '', keys: ai.keys };
+}
+
+async function loadAiModels(quiet = false) {
+  const f = aiFields();
+  if (!quiet) setAiStatus(t('set.aiTesting'));
+  try {
+    const models = await cmd('ai_list_models', { provider: f.provider, baseUrl: f.baseUrl, apiKey: f.apiKey });
+    $ai('s-ai-models').innerHTML = models.map(m => `<option value="${esc(m)}"></option>`).join('');
+    if (!$ai('s-ai-model').value && models.length) $ai('s-ai-model').value = models[0];
+    setAiStatus(models.length ? t('set.aiModelsLoaded', { n: models.length }) : t('set.aiNoModels'), models.length ? 'ok' : 'error');
+  } catch (e) {
+    if (!quiet) setAiStatus(String(e), 'error');
+  }
+}
+
+function setupAiSettings() {
+  $ai('s-ai-provider').addEventListener('change', () => {
+    stashAiFields();
+    ai.provider = $ai('s-ai-provider').value;
+    showAiProvider();
+    // Ollama needs no key: list the installed models straight away.
+    if (ai.provider === 'ollama') loadAiModels(true);
+  });
+  $ai('s-ai-load').addEventListener('click', () => loadAiModels());
+  $ai('s-ai-test').addEventListener('click', async () => {
+    const f = aiFields();
+    setAiStatus(t('set.aiTesting'));
+    $ai('s-ai-test').disabled = true;
+    try {
+      const [answer, ms] = await cmd('ai_test', { provider: f.provider, model: f.model, baseUrl: f.baseUrl, apiKey: f.apiKey });
+      setAiStatus(t('set.aiTestOk', { answer, seconds: fmtNumber(Math.round(ms / 100) / 10) }), 'ok');
+    } catch (e) {
+      setAiStatus(String(e), 'error');
+    } finally {
+      $ai('s-ai-test').disabled = false;
+    }
+  });
 }
 
 // ── Settings → Cloud (Supabase) ──
@@ -2152,7 +2358,7 @@ function emailRow(email) {
   row.innerHTML = `
     <div class="email-row-top">
       <span class="email-from">${toggle}${dot}${esc(email.from_name)}</span>
-      <span class="email-date">${esc(email.date_str)}</span>
+      <span class="email-date">${esc(emailDateShort(email))}</span>
     </div>
     <div class="email-subject">${esc(email.subject)}</div>
     <div class="email-summary">${esc(email.summary)}</div>
