@@ -2212,10 +2212,8 @@ function addPasswordToggles(root) {
 
 function setupSettings() {
   addPasswordToggles(document.getElementById('settings-overlay'));
+  // Only the × closes Settings: a click beside the window must not lose what was typed.
   document.getElementById('settings-close').addEventListener('click', closeSettings);
-  document.getElementById('settings-overlay').addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeSettings();
-  });
 
   document.querySelectorAll('.tab').forEach(t => {
     t.addEventListener('click', () => switchSettingsTab(t.dataset.tab));
