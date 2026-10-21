@@ -4,9 +4,115 @@
 
 # Le courriel
 
-An AI-assisted desktop email client built with [Tauri 2](https://tauri.app/) (Rust backend, HTML/JS UI).
-It connects to any IMAP/SMTP mailbox and uses AI to triage your inbox — **Claude, OpenAI, Mistral,
-a local Ollama model, or any OpenAI-compatible API**, your choice.
+**An AI-boosted alternative to Thunderbird.** Free, open source, and it works with the mailbox you
+already have.
+
+We have never received so much information, and never had so little time to find what matters.
+Hundreds of emails a week: newsletters, notifications, threads that go on forever. Somewhere in there
+are the few messages that actually create value: the request from your client, the deadline your boss
+mentioned in passing, the meeting that moved to Thursday. Finding them is a job in itself.
+
+**Why not let an assistant do that job, and spend your time on what matters?**
+
+Le courriel puts an AI assistant between you and your inbox. **It reads every new email for you:**
+- it summarises it in one line and judges how urgent it is;
+- it files it into the right project;
+- it pulls out the tasks, deadlines and meetings hidden inside.
+
+It does the tedious work and hands you only what's worth your time.
+
+<p align="center"><img src="docs/screenshots/overview.png" alt="The Overview prepared by the AI: urgent emails, deadlines, tasks, meetings and the week ahead" width="900"></p>
+
+## Your day, prepared by AI
+
+Open the app and the triage is already done. The **Overview** answers four questions before you read
+a single email:
+
+- **Which emails really need me?** The AI reads each new email, ranks it (urgent, important, task,
+  information, or even a phishing threat) and sums it up in one line.
+- **What do I have to do?** The AI spots the requests buried in your messages and turns them into tasks.
+- **Which deadlines are coming?** The AI finds the dates and due dates in your mail and counts them down.
+- **Where is my next meeting?** The AI detects invitations and video-call links and gathers them in one place.
+
+The week ahead sits underneath, so nothing slips.
+
+## Tasks that manage themselves
+
+A to-do list only helps if someone keeps it up to date. Here, the AI does:
+
+- **It creates the tasks.** "Can you send me the figures by Thursday?" becomes a task, linked to the email it came from.
+- **It sorts them.** Every email and task is filed into the right project, based on the descriptions
+  you give your projects.
+- **It closes them.** The AI reads what you send. When your reply shows a task is handled, it moves
+  it to *Done*. When a later email makes it pointless, it marks it *obsolete*.
+
+No one has to maintain the board, not even you.
+
+<p align="center"><img src="docs/screenshots/tasks.png" alt="The task board, filled and updated by the AI" width="900"></p>
+
+## Your AI writing partner
+
+Write a rough draft and let the AI polish it. Or don't write at all:
+
+- **Rewrite** your text in a more formal tone.
+- **Correct** spelling and grammar in one click.
+- **Translate** your message.
+- **Draft the whole reply** from the email you're answering.
+
+The AI only touches what you wrote, never your signature or the quoted message. Choose which address
+sends it, and the matching signature follows.
+
+<p align="center"><img src="docs/screenshots/compose.png" alt="Replying to an email with the AI writing tools" width="900"></p>
+
+## Ask your inbox anything, and get an answer
+
+Most search boxes give you a list of results and leave the reading to you. Here you can ask a real
+question, the way you'd ask a colleague:
+
+- *"What did we decide about the budget?"*
+- *"Summarise this week's messages from Sara"*
+- *"Does Julien have any insights about AI?"*
+
+Press **Ctrl+K**. The AI reads the matching emails and **finds** the right ones, **summarises** them,
+**answers** your question, or **draws a conclusion** across a dozen different threads. It always shows
+which emails it used.
+
+<p align="center"><img src="docs/screenshots/search.png" alt="The AI answering a question across several emails" width="900"></p>
+
+## And everything you expect from a mail client
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/calendar.png" alt="Calendar with deadlines"><br><sub><b>Calendar</b>: every deadline the AI found in your mail, on its day.</sub></td>
+    <td width="50%"><img src="docs/screenshots/inbox.png" alt="Inbox with the reading pane"><br><sub><b>Inbox</b>: a coloured bar shows the importance the AI gave each email; a box shows read/unread.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/settings.png" alt="Account settings with the connection test"><br><sub><b>Your accounts</b>: any IMAP/SMTP mailbox, a one-click connection test, and a signature per account.</sub></td>
+    <td></td>
+  </tr>
+</table>
+
+## Make it yours
+
+*Don't forget to do some ricing.*
+
+The AI gave you your time back. Spend a little of it making your mail client look exactly the way
+you like.
+
+<p align="center"><img src="docs/screenshots/themes.gif" alt="The Overview in the six themes: Premium, Midnight, Modern, Brutalist, Frutiger Aero and Terminal" width="900"></p>
+
+- **Premium**: graphite grey and champagne gold, with a serif greeting.
+- **Midnight**: the classic dark theme with blue accents.
+- **Modern**: light, airy and rounded.
+- **Brutalist**: thick black borders, loud yellow, monospace, hard shadows.
+- **Frutiger Aero**: glossy bubbles and sky gradients, 2008 nostalgia included.
+- **Terminal**: green on black, for those who never left the shell.
+
+Switch in **Settings → General** with a live preview, adjust the text size, and pick one of
+13 languages, including right-to-left Arabic and Urdu.
+
+**Your AI, your choice.** Use Claude, OpenAI or Mistral. Or run a model on your own computer with
+Ollama, so your emails never leave it. See [Choose your AI](#choose-your-ai).
 
 ## Features
 
@@ -63,7 +169,7 @@ On first start the app opens **Settings → Accounts** so you can add your mailb
 - An **IMAP/SMTP** email account. Gmail needs an [App Password](https://myaccount.google.com/apppasswords).
 - For the AI features, either an API key (Claude, OpenAI, Mistral…) or [Ollama](https://ollama.com)
   running locally — see [Choose your AI](#choose-your-ai).
-- *Optional:* a **GIPHY API key** for the GIF picker: <https://developers.giphy.com/>
+- *Optional:* your own **GIPHY API key** for the GIF picker (a key is built in): <https://developers.giphy.com/>. GIFs are inserted as links to GIPHY, as its terms require, so they are not copied into the email.
 
 ### Setup
 

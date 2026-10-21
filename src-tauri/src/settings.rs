@@ -2,7 +2,7 @@ use anyhow::Result;
 use qrcode::QrCode;
 use qrcode::render::unicode;
 
-use crate::config::{AccountConfig, Config, ImapConfig, SmtpConfig, UserConfig, AI_PROVIDERS};
+use crate::config::{AccountConfig, Config, ImapConfig, SignatureConfig, SmtpConfig, UserConfig, AI_PROVIDERS};
 use crate::dto::{AccountDto, AiSettingsDto, SettingsDto};
 
 pub fn config_to_dto(cfg: &Config) -> SettingsDto {
@@ -18,7 +18,6 @@ pub fn config_to_dto(cfg: &Config) -> SettingsDto {
             keys: cfg.ai.keys.clone(),
         },
         giphy_key: cfg.gifs.giphy_api_key.clone(),
-        signature: cfg.signature.clone(),
         supabase_url: cfg.supabase.as_ref().map(|s| s.url.clone()).unwrap_or_default(),
         supabase_anon_key: cfg.supabase.as_ref().map(|s| s.anon_key.clone()).unwrap_or_default(),
         accounts: cfg.accounts.iter().map(|a| AccountDto {
@@ -34,16 +33,18 @@ pub fn config_to_dto(cfg: &Config) -> SettingsDto {
             smtp_user: a.smtp.username.clone(),
             smtp_pass: a.smtp.password.clone(),
             smtp_from: a.smtp.from_address.clone(),
+            signature_file: a.signature.file.clone(),
+            signature_on_new: a.signature.on_new,
+            signature_on_reply: a.signature.on_reply,
         }).collect(),
     }
 }
 
 pub fn save_config(
-    display_name: &str,
+    display_name: Option<&str>,
     accounts: &[AccountDto],
     ai: &AiSettingsDto,
     giphy_key: &str,
-    signature: Option<&crate::config::SignatureConfig>,
     font_scale: f32,
     theme: Option<&str>,
     language: Option<&str>,
@@ -51,7 +52,8 @@ pub fn save_config(
     let mut cfg = Config::load()?;
 
     cfg.user = UserConfig {
-        display_name: display_name.to_string(),
+        // Not in Settings any more: keep the stored name (it may come from config.toml or the cloud).
+        display_name: display_name.map(str::to_string).unwrap_or_else(|| cfg.user.display_name.clone()),
         font_scale,
         theme: theme.map(str::to_string).unwrap_or_else(|| cfg.user.theme.clone()),
         language: language
@@ -60,24 +62,7 @@ pub fn save_config(
             .unwrap_or_else(|| cfg.user.language.clone()),
     };
 
-    cfg.accounts = accounts.iter().map(|a| AccountConfig {
-        name: a.label.clone(),
-        imap: ImapConfig {
-            host: a.imap_host.clone(),
-            port: a.imap_port.parse().unwrap_or(993),
-            username: a.imap_user.clone(),
-            password: a.imap_pass.clone(),
-            mailbox: a.imap_mailbox.clone(),
-            fetch_count: a.imap_fetch.parse().unwrap_or(50),
-        },
-        smtp: SmtpConfig {
-            host: a.smtp_host.clone(),
-            port: a.smtp_port.parse().unwrap_or(587),
-            username: a.smtp_user.clone(),
-            password: a.smtp_pass.clone(),
-            from_address: a.smtp_from.clone(),
-        },
-    }).collect();
+    cfg.accounts = accounts.iter().map(account_from_dto).collect();
 
     if AI_PROVIDERS.contains(&ai.provider.as_str()) {
         cfg.ai.provider = ai.provider.clone();
@@ -89,11 +74,35 @@ pub fn save_config(
         .filter(|(p, k)| AI_PROVIDERS.contains(&p.as_str()) && !k.is_empty())
         .collect();
     cfg.gifs.giphy_api_key = giphy_key.trim().to_string();
-    if let Some(sig) = signature {
-        cfg.signature = sig.clone();
-    }
 
     crate::config::save_config(&cfg)
+}
+
+/// An account as typed in Settings. Blank ports and advanced options mean the defaults.
+pub fn account_from_dto(a: &AccountDto) -> AccountConfig {
+    AccountConfig {
+        name: a.label.clone(),
+        imap: ImapConfig {
+            host: a.imap_host.clone(),
+            port: a.imap_port.trim().parse().unwrap_or(993),
+            username: a.imap_user.clone(),
+            password: a.imap_pass.clone(),
+            mailbox: Some(a.imap_mailbox.trim()).filter(|m| !m.is_empty()).unwrap_or("INBOX").to_string(),
+            fetch_count: a.imap_fetch.trim().parse().unwrap_or(50),
+        },
+        smtp: SmtpConfig {
+            host: a.smtp_host.clone(),
+            port: a.smtp_port.trim().parse().unwrap_or(587),
+            username: a.smtp_user.clone(),
+            password: a.smtp_pass.clone(),
+            from_address: a.smtp_from.clone(),
+        },
+        signature: SignatureConfig {
+            file: a.signature_file.clone(),
+            on_new: a.signature_on_new,
+            on_reply: a.signature_on_reply,
+        },
+    }
 }
 
 pub fn generate_qr(cfg: &Config) -> String {

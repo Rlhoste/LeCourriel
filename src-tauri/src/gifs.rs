@@ -1,13 +1,9 @@
-//! GIF search for the composer, backed by the GIPHY API.
-//! Requests go through the backend so the API key never reaches the page,
-//! and picked GIFs are downloaded here and embedded as data URIs (sent later
-//! as inline cid: images by `smtp_sender`).
+//! GIF search for the composer, backed by the GIPHY API (Trending and Search).
+//! GIPHY's terms forbid copying or caching its media: a picked GIF is inserted in the
+//! email as a link to the media URL GIPHY returned, unchanged.
 
 use anyhow::{Context, Result};
-use base64::Engine;
 use serde::{Deserialize, Serialize};
-
-const MAX_GIF_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct GifDto {
@@ -59,6 +55,10 @@ pub fn parse_giphy(json: &str) -> Result<Vec<GifDto>> {
         .into_iter()
         .filter_map(|g| {
             let full = g.images.fixed_height?;
+            // The URL goes into an <img src>: only GIPHY's own https media hosts.
+            if !is_giphy_media_url(&full.url) {
+                return None;
+            }
             let preview = g
                 .images
                 .fixed_width_small
@@ -79,9 +79,6 @@ pub fn parse_giphy(json: &str) -> Result<Vec<GifDto>> {
 
 /// Search GIPHY; an empty query returns trending GIFs.
 pub async fn search(api_key: &str, query: &str) -> Result<Vec<GifDto>> {
-    if api_key.trim().is_empty() {
-        anyhow::bail!("Add a GIPHY API key in Settings → AI to search GIFs");
-    }
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .build()?;
@@ -106,7 +103,7 @@ pub async fn search(api_key: &str, query: &str) -> Result<Vec<GifDto>> {
     parse_giphy(&resp.text().await?)
 }
 
-/// Only GIPHY's media hosts may be downloaded through the backend.
+/// Whether a URL is on GIPHY's https media hosts.
 pub fn is_giphy_media_url(url: &str) -> bool {
     match reqwest::Url::parse(url) {
         Ok(u) => {
@@ -115,26 +112,4 @@ pub fn is_giphy_media_url(url: &str) -> bool {
         }
         Err(_) => false,
     }
-}
-
-/// Download a GIF and return it as a `data:image/gif;base64,…` URI.
-pub async fn fetch_as_data_uri(url: &str) -> Result<String> {
-    if !is_giphy_media_url(url) {
-        anyhow::bail!("Not a GIPHY media URL");
-    }
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()?;
-    let resp = client.get(url).send().await.context("Could not download the GIF")?;
-    if !resp.status().is_success() {
-        anyhow::bail!("GIF download failed ({})", resp.status());
-    }
-    let bytes = resp.bytes().await?;
-    if bytes.len() > MAX_GIF_BYTES {
-        anyhow::bail!("This GIF is too large to send (over 8 MB)");
-    }
-    Ok(format!(
-        "data:image/gif;base64,{}",
-        base64::engine::general_purpose::STANDARD.encode(&bytes)
-    ))
 }

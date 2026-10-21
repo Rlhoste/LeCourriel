@@ -1,5 +1,6 @@
-//! Email signature imported from an HTML file (exported from Outlook, Gmail, a
-//! signature generator…) and kept as `signature.html` in the data folder.
+//! Email signatures imported from an HTML file (exported from Outlook, Gmail, a
+//! signature generator…). Each account has its own, kept as `signature-<hex>.html` in
+//! the data folder and named in config.toml (`[accounts.signature] file = …`).
 //!
 //! On import the HTML is decoded (Outlook writes Windows-1252), reduced to its
 //! <body>, and local images are embedded as data: URIs, so the signature no longer
@@ -10,7 +11,10 @@ use anyhow::{bail, Context, Result};
 use base64::Engine;
 use std::path::{Path, PathBuf};
 
-const SIGNATURE_FILE: &str = "signature.html";
+use crate::config::{Config, SignatureConfig};
+
+/// The single signature file of older versions (see `migrate_legacy`).
+const LEGACY_FILE: &str = "signature.html";
 const MAX_HTML_BYTES: u64 = 2 * 1024 * 1024;
 pub const MAX_IMAGE_BYTES: u64 = 2 * 1024 * 1024;
 
@@ -131,8 +135,37 @@ pub fn embed_local_images(html: &str, base_dir: &Path, max_bytes: u64) -> String
     out
 }
 
-/// Import a signature file and store it. Returns the stored HTML.
-pub fn import(path: &Path) -> Result<String> {
+/// The data folder, where signature files live next to config.toml.
+pub fn data_dir() -> PathBuf {
+    crate::paths::file(".")
+}
+
+/// Whether `name` is one of our signature files ("signature-<hex>.html"): nothing else
+/// (no path, no other file) can be read or deleted through a signature name.
+pub fn is_signature_file(name: &str) -> bool {
+    name.strip_prefix("signature-")
+        .and_then(|rest| rest.strip_suffix(".html"))
+        .is_some_and(|hex| !hex.is_empty() && hex.chars().all(|c| c.is_ascii_hexdigit()))
+}
+
+/// A file name not used yet in `dir`.
+fn new_file_name(dir: &Path) -> String {
+    let mut n = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    loop {
+        let name = format!("signature-{:x}.html", n);
+        if !dir.join(&name).exists() {
+            return name;
+        }
+        n += 1;
+    }
+}
+
+/// Import a signature file into `dir` under a new name. Returns (file name, HTML).
+/// The file only becomes an account's signature once Settings are saved.
+pub fn import(path: &Path, dir: &Path) -> Result<(String, String)> {
     let meta = std::fs::metadata(path).with_context(|| format!("Cannot read {}", path.display()))?;
     if meta.len() > MAX_HTML_BYTES {
         bail!("This file is too large for a signature (over 2 MB)");
@@ -144,19 +177,47 @@ pub fn import(path: &Path) -> Result<String> {
     }
     let base_dir = path.parent().unwrap_or_else(|| Path::new("."));
     let html = embed_local_images(&html, base_dir, MAX_IMAGE_BYTES);
-    std::fs::write(crate::paths::file(SIGNATURE_FILE), &html).context("Could not save the signature")?;
-    Ok(html)
+    let name = new_file_name(dir);
+    std::fs::write(dir.join(&name), &html).context("Could not save the signature")?;
+    Ok((name, html))
 }
 
-/// The stored signature ("" when there is none).
-pub fn load() -> String {
-    std::fs::read_to_string(crate::paths::file(SIGNATURE_FILE)).unwrap_or_default()
-}
-
-pub fn remove() -> Result<()> {
-    match std::fs::remove_file(crate::paths::file(SIGNATURE_FILE)) {
-        Ok(()) => Ok(()),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(e).context("Could not remove the signature"),
+/// A stored signature ("" when there is none or the name is not a signature file).
+pub fn load(dir: &Path, name: &str) -> String {
+    if !is_signature_file(name) {
+        return String::new();
     }
+    std::fs::read_to_string(dir.join(name)).unwrap_or_default()
+}
+
+/// Delete the signature files no account uses any more (removed, replaced, or imported
+/// and then cancelled). Returns how many were deleted.
+pub fn remove_unused(dir: &Path, cfg: &Config) -> usize {
+    let used: Vec<&str> = cfg.accounts.iter().map(|a| a.signature.file.as_str()).collect();
+    let Ok(entries) = std::fs::read_dir(dir) else { return 0 };
+    entries
+        .flatten()
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|name| is_signature_file(name) && !used.contains(&name.as_str()))
+        .filter(|name| std::fs::remove_file(dir.join(name)).is_ok())
+        .count()
+}
+
+/// Signatures used to be one `signature.html` with a global `[signature]` block. Give it
+/// to the first account (under a new name) when no account has a signature yet.
+/// Returns true when `cfg` changed and should be saved.
+pub fn migrate_legacy(dir: &Path, cfg: &mut Config) -> bool {
+    let legacy = dir.join(LEGACY_FILE);
+    if !legacy.is_file() {
+        return false;
+    }
+    if cfg.accounts.is_empty() || cfg.accounts.iter().any(|a| !a.signature.file.is_empty()) {
+        return false;
+    }
+    let name = new_file_name(dir);
+    if std::fs::rename(&legacy, dir.join(&name)).is_err() {
+        return false;
+    }
+    cfg.accounts[0].signature = SignatureConfig { file: name, ..cfg.signature.clone() };
+    true
 }

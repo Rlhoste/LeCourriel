@@ -15,6 +15,7 @@ pub enum Folder {
     Sent,
     Drafts,
     Trash,
+    Spam,
     /// Found on the IMAP server (older than the cached emails).
     Server,
 }
@@ -26,6 +27,7 @@ impl Folder {
             Folder::Sent => "sent",
             Folder::Drafts => "drafts",
             Folder::Trash => "trash",
+            Folder::Spam => "spam",
             Folder::Server => "server",
         }
     }
@@ -37,6 +39,7 @@ impl Folder {
             "sent" | "envoyes" | "envoye" => Some(Folder::Sent),
             "drafts" | "draft" | "brouillons" | "brouillon" => Some(Folder::Drafts),
             "trash" | "corbeille" => Some(Folder::Trash),
+            "spam" | "junk" | "indesirables" | "indesirable" => Some(Folder::Spam),
             "server" | "serveur" => Some(Folder::Server),
             _ => None,
         }

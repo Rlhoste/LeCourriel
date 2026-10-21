@@ -114,7 +114,7 @@ pub async fn send_message(cfg: &SmtpConfig, mail: &OutgoingMail) -> Result<Vec<u
     let from_mailbox: Mailbox = cfg
         .from_address
         .parse()
-        .context("Invalid from_address in config")?;
+        .with_context(|| format!("Invalid sender address \"{}\": write it as Name <you@example.com> in Settings → Accounts", cfg.from_address))?;
 
     let to = parse_list(&mail.to, "To")?;
     let cc = parse_list(&mail.cc, "Cc")?;

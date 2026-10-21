@@ -143,6 +143,7 @@ api_key = "k" model = "m" max_tokens = 100
             smtp_user: "me@test.com".to_string(),
             smtp_pass: "pass".to_string(),
             smtp_from: "me@test.com".to_string(),
+            ..Default::default()
         }];
 
         // Validate parse logic used inside save_config
@@ -276,6 +277,7 @@ api_key = "k" model = "m" max_tokens = 100
                     username: "u".to_string(), password: "p".to_string(),
                     from_address: "u@example.com".to_string(),
                 },
+                signature: SignatureConfig::default(),
             }],
             claude: ClaudeConfig {
                 api_key: "sk-test".to_string(),
@@ -659,6 +661,7 @@ max_tokens = 10
                 password: "IMAP-SECRET".into(), mailbox: "INBOX".into(), fetch_count: 50 },
             smtp: SmtpConfig { host: "smtp.example.com".into(), port: 465, username: "remi".into(),
                 password: "SMTP-SECRET".into(), from_address: "Remi <remi@example.com>".into() },
+            signature: SignatureConfig::default(),
         }];
         cfg.ai.keys.insert("anthropic".into(), "CLAUDE-SECRET".into());
         cfg.ai.keys.insert("openai".into(), "OPENAI-SECRET".into());
@@ -1328,7 +1331,7 @@ max_tokens = 10
 
     #[test]
     fn test_signature_outlook_import() {
-        use crate::signature::{embed_local_images, import, load, remove};
+        use crate::signature::{embed_local_images, import, load};
         let dir = std::env::temp_dir().join(format!("courriel-sig-{}", std::process::id()));
         let files = dir.join("Sig_files");
         std::fs::create_dir_all(&files).unwrap();
@@ -1347,8 +1350,10 @@ max_tokens = 10
         let sig_path = dir.join("Sig.htm");
         std::fs::write(&sig_path, &html).unwrap();
 
-        let _ = remove();
-        let out = import(&sig_path).unwrap();
+        let store = dir.join("data");
+        std::fs::create_dir_all(&store).unwrap();
+        let (file, out) = import(&sig_path, &store).unwrap();
+        assert!(crate::signature::is_signature_file(&file), "{}", file);
         assert!(out.starts_with("<p>Rémi Lhoste<br>Doctorant</p>"), "{}", out);
         assert_eq!(out.matches("data:image/png;base64,").count(), 2, "relative and file:// images embedded");
         assert!(out.contains("https://example.com/logo.png"), "remote image kept");
@@ -1356,9 +1361,9 @@ max_tokens = 10
         assert!(out.contains("\"logo.svg\""), "svg not embedded");
         assert!(out.contains("\"missing.png\""), "missing file left as is");
         assert!(!out.contains("<html") && !out.contains("Generator"));
-        assert_eq!(load(), out, "stored as signature.html");
-        remove().unwrap();
-        assert_eq!(load(), "");
+        assert_eq!(load(&store, &file), out, "stored under its new name");
+        let (file2, _) = import(&sig_path, &store).unwrap();
+        assert_ne!(file, file2, "each import gets its own file");
 
         // Quote styles and an unquoted src are handled without breaking the HTML.
         let mixed = embed_local_images("<img src=Sig_files/image001.png><img src=\"Sig_files/image001.png\">", &dir, 1024);
@@ -1367,4 +1372,165 @@ max_tokens = 10
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+
+    #[test]
+    fn test_smtp_blank_fields_use_incoming_settings() {
+        let imap = ImapConfig { host: "imap.x.fr".into(), port: 993, username: "remi@x.fr".into(),
+                                password: "secret".into(), mailbox: "INBOX".into(), fetch_count: 50 };
+        let blank = SmtpConfig { host: "smtp.x.fr".into(), port: 587, username: "".into(), password: "".into(), from_address: "".into() };
+        let acc = AccountConfig { name: "Work".into(), imap, smtp: blank, signature: SignatureConfig::default() };
+        let s = acc.smtp_for_sending("Remi Lhoste");
+        assert_eq!((s.username.as_str(), s.password.as_str()), ("remi@x.fr", "secret"));
+        assert_eq!(s.from_address, "\"Remi Lhoste\" <remi@x.fr>");
+        assert!(s.from_address.parse::<lettre::message::Mailbox>().is_ok());
+        assert_eq!(acc.smtp_for_sending("").from_address, "remi@x.fr");
+
+        // Filled fields are kept as they are.
+        let mut filled = acc.clone();
+        filled.smtp.username = "relay".into();
+        filled.smtp.password = "p2".into();
+        filled.smtp.from_address = "Boss <boss@x.fr>".into();
+        let s = filled.smtp_for_sending("Remi");
+        assert_eq!((s.username.as_str(), s.password.as_str(), s.from_address.as_str()), ("relay", "p2", "Boss <boss@x.fr>"));
+        // A non-email login gives no automatic sender (the send error then asks for one).
+        filled.smtp.username = "relay".into();
+        filled.smtp.from_address = "".into();
+        assert_eq!(filled.smtp_for_sending("Remi").from_address, "");
+    }
+
+    #[test]
+    fn test_blank_advanced_options_mean_defaults() {
+        let dto = AccountDto { label: "W".into(), imap_host: "h".into(), imap_port: " ".into(), imap_mailbox: "".into(),
+                               imap_fetch: "".into(), smtp_port: "".into(), ..Default::default() };
+        let acc = crate::settings::account_from_dto(&dto);
+        assert_eq!((acc.imap.port, acc.imap.mailbox.as_str(), acc.imap.fetch_count, acc.smtp.port), (993, "INBOX", 50, 587));
+        let dto = AccountDto { imap_port: "143".into(), imap_mailbox: "Archive".into(), imap_fetch: "200".into(), ..dto };
+        let acc = crate::settings::account_from_dto(&dto);
+        assert_eq!((acc.imap.port, acc.imap.mailbox.as_str(), acc.imap.fetch_count), (143, "Archive", 200));
+    }
+
+    #[test]
+    fn test_user_name_comes_from_the_sender() {
+        let mut cfg: Config = toml::from_str("").unwrap();
+        assert_eq!(cfg.user_name(), "");
+        let dto = AccountDto { smtp_from: "\"Remi Lhoste\" <remi@x.fr>".into(), ..Default::default() };
+        cfg.accounts.push(crate::settings::account_from_dto(&dto));
+        assert_eq!(cfg.user_name(), "Remi Lhoste");
+        cfg.accounts[0].smtp.from_address = "remi@x.fr".into();
+        assert_eq!(cfg.user_name(), "");
+        cfg.user.display_name = "Remi".into();   // set earlier, or synced from the cloud
+        assert_eq!(cfg.user_name(), "Remi");
+    }
+
+    /// Settings → Test against the real account in config.toml, then with wrong values.
+    /// Run with: cargo test test_account_check_live -- --ignored --nocapture
+    #[tokio::test]
+    #[ignore]
+    async fn test_account_check_live() {
+        let cfg: Config = toml::from_str(&std::fs::read_to_string("../config.toml").unwrap()).unwrap();
+        let acc = cfg.accounts.first().expect("an account in config.toml").clone();
+        let imap = crate::imap_client::check_connection(&acc.imap).await;
+        println!("IMAP: {:?}", imap.as_ref().map_err(|e| format!("{:#}", e)));
+        let smtp = crate::smtp_sender::check_connection(&acc.smtp_for_sending("")).await;
+        println!("SMTP: {:?}", smtp.as_ref().map_err(|e| format!("{:#}", e)));
+        assert!(imap.is_ok(), "the account's incoming server should accept its login");
+
+        let mut bad = acc.clone();
+        bad.imap.password = "wrong-password".into();
+        bad.smtp.password = "wrong-password".into();
+        let e = crate::imap_client::check_connection(&bad.imap).await.unwrap_err();
+        println!("IMAP wrong password: {:#}", e);
+        let e = crate::smtp_sender::check_connection(&bad.smtp).await.unwrap_err();
+        println!("SMTP wrong password: {:#}", e);
+        bad.imap.host = "no-such-host.invalid".into();
+        println!("IMAP bad host: {:#}", crate::imap_client::check_connection(&bad.imap).await.unwrap_err());
+        let mut folder = acc.clone();
+        folder.imap.mailbox = "NoSuchFolder".into();
+        println!("IMAP bad folder: {:#}", crate::imap_client::check_connection(&folder.imap).await.unwrap_err());
+    }
+
+    #[test]
+    fn test_connection_errors_are_classified() {
+        use crate::dto::ConnError;
+        let err = |s: &str| ConnError::from_error(&anyhow::anyhow!(s.to_string()));
+        let smtp = err("SMTP connection/auth failed: permanent error (535): 5.7.8 Error: authentication failed: : 5.7.8 Error: authentication failed: ");
+        assert_eq!(smtp.kind, "auth");
+        assert_eq!(smtp.detail, "SMTP connection/auth failed: permanent error (535): 5.7.8 Error: authentication failed");
+        assert_eq!(err("IMAP login failed: no response: [AUTHENTICATIONFAILED] Authentication failed.").kind, "auth");
+        assert_eq!(err("TCP connection to IMAP server failed: failed to lookup address information: Name or service not known").kind, "host");
+        assert_eq!(err("Folder \"Nope\" not found: Mailbox doesn't exist: Nope").kind, "folder");
+        let reset = err("SMTP connection/auth failed: Connection error: Connection error: Connection reset by peer (os error 104): Connection reset by peer (os error 104)");
+        assert_eq!(reset.kind, "reset");
+        assert_eq!(err("TCP connection to IMAP server failed: Connection refused (os error 111)").kind, "refused");
+        assert_eq!(reset.detail, "SMTP connection/auth failed: Connection error: Connection reset by peer (os error 104)");
+        assert_eq!(err("TLS handshake with IMAP server failed").kind, "tls");
+        assert_eq!(err("something odd").kind, "other");
+        assert_eq!(ConnError::timeout().kind, "timeout");
+    }
+
+    #[test]
+    fn test_signature_file_names_are_checked() {
+        use crate::signature::{is_signature_file, load};
+        assert!(is_signature_file("signature-18f3a2b.html"));
+        for bad in ["signature.html", "signature-.html", "signature-xyz.html", "../signature-1.html",
+                    "signature-1.html/../config.toml", "config.toml", "signature-1.htm", ""] {
+            assert!(!is_signature_file(bad), "{}", bad);
+        }
+        let dir = std::env::temp_dir().join(format!("courriel-signame-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("config.toml"), "secret").unwrap();
+        assert_eq!(load(&dir, "config.toml"), "", "only signature files can be read");
+        assert_eq!(load(&dir, "signature-1.html"), "", "a missing file is no signature");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_signature_per_account_migration_and_cleanup() {
+        use crate::signature::{load, migrate_legacy, remove_unused};
+        let dir = std::env::temp_dir().join(format!("courriel-sigmig-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut cfg = make_test_config();
+        cfg.accounts.push(cfg.accounts[0].clone());
+        cfg.signature = SignatureConfig { file: String::new(), on_new: false, on_reply: true };
+
+        assert!(!migrate_legacy(&dir, &mut cfg), "no legacy file: nothing to do");
+        std::fs::write(dir.join("signature.html"), "<b>Remi</b>").unwrap();
+        assert!(migrate_legacy(&dir, &mut cfg));
+        let file = cfg.accounts[0].signature.file.clone();
+        assert_eq!(load(&dir, &file), "<b>Remi</b>");
+        assert!(!dir.join("signature.html").exists());
+        assert_eq!((cfg.accounts[0].signature.on_new, cfg.accounts[0].signature.on_reply), (false, true), "legacy options kept");
+        assert_eq!(cfg.accounts[1].signature.file, "", "only the first account gets it");
+        std::fs::write(dir.join("signature.html"), "again").unwrap();
+        assert!(!migrate_legacy(&dir, &mut cfg), "never twice once an account has a signature");
+
+        // The per-account signature survives a save; the legacy block is not written back.
+        let text = toml::to_string_pretty(&cfg).unwrap();
+        let back: Config = toml::from_str(&text).unwrap();
+        assert_eq!(back.accounts[0].signature, cfg.accounts[0].signature);
+        assert!(!text.contains("\n[signature]"), "{}", text);
+        // Settings round-trip.
+        let dto = &crate::settings::config_to_dto(&back).accounts[0];
+        assert_eq!((dto.signature_file.as_str(), dto.signature_on_new), (file.as_str(), false));
+        assert_eq!(crate::settings::account_from_dto(dto).signature, cfg.accounts[0].signature);
+
+        // Unused signature files are deleted, used ones and other files kept.
+        std::fs::write(dir.join("signature-abc.html"), "old").unwrap();
+        assert_eq!(remove_unused(&dir, &cfg), 1);
+        assert!(!dir.join("signature-abc.html").exists());
+        assert!(dir.join(&file).exists());
+        assert!(dir.join("signature.html").exists(), "not a per-account file: left alone");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_giphy_key_defaults_to_built_in() {
+        let mut gifs = GifConfig::default();
+        assert_eq!(gifs.key(), DEFAULT_GIPHY_KEY);
+        gifs.giphy_api_key = "  ".into();
+        assert_eq!(gifs.key(), DEFAULT_GIPHY_KEY, "blank means built-in");
+        gifs.giphy_api_key = " mine ".into();
+        assert_eq!(gifs.key(), "mine");
+    }
 }

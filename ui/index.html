@@ -6,7 +6,7 @@
   <title>Le courriel</title>
   <script>
     // Apply the last theme before the first paint (config.toml is applied again by app.js).
-    try { document.documentElement.dataset.theme = localStorage.getItem('theme') || 'brutalist'; } catch (_) {}
+    try { const th = localStorage.getItem('theme'); document.documentElement.dataset.theme = th === 'white' ? 'premium' : th || 'brutalist'; } catch (_) {}
   </script>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -31,6 +31,7 @@
 
     <button class="nav-btn" data-panel="sent" data-i18n="nav.sent">Sent</button>
     <button class="nav-btn" data-panel="drafts" data-i18n="nav.drafts">Drafts</button>
+    <button class="nav-btn" data-panel="spam" data-i18n="nav.spam">Spam</button>
     <button class="nav-btn" data-panel="trash" data-i18n="nav.trash">Trash</button>
 
     <div class="nav-spacer"></div>
@@ -119,6 +120,7 @@
     <section id="panel-meetings"  class="panel split-panel"></section>
     <section id="panel-sent"      class="panel split-panel"></section>
     <section id="panel-drafts"    class="panel split-panel"></section>
+    <section id="panel-spam"      class="panel split-panel"></section>
     <section id="panel-trash"     class="panel split-panel"></section>
 
     <!-- ── Calendar ────────────────────────────────────────────────────────── -->
@@ -184,6 +186,10 @@
     </div>
   </div>
   <div class="composer-main">
+    <div class="composer-field hidden" id="compose-from-row">
+      <label for="compose-from" data-i18n="cmp.from">From</label>
+      <select id="compose-from"></select>
+    </div>
     <div class="composer-field">
       <label for="compose-to" data-i18n="cmp.to">To</label>
       <input type="text" id="compose-to" autocomplete="off" />
@@ -262,7 +268,10 @@
           <div class="tb-gif-grid" id="tb-gif-grid"></div>
           <div class="tb-gif-footer">
             <span id="tb-gif-status"></span>
-            <span class="tb-gif-attrib">Powered by GIPHY</span>
+            <!-- GIPHY's official attribution marks (giphy-attribution-marks.zip): the badge on light
+                 paper, the white-text mark on dark paper (Terminal). -->
+            <img class="tb-gif-attrib giphy-mark-light" src="giphy-attribution-light.png" alt="Powered by GIPHY" />
+            <img class="tb-gif-attrib giphy-mark-dark" src="giphy-attribution-dark.png" alt="Powered by GIPHY" />
           </div>
         </div>
       </div>
@@ -351,8 +360,6 @@
 
     <!-- General -->
     <div class="tab-content active" id="tab-general">
-      <label data-i18n="set.displayName">Display Name</label>
-      <input type="text" id="s-display-name" />
       <label data-i18n="set.fontScale">Font Scale</label>
       <input type="range" id="s-font-scale" min="0.7" max="1.8" step="0.05" />
       <span id="s-font-scale-val">1.0×</span>
@@ -366,19 +373,6 @@
     <div class="tab-content" id="tab-accounts">
       <div id="s-accounts-container"></div>
       <button id="s-add-account" class="secondary-btn" data-i18n="set.addAccount">+ Add Account</button>
-
-      <div class="signature-section">
-        <label data-i18n="set.signature">Signature</label>
-        <iframe id="s-sig-preview" class="sig-preview" sandbox="" title="Signature"></iframe>
-        <p id="s-sig-hint" class="settings-note" data-i18n="set.sigHint">No signature yet. Export it from your mail client (Outlook, Gmail…) as an HTML file, or create one with any signature generator.</p>
-        <div class="db-test-row">
-          <button id="s-sig-choose" class="secondary-btn" data-i18n="set.sigChoose">📄 Choose an HTML file…</button>
-          <button id="s-sig-remove" class="secondary-btn" data-i18n="set.sigRemove">Remove</button>
-          <span id="s-sig-status" class="db-status"></span>
-        </div>
-        <label class="checkbox-label"><input type="checkbox" id="s-sig-on-new" /> <span data-i18n="set.sigOnNew">Add to new messages</span></label>
-        <label class="checkbox-label"><input type="checkbox" id="s-sig-on-reply" /> <span data-i18n="set.sigOnReply">Add to replies and forwards</span></label>
-      </div>
     </div>
 
     <!-- AI -->
@@ -411,7 +405,7 @@
       </div>
       <p class="settings-note" id="s-ai-note"></p>
       <label><span data-i18n="set.giphyKey">GIPHY API Key</span> <span style="opacity:.7" data-i18n="set.giphyHint">(for the GIF picker — free at developers.giphy.com)</span></label>
-      <input type="password" id="s-giphy-key" />
+      <input type="password" id="s-giphy-key" data-i18n-placeholder="set.giphyDefaultPh" placeholder="Built-in key (leave blank to use it)" />
       <div style="margin-top:16px">
         <button id="s-show-qr" class="secondary-btn" data-i18n="set.showQr">Show QR Code</button>
         <pre id="s-qr-output" style="font-size:0.6rem;display:none"></pre>

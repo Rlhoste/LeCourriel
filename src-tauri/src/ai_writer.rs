@@ -63,7 +63,7 @@ pub fn strip_fences(text: &str) -> String {
 }
 
 pub async fn run(cfg: &Config, action: &str, html: &str, original: Option<Original>) -> Result<String> {
-    let system = system_prompt(action, &cfg.user.display_name)
+    let system = system_prompt(action, &cfg.user_name())
         .ok_or_else(|| anyhow::anyhow!("Unknown AI action: {}", action))?;
 
     let user_content = if action == "auto_reply" {
@@ -72,7 +72,7 @@ pub async fn run(cfg: &Config, action: &str, html: &str, original: Option<Origin
         let notes = if html.trim().is_empty() { "(none)".to_string() } else { html.to_string() };
         format!(
             "ORIGINAL EMAIL\nFrom: {}\nDate: {}\nSubject: {}\n\n{}\n\nDRAFT NOTES FROM {} (HTML):\n{}",
-            o.from, o.date, o.subject, body, cfg.user.display_name, notes
+            o.from, o.date, o.subject, body, cfg.user_name(), notes
         )
     } else {
         if html.trim().is_empty() {

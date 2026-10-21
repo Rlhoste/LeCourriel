@@ -52,8 +52,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.documentElement.style.fontSize = `${fontScale * 14}px`;
     applyTheme(s.theme);
     if (s.language && s.language !== LANG) applyLanguage(s.language);
-    sig.opts = s.signature || sig.opts;
-    sig.html = await invoke('signature_get');
+    await loadComposeAccounts();
     // First start (or no account yet): open Settings on Accounts, with an empty account to fill in.
     if (!s.accounts || !s.accounts.length) {
       document.getElementById('ov-briefing').textContent = t('ov.noAccount');
@@ -110,6 +109,7 @@ const SPLIT_PANELS = {
   meetings:  { title: 'Meetings',  key: 'meeting_items' },
   sent:      { title: 'Sent',      key: 'sent_emails' },
   drafts:    { title: 'Drafts',    key: 'drafts_emails' },
+  spam:      { title: 'Spam',      key: 'spam_emails' },
   trash:     { title: 'Trash',     key: 'trash_emails' },
 };
 
@@ -293,7 +293,7 @@ function removeFromState(uid, kind) {
   else if (kind === 'deadline') drop('deadlines');
   else {
     // Sent/Drafts/Trash have their own UID numbering, so leave them alone.
-    const skip = ['week_days', 'projects', 'sent_emails', 'drafts_emails', 'trash_emails'];
+    const skip = ['week_days', 'projects', 'sent_emails', 'drafts_emails', 'trash_emails', 'spam_emails'];
     for (const [key, val] of Object.entries(appState)) {
       if (Array.isArray(val) && !skip.includes(key)) drop(key);
     }
@@ -399,13 +399,13 @@ function showEmail(section, email) {
 }
 
 // Mark an inbox email read: locally right away, on the server in the background.
-const NON_INBOX_PANELS = '#panel-sent, #panel-drafts, #panel-trash';
+const NON_INBOX_PANELS = '#panel-sent, #panel-drafts, #panel-trash, #panel-spam';
 function setRead(email, read) {
   if (email.is_read === read || !appState || panelForEmail(email) !== 'inbox') return;
   const uid = email.uid;
   email.is_read = read;
   // The same email appears in several lists (all_emails, urgent_emails, …).
-  const skip = ['sent_emails', 'drafts_emails', 'trash_emails'];
+  const skip = ['sent_emails', 'drafts_emails', 'trash_emails', 'spam_emails'];
   for (const [key, val] of Object.entries(appState)) {
     if (!Array.isArray(val) || skip.includes(key)) continue;
     for (const e of val) if (e.uid === uid && 'is_read' in e) e.is_read = read;
@@ -413,7 +413,7 @@ function setRead(email, read) {
   document.querySelectorAll(`.email-row[data-uid="${uid}"]`).forEach(row => {
     if (row.closest(NON_INBOX_PANELS)) return;
     row.classList.toggle('unread', !read);
-    row.querySelector('.row-read-toggle')?.setAttribute('title', readToggleTitle(read));
+    row.querySelector('button.row-mark')?.setAttribute('title', readToggleTitle(read));
   });
   renderOverview();
   cmd('set_read', { uid, read }).catch(() => {});   // cmd() already logs the error
@@ -421,12 +421,14 @@ function setRead(email, read) {
 
 // ── Reading-pane actions ───────────────────────────────────────────────────
 // Reply · Forward · Spam · Delete · Project ▾ · ⋯ (Mark as unread, Save as…, Print)
-// Spam, Delete, Project and Mark as unread only apply to inbox emails.
+// Spam, Delete, Project and Mark as unread only apply to inbox emails; Not spam to the Spam folder.
 function renderActions(bar, email, onGone) {
-  const inInbox = panelForEmail(email) === 'inbox';
+  const folder = panelForEmail(email);
+  const inInbox = folder === 'inbox';
   bar.innerHTML = `
     <button class="rp-btn" data-act="reply">${t('rp.reply')}</button>
     <button class="rp-btn" data-act="forward">${t('rp.forward')}</button>
+    ${folder === 'spam' ? `<button class="rp-btn" data-act="notSpam">${t('rp.notSpam')}</button>` : ''}
     ${inInbox ? `
       <button class="rp-btn danger" data-act="spam">${t('rp.spam')}</button>
       <button class="rp-btn danger" data-act="delete">${t('rp.delete')}</button>
@@ -472,6 +474,18 @@ function renderActions(bar, email, onGone) {
     reply: () => openCompose({ mode: 'reply', email }),
     forward: () => openCompose({ mode: 'forward', email }),
     spam: () => moveAway('spam_email', 'Moved to spam'),
+    notSpam: async () => {
+      try {
+        await cmd('not_spam_email', { uid: email.uid });
+        // Only the spam entry goes: the same UID may be another email in the inbox.
+        appState.spam_emails = appState.spam_emails.filter(e => e !== email);
+        onGone();
+        showToast(t('rp.movedToInbox'));
+        cmd('refresh_emails').catch(() => {});   // bring it into the inbox now
+      } catch (e) {
+        flash(String(e), true);
+      }
+    },
     delete: () => moveAway('trash_email', 'Moved to trash'),
     more: () => menu.classList.toggle('hidden'),
     unread: () => { setRead(email, false); flash(t('rp.markedUnread')); },
@@ -504,7 +518,7 @@ document.addEventListener('keydown', e => {
 });
 
 function retagInState(uid, project) {
-  const skip = ['sent_emails', 'drafts_emails', 'trash_emails', 'tasks'];
+  const skip = ['sent_emails', 'drafts_emails', 'trash_emails', 'spam_emails', 'tasks'];
   for (const [key, val] of Object.entries(appState)) {
     if (!Array.isArray(val) || skip.includes(key)) continue;
     for (const e of val) if (e.uid === uid && 'project' in e) e.project = project;
@@ -625,7 +639,7 @@ function wrapHtml(raw) {
 function switchToEmail(uid) {
   if (!appState) return;
   const email = appState.all_emails.find(e => e.uid === uid)
-    || [...appState.sent_emails, ...appState.drafts_emails, ...appState.trash_emails].find(e => e.uid === uid);
+    || [...appState.sent_emails, ...appState.drafts_emails, ...appState.trash_emails, ...appState.spam_emails].find(e => e.uid === uid);
   if (!email) return;
 
   // Pick best panel
@@ -649,11 +663,16 @@ function openEmailIn(panel, uid) {
   }, 0);
 }
 
+// Each folder numbers its UIDs separately, so the same UID can exist in two folders:
+// look for the email object itself first, and only then compare UIDs.
+const OTHER_FOLDERS = [['sent', 'sent_emails'], ['drafts', 'drafts_emails'], ['trash', 'trash_emails'], ['spam', 'spam_emails']];
 function panelForEmail(email) {
-  if (appState.sent_emails.some(e => e.uid === email.uid))   return 'sent';
-  if (appState.drafts_emails.some(e => e.uid === email.uid)) return 'drafts';
-  if (appState.trash_emails.some(e => e.uid === email.uid))  return 'trash';
-  return 'inbox';
+  const own = OTHER_FOLDERS.find(([, key]) => appState[key].includes(email));
+  if (own) return own[0];
+  // Taken from an inbox list (all, important, urgent, meetings…).
+  if (Object.values(appState).some(v => Array.isArray(v) && v.includes(email))) return 'inbox';
+  const byUid = OTHER_FOLDERS.find(([, key]) => appState[key].some(e => e.uid === email.uid));
+  return byUid ? byUid[0] : 'inbox';
 }
 
 // ── Search & AI assistant ───────────────────────────────────────────────────
@@ -850,7 +869,7 @@ async function openSearchHit(h) {
     return;
   }
   closeSearch();
-  const panel = { inbox: 'inbox', sent: 'sent', drafts: 'drafts', trash: 'trash' }[h.folder] || 'inbox';
+  const panel = { inbox: 'inbox', sent: 'sent', drafts: 'drafts', trash: 'trash', spam: 'spam' }[h.folder] || 'inbox';
   openEmailIn(panel, h.uid);
 }
 
@@ -1252,6 +1271,10 @@ const $c = id => document.getElementById(id);
 function setupCompose() {
   const body = $c('compose-body');
 
+  $c('compose-from').addEventListener('change', () => {
+    placeSignature(body, Number($c('compose-from').value) || 0);
+    composeDirty = true;
+  });
   $c('composer-close').addEventListener('click', () => requestCloseCompose());
   $c('compose-discard').addEventListener('click', () => requestCloseCompose(true));
   $c('compose-discard-yes').addEventListener('click', closeCompose);
@@ -1539,19 +1562,18 @@ async function loadGifs(query) {
   }
 }
 
-async function insertGif(gif) {
+// GIPHY's terms forbid copying its media: the email links to the GIF on GIPHY (URL kept
+// exactly as returned), like other mail tools do. Where the recipient's mail client blocks
+// remote images, the alt text says what it is.
+function insertGif(gif) {
   const status = $c('tb-gif-status');
-  status.textContent = t('gif.adding');
-  status.classList.remove('error');
   try {
-    // Downloaded by the backend and embedded, so it is sent with the email
-    // instead of being loaded from GIPHY by the recipient.
-    const dataUri = await cmd('fetch_gif', { url: gif.url });
     $c('tb-gif-pop').classList.add('hidden');
     status.textContent = '';
     const h = gif.height || 200;
+    const alt = t('gif.alt', { title: gif.title || 'GIPHY' });
     execCompose('insertHTML',
-      `<img src="${dataUri}" alt="${esc(gif.title || 'GIF')}" height="${h}" style="max-width:100%;height:auto">&nbsp;`);
+      `<img src="${esc(gif.url)}" alt="${esc(alt)}" height="${h}" style="max-width:100%;height:auto">&nbsp;`);
   } catch (e) {
     status.textContent = String(e);
     status.classList.add('error');
@@ -1778,8 +1800,11 @@ function openCompose({ mode = 'new', email = null, to: presetTo = '', subject: p
       </div>`;
   }
 
-  // Signature: above the quoted original in replies/forwards, at the end of new messages.
-  const sigHtml = signatureBlock(email ? 'reply' : 'new');
+  // Sending account: the one the original was sent to, else the first. Its signature goes
+  // above the quoted original in replies/forwards, at the end of new messages.
+  const accountIndex = email ? accountForEmail(email) : 0;
+  $c('compose-from').value = String(accountIndex);
+  const sigHtml = signatureBlock(accountIndex, email ? 'reply' : 'new');
   if (sigHtml) {
     const quoteStart = html.indexOf('<div class="compose-quoted">');
     html = quoteStart < 0 ? html + sigHtml : html.slice(0, quoteStart) + sigHtml + html.slice(quoteStart);
@@ -1866,7 +1891,8 @@ async function sendEmail() {
   btn.disabled = true;
   setComposeStatus(t('cmp.sending'));
   try {
-    await cmd('send_email', { to, cc, bcc, subject, html, inReplyTo: composeInReplyTo });
+    await cmd('send_email', { to, cc, bcc, subject, html, inReplyTo: composeInReplyTo,
+                              account: Number($c('compose-from').value) || 0 });
     closeCompose();
     showToast(t('cmp.sent'));
   } catch (e) {
@@ -1894,7 +1920,7 @@ let settingsData = null;
 // ── Themes ──
 const THEMES = [
   { id: 'midnight',  name: 'Midnight' },
-  { id: 'white',     name: 'White' },
+  { id: 'premium',   name: 'Premium' },
   { id: 'modern',    name: 'Modern' },
   { id: 'brutalist', name: 'Brutalist' },
   { id: 'aero',      name: 'Frutiger Aero' },
@@ -1904,6 +1930,7 @@ let savedTheme = 'brutalist';      // last saved; restored if Settings closes wi
 let savedFontScale = 1.0;
 
 function applyTheme(id) {
+  if (id === 'white') id = 'premium';   // Premium replaced the White theme
   if (!THEMES.some(t => t.id === id)) id = 'brutalist';
   document.documentElement.dataset.theme = id;
   try { localStorage.setItem('theme', id); } catch (_) {}
@@ -1964,6 +1991,9 @@ let savedLang = 'en';   // last saved; restored if Settings closes without savin
 
 async function openSettings() {
   settingsData = await cmd('get_settings');
+  // Passwords shown last time are hidden again.
+  document.querySelectorAll('#settings-overlay input[data-pw]').forEach(i => { i.type = 'password'; });
+  document.querySelectorAll('#settings-overlay .pw-toggle.on').forEach(b => b.classList.remove('on'));
   savedTheme = settingsData.theme || 'brutalist';
   savedLang = settingsData.language || 'en';
   const langSelect = document.getElementById('s-language');
@@ -1971,13 +2001,11 @@ async function openSettings() {
   langSelect.value = LANG;
   savedFontScale = settingsData.font_scale || 1.0;
   renderThemePicker();
-  document.getElementById('s-display-name').value = settingsData.display_name;
   fontScale = settingsData.font_scale;
   const slider = document.getElementById('s-font-scale');
   slider.value = fontScale;
   document.getElementById('s-font-scale-val').textContent = fontScale.toFixed(2) + '×';
   loadAiSettings(settingsData.ai);
-  loadSignatureSettings(settingsData.signature);
   document.getElementById('s-giphy-key').value = settingsData.giphy_key || '';
   document.getElementById('s-cloud-url').value = settingsData.supabase_url || '';
   document.getElementById('s-cloud-anon').value = settingsData.supabase_anon_key || '';
@@ -1991,6 +2019,30 @@ async function openSettings() {
   switchSettingsTab('general');
 }
 
+// "Remi Lhoste <remi@x.fr>" → { name: 'Remi Lhoste', email: 'remi@x.fr' }; a bare address has no name.
+function splitSender(from) {
+  const m = /^\s*"?([^"<]*?)"?\s*<([^>]*)>\s*$/.exec(from || '');
+  return m ? { name: m[1].trim(), email: m[2].trim() } : { name: '', email: (from || '').trim() };
+}
+
+const isEmail = s => /^[^\s@]+@[^\s@]+$/.test((s || '').trim());
+
+// The sender address comes from a login that is an email (sending first); else it must be typed.
+function loginEmail(block) {
+  return [block.querySelector('.a-smtp-user').value, block.querySelector('.a-imap-user').value]
+    .map(s => s.trim()).find(isEmail) || '';
+}
+
+// Show the address field only when no login is an email address, or when it holds
+// another address than the login (an alias). Updates the block title too.
+function refreshSenderEmail(block) {
+  const typed = block.querySelector('.a-sender-email').value.trim();
+  const login = loginEmail(block);
+  block.querySelector('.sender-email-row').classList.toggle('hidden', !!login && (!typed || typed === login));
+  block.querySelector('.account-title').textContent =
+    typed || login || t('set.account', { n: +block.dataset.idx + 1 });
+}
+
 function renderAccountBlocks(accounts) {
   const container = document.getElementById('s-accounts-container');
   container.innerHTML = '';
@@ -1998,33 +2050,168 @@ function renderAccountBlocks(accounts) {
     const block = document.createElement('div');
     block.className = 'account-block';
     block.dataset.idx = idx;
+    block.dataset.label = acc.label;
+    block.dataset.sigFile = acc.signature_file || '';
+    const sender = splitSender(acc.smtp_from);
     block.innerHTML = `
       <div class="account-block-title">
-        <span>${esc(acc.label) || t('set.account', { n: idx + 1 })}</span>
-        <button class="remove-account-btn" data-idx="${idx}">${t('set.remove')}</button>
+        <span class="account-title"></span>
+        <div class="account-actions">
+          <button type="button" class="collapse-account-btn" title="${esc(t('set.collapse'))}" aria-expanded="true">▾</button>
+          <button type="button" class="remove-account-btn" data-idx="${idx}" title="${esc(t('set.removeAccount'))}" aria-label="${esc(t('set.removeAccount'))}">✕</button>
+        </div>
       </div>
-      <label>${t('set.label')}</label><input type="text" class="a-label" value="${esc(acc.label)}" />
-      <label>${t('set.imapHost')}</label><input type="text" class="a-imap-host" value="${esc(acc.imap_host)}" />
-      <label>${t('set.imapPort')}</label><input type="text" class="a-imap-port" value="${esc(acc.imap_port)}" />
-      <label>${t('set.imapUser')}</label><input type="text" class="a-imap-user" value="${esc(acc.imap_user)}" />
-      <label>${t('set.imapPass')}</label><input type="password" class="a-imap-pass" value="${esc(acc.imap_pass)}" />
-      <label>${t('set.imapMailbox')}</label><input type="text" class="a-imap-mailbox" value="${esc(acc.imap_mailbox)}" />
-      <label>${t('set.fetchCount')}</label><input type="text" class="a-imap-fetch" value="${esc(acc.imap_fetch)}" />
-      <label>${t('set.smtpHost')}</label><input type="text" class="a-smtp-host" value="${esc(acc.smtp_host)}" />
-      <label>${t('set.smtpPort')}</label><input type="text" class="a-smtp-port" value="${esc(acc.smtp_port)}" />
-      <label>${t('set.smtpUser')}</label><input type="text" class="a-smtp-user" value="${esc(acc.smtp_user)}" />
-      <label>${t('set.smtpPass')}</label><input type="password" class="a-smtp-pass" value="${esc(acc.smtp_pass)}" />
-      <label>${t('set.fromAddress')}</label><input type="text" class="a-smtp-from" value="${esc(acc.smtp_from)}" />
+      <label>${t('set.yourName')}</label>
+      <input type="text" class="a-sender-name" value="${esc(sender.name)}" placeholder="${esc(t('set.yourNamePh'))}" />
+      <div class="sender-email-row">
+        <label>${t('set.senderEmail')}</label>
+        <input type="text" class="a-sender-email" value="${esc(sender.email)}" placeholder="${esc(t('set.usernamePh'))}" />
+        <p class="settings-note">${t('set.senderEmailHint')}</p>
+      </div>
+
+      <fieldset class="account-section">
+        <legend>${t('set.incoming')} <span class="conn-status" data-kind="imap"></span></legend>
+        <div class="field-row">
+          <div class="field-grow"><label>${t('set.server')}</label>
+            <input type="text" class="a-imap-host" value="${esc(acc.imap_host)}" placeholder="imap.example.com" /></div>
+          <div class="field-port"><label>${t('set.port')}</label>
+            <input type="text" class="a-imap-port" inputmode="numeric" value="${esc(acc.imap_port)}" placeholder="993" /></div>
+        </div>
+        <label>${t('set.username')}</label>
+        <input type="text" class="a-imap-user" value="${esc(acc.imap_user)}" placeholder="${esc(t('set.usernamePh'))}" autocomplete="off" />
+        <label>${t('set.password')}</label>
+        <input type="password" class="a-imap-pass" value="${esc(acc.imap_pass)}" placeholder=" " autocomplete="new-password" />
+        <p class="conn-error" data-kind="imap"></p>
+      </fieldset>
+
+      <fieldset class="account-section">
+        <legend>${t('set.outgoing')} <span class="conn-status" data-kind="smtp"></span></legend>
+        <div class="field-row">
+          <div class="field-grow"><label>${t('set.server')}</label>
+            <input type="text" class="a-smtp-host" value="${esc(acc.smtp_host)}" placeholder="smtp.example.com" /></div>
+          <div class="field-port"><label>${t('set.port')}</label>
+            <input type="text" class="a-smtp-port" inputmode="numeric" value="${esc(acc.smtp_port)}" placeholder="587" /></div>
+        </div>
+        <label>${t('set.username')}</label>
+        <input type="text" class="a-smtp-user" value="${esc(acc.smtp_user)}" placeholder="${esc(t('set.sameAsIncoming'))}" autocomplete="off" />
+        <label>${t('set.password')}</label>
+        <input type="password" class="a-smtp-pass" value="${esc(acc.smtp_pass)}" placeholder="${esc(t('set.sameAsIncoming'))}" autocomplete="new-password" />
+        <p class="conn-error" data-kind="smtp"></p>
+      </fieldset>
+
+      <div class="db-test-row">
+        <button type="button" class="secondary-btn account-test-btn">${t('set.testConn')}</button>
+      </div>
+
+      <details class="account-advanced">
+        <summary>${t('set.advanced')} <span class="sig-marker hidden">${t('set.sigMarker')}</span></summary>
+        <label>${t('set.imapMailbox')}</label>
+        <input type="text" class="a-imap-mailbox" value="${esc(acc.imap_mailbox)}" placeholder="INBOX" />
+        <label>${t('set.fetchCount')}</label>
+        <input type="text" class="a-imap-fetch" inputmode="numeric" value="${esc(acc.imap_fetch)}" placeholder="50" />
+
+        <div class="signature-section">
+          <label>${t('set.signature')}</label>
+          <iframe class="sig-preview hidden" sandbox="" title="${esc(t('set.signature'))}"></iframe>
+          <p class="settings-note sig-hint">${t('set.sigHint')}</p>
+          <div class="db-test-row">
+            <button type="button" class="secondary-btn sig-choose">${t('set.sigChoose')}</button>
+            <button type="button" class="secondary-btn sig-remove hidden">${t('set.sigRemove')}</button>
+            <span class="db-status sig-status"></span>
+          </div>
+          <label class="checkbox-label"><input type="checkbox" class="a-sig-on-new" ${acc.signature_on_new ? 'checked' : ''} /> <span>${t('set.sigOnNew')}</span></label>
+          <label class="checkbox-label"><input type="checkbox" class="a-sig-on-reply" ${acc.signature_on_reply ? 'checked' : ''} /> <span>${t('set.sigOnReply')}</span></label>
+        </div>
+      </details>
     `;
+    // ▾ / ▸ shrinks the account to its title line (clicking the title does the same).
+    const toggle = () => {
+      const collapsed = block.classList.toggle('collapsed');
+      const btn = block.querySelector('.collapse-account-btn');
+      btn.textContent = collapsed ? '▸' : '▾';
+      btn.title = t(collapsed ? 'set.expand' : 'set.collapse');
+      btn.setAttribute('aria-expanded', String(!collapsed));
+    };
+    block.querySelector('.collapse-account-btn').addEventListener('click', toggle);
+    block.querySelector('.account-title').addEventListener('click', toggle);
     block.querySelector('.remove-account-btn').addEventListener('click', () => {
       settingsData.accounts.splice(idx, 1);
       renderAccountBlocks(settingsData.accounts);
     });
+    block.querySelectorAll('.a-smtp-user, .a-imap-user, .a-sender-email')
+      .forEach(el => el.addEventListener('input', () => refreshSenderEmail(block)));
+    block.querySelector('.account-test-btn').addEventListener('click', () => testAccount(block));
+    // A result no longer holds once the fields change (blank SMTP fields reuse the IMAP ones).
+    block.querySelectorAll('.account-section').forEach((fs, i) => fs.addEventListener('input', () => {
+      setConnStatus(block, 'smtp', '');
+      if (i === 0) setConnStatus(block, 'imap', '');
+    }));
+    refreshSenderEmail(block);
+    addPasswordToggles(block);
+    setupAccountSignature(block);
     container.appendChild(block);
   });
 }
 
+// ── Settings → Accounts → connection test ──
+// state: '' (not tested), 'busy', 'ok' or 'error'; `msg` is the tooltip / error sentence,
+// `detail` the server's own message, shown smaller under an error.
+function setConnStatus(block, kind, state, msg = '', detail = '') {
+  const icon = block.querySelector(`.conn-status[data-kind="${kind}"]`);
+  icon.textContent = { busy: '⏳', ok: '✅', error: '❌' }[state] || '';
+  icon.title = detail ? `${msg}\n${detail}` : msg;
+  icon.dataset.state = state;
+  const err = block.querySelector(`.conn-error[data-kind="${kind}"]`);
+  err.innerHTML = state === 'error' ? `${esc(msg)}${detail ? `<small>${esc(detail)}</small>` : ''}` : '';
+}
+
+// The backend's ConnError { kind, detail } → a sentence in the UI language.
+function connErrorText(e) {
+  const kind = e && e.kind ? e.kind : 'other';
+  return [t(`set.connErr.${kind}`), e && e.kind ? e.detail : String(e)];
+}
+
+async function testAccount(block) {
+  const account = collectAccount(block);
+  const btn = block.querySelector('.account-test-btn');
+  btn.disabled = true;
+  setConnStatus(block, 'imap', 'busy', t('set.testing'));
+  setConnStatus(block, 'smtp', 'busy', t('set.testing'));
+  await Promise.all([
+    invoke('account_test_imap', { account })
+      .then(n => setConnStatus(block, 'imap', 'ok', t('set.imapOk', { n, folder: account.imap_mailbox || 'INBOX' })))
+      .catch(e => setConnStatus(block, 'imap', 'error', ...connErrorText(e))),
+    invoke('account_test_smtp', { account })
+      .then(() => setConnStatus(block, 'smtp', 'ok', t('set.smtpOk')))
+      .catch(e => setConnStatus(block, 'smtp', 'error', ...connErrorText(e))),
+  ]);
+  btn.disabled = false;
+}
+
+// An eye button next to each password field shows or hides what was typed.
+function addPasswordToggles(root) {
+  root.querySelectorAll('input[type="password"]:not([data-pw])').forEach(input => {
+    input.dataset.pw = '1';
+    const wrap = document.createElement('span');
+    wrap.className = 'pw-wrap';
+    input.replaceWith(wrap);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'pw-toggle';
+    btn.dataset.i18nTitle = 'set.togglePassword';
+    btn.title = t('set.togglePassword');
+    btn.textContent = '👁';
+    btn.addEventListener('click', () => {
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      btn.classList.toggle('on', show);
+    });
+    wrap.append(input, btn);
+  });
+}
+
 function setupSettings() {
+  addPasswordToggles(document.getElementById('settings-overlay'));
   document.getElementById('settings-close').addEventListener('click', closeSettings);
   document.getElementById('settings-overlay').addEventListener('click', e => {
     if (e.target === e.currentTarget) closeSettings();
@@ -2042,9 +2229,11 @@ function setupSettings() {
 
   document.getElementById('s-add-account').addEventListener('click', () => {
     settingsData.accounts.push({
-      label: '', imap_host: '', imap_port: '993', imap_user: '', imap_pass: '',
-      imap_mailbox: 'INBOX', imap_fetch: '50',
-      smtp_host: '', smtp_port: '587', smtp_user: '', smtp_pass: '', smtp_from: '',
+      // All blank: the placeholders show the defaults used for blank fields.
+      label: '', imap_host: '', imap_port: '', imap_user: '', imap_pass: '',
+      imap_mailbox: '', imap_fetch: '',
+      smtp_host: '', smtp_port: '', smtp_user: '', smtp_pass: '', smtp_from: '',
+      signature_file: '', signature_on_new: true, signature_on_reply: true,
     });
     renderAccountBlocks(settingsData.accounts);
   });
@@ -2053,7 +2242,6 @@ function setupSettings() {
   document.getElementById('s-language').addEventListener('change', e => applyLanguage(e.target.value));   // live preview
   setupCloudSettings();
   setupAiSettings();
-  setupSignatureSettings();
 
   document.getElementById('s-show-qr').addEventListener('click', async () => {
     const qr = await cmd('get_qr');
@@ -2069,30 +2257,41 @@ function switchSettingsTab(tab) {
 }
 
 function collectAccounts() {
-  return Array.from(document.querySelectorAll('.account-block')).map(block => ({
-    label:        block.querySelector('.a-label').value,
-    imap_host:    block.querySelector('.a-imap-host').value,
-    imap_port:    block.querySelector('.a-imap-port').value,
-    imap_user:    block.querySelector('.a-imap-user').value,
-    imap_pass:    block.querySelector('.a-imap-pass').value,
-    imap_mailbox: block.querySelector('.a-imap-mailbox').value,
-    imap_fetch:   block.querySelector('.a-imap-fetch').value,
-    smtp_host:    block.querySelector('.a-smtp-host').value,
-    smtp_port:    block.querySelector('.a-smtp-port').value,
-    smtp_user:    block.querySelector('.a-smtp-user').value,
-    smtp_pass:    block.querySelector('.a-smtp-pass').value,
-    smtp_from:    block.querySelector('.a-smtp-from').value,
-  }));
+  return Array.from(document.querySelectorAll('.account-block')).map(collectAccount);
+}
+
+// One account block as typed (the AccountDto the backend expects).
+function collectAccount(block) {
+  const v = cls => block.querySelector(cls).value;
+  // The sender: "Name <address>", the address being the typed one or the login's.
+  const email = v('.a-sender-email').trim() || loginEmail(block);
+  const name = v('.a-sender-name').trim().replace(/["<>]/g, '');
+  const from = email ? (name ? `"${name}" <${email}>` : email) : '';
+  return {
+    label:        email || block.dataset.label,   // only names the account inside the app
+    imap_host:    v('.a-imap-host'),
+    imap_port:    v('.a-imap-port'),
+    imap_user:    v('.a-imap-user'),
+    imap_pass:    v('.a-imap-pass'),
+    imap_mailbox: v('.a-imap-mailbox'),
+    imap_fetch:   v('.a-imap-fetch'),
+    smtp_host:    v('.a-smtp-host'),
+    smtp_port:    v('.a-smtp-port'),
+    smtp_user:    v('.a-smtp-user'),
+    smtp_pass:    v('.a-smtp-pass'),
+    smtp_from:    from,
+    signature_file:     block.dataset.sigFile || '',
+    signature_on_new:   block.querySelector('.a-sig-on-new').checked,
+    signature_on_reply: block.querySelector('.a-sig-on-reply').checked,
+  };
 }
 
 async function saveSettings() {
-  const displayName  = document.getElementById('s-display-name').value;
   const giphyKey     = document.getElementById('s-giphy-key').value;
   const accounts     = collectAccounts();
   try {
     await cmd('save_settings', {
-      displayName, accounts, ai: collectAiSettings(), giphyKey, fontScale,
-      signature: collectSignatureSettings(),
+      accounts, ai: collectAiSettings(), giphyKey, fontScale,
       theme: document.documentElement.dataset.theme,
       language: LANG,
     });
@@ -2100,81 +2299,103 @@ async function saveSettings() {
     savedTheme = document.documentElement.dataset.theme;
     savedFontScale = fontScale;
     savedLang = LANG;
-    sig.opts = collectSignatureSettings();
+    await loadComposeAccounts();   // senders and signatures may have changed
     closeSettings();
   } catch (e) {
     alert(t('set.saveFailed', { err: e }));
   }
 }
 
-// ── Signature ──
-// The HTML comes from signature.html (imported from a file in Settings → Accounts).
-const sig = { html: '', opts: { on_new: true, on_reply: true } };
+// ── Sending account & signature ──
+// Each account's sender and signature (compose_accounts), reloaded after saving Settings.
+let composeAccounts = [];
 
-// The block inserted in the composer, or '' when there is none / it is off for this kind.
-function signatureBlock(kind) {
-  if (!sig.html.trim()) return '';
-  if (kind === 'new' ? !sig.opts.on_new : !sig.opts.on_reply) return '';
-  return `<div class="compose-signature"><br>-- <br>${sanitizeHtml(sig.html)}</div>`;
+async function loadComposeAccounts() {
+  try { composeAccounts = await invoke('compose_accounts'); }
+  catch (_) { composeAccounts = []; }
+  $c('compose-from').innerHTML = composeAccounts
+    .map((a, i) => `<option value="${i}">${esc(a.from.replace(/"/g, ''))}</option>`).join('');
+  // Always shown, so the sender is visible even with a single account.
+  $c('compose-from-row').classList.toggle('hidden', composeAccounts.length === 0);
 }
 
-function showSignaturePreview() {
-  const frame = document.getElementById('s-sig-preview');
-  const has = !!sig.html.trim();
+// The account an email was sent to (its address in To or Cc), else the first.
+function accountForEmail(email) {
+  const recipients = `${email.to || ''} ${email.cc || ''}`.toLowerCase();
+  const i = composeAccounts.findIndex(a => {
+    const address = splitSender(a.from).email.toLowerCase();
+    return address.includes('@') && recipients.includes(address);
+  });
+  return Math.max(i, 0);
+}
+
+// The signature block of account `index`, or '' when it has none / it is off for this kind.
+function signatureBlock(index, kind) {
+  const a = composeAccounts[index];
+  if (!a || !a.signature_html.trim()) return '';
+  if (kind === 'new' ? !a.signature_on_new : !a.signature_on_reply) return '';
+  return `<div class="compose-signature"><br>-- <br>${sanitizeHtml(a.signature_html)}</div>`;
+}
+
+// After a change of sending account: its signature takes the place of the previous one
+// (or goes above the quoted original, or at the end).
+function placeSignature(body, index) {
+  const old = body.querySelector('.compose-signature');
+  const before = old ? old.nextSibling : body.querySelector('.compose-quoted');
+  old?.remove();
+  const html = signatureBlock(index, composeMode === 'new' ? 'new' : 'reply');
+  if (!html) return;
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html;
+  body.insertBefore(tpl.content.firstElementChild, before || null);
+}
+
+// Settings → account → Options avancées → Signature. The file name is kept on the block
+// (dataset.sigFile) and saved with the account.
+function signaturePreviewDoc(html) {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:10px;font-family:Arial,sans-serif;font-size:14px;color:#222;background:#fff">${sanitizeHtml(html)}</body></html>`;
+}
+
+function showAccountSignature(block, html) {
+  const has = !!block.dataset.sigFile && !!html.trim();
+  const frame = block.querySelector('.sig-preview');
   frame.classList.toggle('hidden', !has);
-  document.getElementById('s-sig-hint').classList.toggle('hidden', has);
-  document.getElementById('s-sig-remove').classList.toggle('hidden', !has);
-  frame.srcdoc = has
-    ? `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:10px;font-family:Arial,sans-serif;font-size:14px;color:#222;background:#fff">${sanitizeHtml(sig.html)}</body></html>`
-    : '';
+  frame.srcdoc = has ? signaturePreviewDoc(html) : '';
+  block.querySelector('.sig-hint').classList.toggle('hidden', has);
+  block.querySelector('.sig-remove').classList.toggle('hidden', !has);
+  block.querySelector('.sig-marker').classList.toggle('hidden', !has);
 }
 
-function setSigStatus(msg, kind = '') {
-  const el = document.getElementById('s-sig-status');
-  el.textContent = msg;
-  el.classList.toggle('ok', kind === 'ok');
-  el.classList.toggle('error', kind === 'error');
-}
-
-function loadSignatureSettings(opts) {
-  sig.opts = opts || sig.opts;
-  document.getElementById('s-sig-on-new').checked = sig.opts.on_new;
-  document.getElementById('s-sig-on-reply').checked = sig.opts.on_reply;
-  setSigStatus('');
-  showSignaturePreview();
-}
-
-function collectSignatureSettings() {
-  return {
-    on_new: document.getElementById('s-sig-on-new').checked,
-    on_reply: document.getElementById('s-sig-on-reply').checked,
+function setupAccountSignature(block) {
+  const status = (msg, kind = '') => {
+    const el = block.querySelector('.sig-status');
+    el.textContent = msg;
+    el.classList.toggle('ok', kind === 'ok');
+    el.classList.toggle('error', kind === 'error');
   };
-}
-
-function setupSignatureSettings() {
-  document.getElementById('s-sig-choose').addEventListener('click', async () => {
+  const file = block.dataset.sigFile;
+  showAccountSignature(block, '');
+  if (file) invoke('signature_get', { file }).then(html => showAccountSignature(block, html)).catch(() => {});
+  block.querySelector('.sig-choose').addEventListener('click', async () => {
     try {
       const path = await window.__TAURI__.dialog.open({
         multiple: false,
         filters: [{ name: t('set.sigFileFilter'), extensions: ['html', 'htm'] }],
       });
       if (!path) return;
-      sig.html = await cmd('signature_import', { path });
-      showSignaturePreview();
-      setSigStatus(t('set.sigImported'), 'ok');
+      const [name, html] = await cmd('signature_import', { path });
+      block.dataset.sigFile = name;
+      showAccountSignature(block, html);
+      status(t('set.sigImported'), 'ok');
     } catch (e) {
-      setSigStatus(String(e), 'error');
+      status(String(e), 'error');
     }
   });
-  document.getElementById('s-sig-remove').addEventListener('click', async () => {
-    try {
-      await cmd('signature_remove');
-      sig.html = '';
-      showSignaturePreview();
-      setSigStatus(t('set.sigRemoved'), 'ok');
-    } catch (e) {
-      setSigStatus(String(e), 'error');
-    }
+  // The file itself is deleted when Settings are saved (no longer used by any account).
+  block.querySelector('.sig-remove').addEventListener('click', () => {
+    block.dataset.sigFile = '';
+    showAccountSignature(block, '');
+    status(t('set.sigRemoved'), 'ok');
   });
 }
 
@@ -2347,23 +2568,27 @@ function closeSettings() {
 // ── Email row builder ──────────────────────────────────────────────────────
 function emailRow(email) {
   const row = document.createElement('div');
-  row.className = 'email-row' + (email.is_read ? '' : ' unread');
+  // Two separate signs: the importance is the coloured bar on the row's edge (p-<priority>);
+  // the square mark is filled while unread and, in the inbox, toggles read/unread
+  // (other folders number UIDs separately).
+  row.className = `email-row has-mark p-${email.priority}` + (email.is_read ? '' : ' unread');
   row.dataset.uid = email.uid;
-  const dot = `<span class="priority-dot p-${email.priority}"></span>`;
-  // Read/unread toggle, only for inbox emails (other folders number UIDs separately).
   const inInbox = appState && panelForEmail(email) === 'inbox';
-  const toggle = inInbox
-    ? `<button class="row-read-toggle" title="${readToggleTitle(email.is_read)}" aria-label="${t('rp.toggleRead')}"></button>`
-    : '';
+  const mark = inInbox
+    ? `<button class="row-mark" title="${readToggleTitle(email.is_read)}" aria-label="${t('rp.toggleRead')}"></button>`
+    : `<span class="row-mark"></span>`;
   row.innerHTML = `
-    <div class="email-row-top">
-      <span class="email-from">${toggle}${dot}${esc(email.from_name)}</span>
-      <span class="email-date">${esc(emailDateShort(email))}</span>
+    ${mark}
+    <div class="email-row-body">
+      <div class="email-row-top">
+        <span class="email-from">${esc(email.from_name)}</span>
+        <span class="email-date">${esc(emailDateShort(email))}</span>
+      </div>
+      <div class="email-subject">${esc(email.subject)}</div>
+      <div class="email-summary">${esc(email.summary)}</div>
     </div>
-    <div class="email-subject">${esc(email.subject)}</div>
-    <div class="email-summary">${esc(email.summary)}</div>
   `;
-  const btn = row.querySelector('.row-read-toggle');
+  const btn = row.querySelector('button.row-mark');
   if (btn) {
     btn.addEventListener('pointerdown', e => e.stopPropagation());   // not the start of a swipe
     btn.addEventListener('click', e => {

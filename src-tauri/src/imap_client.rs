@@ -45,6 +45,18 @@ pub async fn connect(cfg: &ImapConfig) -> Result<ImapSession> {
         .context("IMAP login failed — check credentials / App Password")
 }
 
+/// Log in and open the configured folder, as a settings check. Returns how many
+/// messages the folder holds.
+pub async fn check_connection(cfg: &ImapConfig) -> Result<u32> {
+    let mut session = connect(cfg).await?;
+    let mailbox = session
+        .select(&cfg.mailbox)
+        .await
+        .with_context(|| format!("Folder \"{}\" not found", cfg.mailbox))?;
+    session.logout().await.ok();
+    Ok(mailbox.exists)
+}
+
 /// Move one message (by real UID) from the configured mailbox to `folder` (Trash, Junk…).
 pub async fn move_message(cfg: &ImapConfig, uid: u32, folder: &str) -> Result<()> {
     let mut session = connect(cfg).await?;

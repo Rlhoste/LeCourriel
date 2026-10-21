@@ -2,7 +2,8 @@
 # config.toml is git-ignored: it holds your passwords and API keys.
 
 [user]
-display_name = "Your Name"
+# Optional: your name for the greeting and the AI. Without it, the name in from_address is used.
+display_name = ""
 font_scale = 1.0
 
 # One [[accounts]] block per mailbox. The first account is used for sending,
@@ -25,8 +26,10 @@ fetch_count = 50
 # Gmail: smtp.gmail.com · Outlook: smtp.office365.com · Yahoo: smtp.mail.yahoo.com
 host = "smtp.gmail.com"
 port = 587
+# Leave username/password empty ("") to reuse the IMAP ones.
 username = "you@gmail.com"
 password = "your-app-password"
+# What recipients see in "From". Empty = just the login email.
 from_address = "Your Name <you@gmail.com>"
 
 # AI provider: anthropic | openai | mistral | ollama | custom (any OpenAI-compatible API).
@@ -44,7 +47,8 @@ anthropic = "sk-ant-api03-..."
 # mistral = "..."
 
 
-# Optional: GIF picker in the composer (free key at https://developers.giphy.com/)
+# Optional: your own GIPHY key for the GIF picker (https://developers.giphy.com/).
+# Empty = the key built into the app.
 [gifs]
 giphy_api_key = ""
 

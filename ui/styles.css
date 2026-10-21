@@ -23,6 +23,7 @@ button, input, select, textarea { font-family: inherit; }
 
   /* "Paper" surfaces: reading pane, menus, composer */
   --paper:             #fff;
+  --paper-scheme:      light;   /* colour scheme of the paper areas' native controls */
   --paper-2:           #fafafa;
   --paper-3:           #f1f3f4;
   --paper-active:      #e2e6ea;
@@ -250,35 +251,42 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .email-row:hover   { background: var(--bg3); }
 .email-row.active  { background: var(--bg3); border-left: 3px solid var(--accent); }
 
-/* Unread emails: bold sender + subject, accent dot before the sender */
+/* Unread emails: bold sender + subject */
 .email-row.unread .email-from,
 .email-row.unread .email-subject { font-weight: 700; color: var(--text); }
-/* Read/unread toggle: a filled dot when unread, a hollow ring on hover when read */
-.row-read-toggle {
-  display: inline-block;
-  width: 14px;
-  height: 14px;
-  margin: 0 3px 0 0;
-  padding: 0;
+
+/* Email rows with a mark: the mark in a left column, the text beside it. */
+.email-row.has-mark { flex-direction: row; align-items: flex-start; gap: 10px; }
+.email-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+/* Importance: a bar in the priority's colour on every row's leading edge (both writing
+   directions). The selected row is shown by its background. */
+.email-row.has-mark { border-inline-start: 4px solid var(--prio, transparent); }
+/* Seen or not: a small neutral square, filled while unread, hollow once read.
+   In the inbox it is a button (toggle read); its padding makes a bigger click area. */
+.row-mark {
+  --mark: var(--accent);
+  flex: none;
+  box-sizing: content-box;
+  width: 10px; height: 10px;
+  margin: 1px -4px 0 -4px;
+  padding: 4px;
   border: none;
-  border-radius: 50%;
   background: transparent;
-  vertical-align: middle;
-  cursor: pointer;
   position: relative;
-  flex-shrink: 0;
 }
-.row-read-toggle::after {
+.row-mark::before {
   content: '';
   position: absolute;
-  inset: 3px;
-  border-radius: 50%;
-  border: 1.5px solid transparent;
+  inset: 4px;
+  border: 2px solid var(--text-dim);
+  border-radius: 3px;
+  box-sizing: border-box;
+  transition: background 0.12s, transform 0.12s;
 }
-.email-row.unread .row-read-toggle::after { background: var(--accent); border-color: var(--accent); }
-.email-row:not(.unread):hover .row-read-toggle::after { border-color: var(--text-dim); }
-.row-read-toggle:hover { background: var(--bg3); }
-.email-row:not(.unread) .row-read-toggle:hover::after { border-color: var(--accent); }
+.email-row.unread .row-mark::before { background: var(--mark); border-color: var(--mark); }
+button.row-mark { cursor: pointer; }
+button.row-mark:hover::before { transform: scale(1.2); }
+.email-row:not(.unread) button.row-mark:hover::before { border-color: var(--mark); }
 
 /* Swipe right to delete (Overview) */
 #ov-grid .email-row {
@@ -307,19 +315,13 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .email-subject { font-size: 0.8rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .email-summary { font-size: 0.73rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.priority-dot {
-  display: inline-block;
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  margin-right: 5px;
-  flex-shrink: 0;
-}
-.p-urgent  { background: var(--urgent); }
-.p-high    { background: var(--high); }
-.p-task    { background: var(--task); }
-.p-threat  { background: var(--threat); }
-.p-info    { background: var(--info); }
-.p-other   { background: var(--text-faint); }
+/* Priority colours, used by the bar on email rows */
+.p-urgent  { --prio: var(--urgent); }
+.p-high    { --prio: var(--high); }
+.p-task    { --prio: var(--task); }
+.p-threat  { --prio: var(--threat); }
+.p-info    { --prio: var(--info); }
+.p-other   { --prio: var(--text-faint); }
 
 /* ── Split Panel ───────────────────────────────────────────────────────────── */
 .split-panel { flex-direction: row !important; }
@@ -395,9 +397,9 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .rp-actions { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .rp-btn {
   font-size: 0.8rem;
-  padding: 4px 12px;
+  padding: 0 12px;
   border-radius: var(--radius-sm);
-  borderNone: var(--border-w) solid var(--paper-border);
+  border: var(--border-w) solid var(--paper-border);
   background: var(--paper);
   color: var(--paper-text);
   cursor: pointer;
@@ -405,16 +407,28 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .rp-btn:hover { background: var(--paper-3); }
 .rp-btn.danger:hover { color: var(--danger); border-color: var(--danger); background: var(--danger-bg); }
 
+/* The project list sits with the action buttons and looks exactly like them: same box,
+   no native look, a small chevron drawn in the text colour. */
+.rp-btn,
+.rp-project { box-sizing: border-box; height: 2.2em; line-height: 1; font-family: inherit; vertical-align: middle; }
 .rp-project {
+  -webkit-appearance: none; appearance: none;
   font-size: 0.8rem;
-  padding: 4px 8px;
+  padding: 0 26px 0 12px;
   border-radius: var(--radius-sm);
-  borderNone: var(--border-w) solid var(--paper-border);
-  background: var(--paper);
+  border: var(--border-w) solid var(--paper-border);
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 14px) 52%, calc(100% - 10px) 52%;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
   color: var(--paper-text);
   cursor: pointer;
   max-width: 160px;
 }
+.rp-project:hover { background-color: var(--paper-3); }
 
 .rp-status { font-size: 0.75rem; color: var(--success); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rp-status.error { color: var(--danger); }
@@ -425,7 +439,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   right: 0;
   top: calc(100% + 4px);
   background: var(--paper);
-  borderNone: var(--border-w) solid var(--paper-border);
+  border: var(--border-w) solid var(--paper-border);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-pop);
   display: flex;
@@ -753,10 +767,53 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   display: flex; align-items: center; justify-content: space-between;
   font-weight: 600; font-size: 0.85rem; margin-bottom: 6px;
 }
-.remove-account-btn {
-  background: none; border: none; color: var(--urgent);
-  font-size: 0.8rem; cursor: pointer;
+.account-block input::placeholder { color: var(--text-faint); }
+/* Fields still to fill stand out (white in Brutalist and other light themes). */
+.account-block input:placeholder-shown { background: var(--bg2); }
+.account-section {
+  border: var(--border-w) solid var(--border); border-radius: var(--radius-sm);
+  padding: 4px 10px 10px; margin: 12px 0 0; min-width: 0;
 }
+.account-section legend { font-weight: 600; font-size: 0.8rem; padding: 0 6px; color: var(--text); }
+.field-row { display: flex; gap: 8px; }
+.field-row .field-grow { flex: 1; min-width: 0; }
+.field-row .field-port { width: 90px; flex: none; }
+.account-advanced { margin-top: 10px; }
+.sender-email-row.hidden { display: none; }
+.conn-status { font-size: 0.9rem; margin-left: 2px; cursor: default; }
+.conn-error { color: var(--urgent); font-size: 0.75rem; margin: 6px 0 0; word-break: break-word; }
+.conn-error:empty { display: none; }
+.conn-error small { display: block; color: var(--text-faint); font-size: 0.7rem; margin-top: 2px; }
+/* Password field with a show/hide button */
+.pw-wrap { position: relative; display: block; }
+.pw-wrap input { width: 100%; padding-right: 36px; }
+.pw-toggle {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; cursor: pointer; font-size: 1rem; line-height: 1;
+  padding: 4px 6px; opacity: 0.45;
+}
+.pw-toggle:hover, .pw-toggle.on { opacity: 1; }
+.account-advanced summary { cursor: pointer; font-size: 0.8rem; color: var(--text-dim); padding: 4px 0; }
+.account-title { cursor: pointer; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-actions { display: flex; gap: 6px; flex: none; }
+.collapse-account-btn,
+.remove-account-btn {
+  width: 26px; height: 26px; padding: 0; line-height: 1; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.collapse-account-btn {
+  background: var(--bg2); color: var(--text); font-size: 0.9rem;
+  border: var(--border-w) solid var(--border); border-radius: var(--radius-sm);
+}
+/* Remove: white cross on red, black border */
+.remove-account-btn {
+  background: #e02020; color: #fff; font-size: 1rem; font-weight: 900; font-family: Arial, sans-serif;
+  border: 2px solid #000; border-radius: var(--radius-sm);
+}
+.remove-account-btn:hover { background: #c01010; }
+/* Shrunk account: only its title line */
+.account-block.collapsed > :not(.account-block-title) { display: none; }
+.account-block.collapsed .account-block-title { margin-bottom: 0; }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -981,7 +1038,8 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 }
 .composer-field.hidden { display: none; }
 .composer-field label { color: var(--paper-text-dim); min-width: 32px; }
-.composer-field input {
+.composer-field input,
+.composer-field select {
   flex: 1;
   border: none;
   outline: none;
@@ -990,6 +1048,27 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   color: var(--paper-text);
   background: transparent;
 }
+.composer-field select { cursor: pointer; font-family: inherit; min-width: 0; }
+/* The composer and the reading pane are "paper": light even in dark themes, so their lists
+   and menus (native drop-downs included) use the paper colours, not the theme's dark scheme. */
+.composer,
+.reading-pane { color-scheme: var(--paper-scheme); }
+/* No native look for the composer's lists either: paper background, chevron in the text colour. */
+.composer-toolbar select,
+.composer-field select {
+  -webkit-appearance: none; appearance: none;
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 12px) 52%, calc(100% - 8px) 52%;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+  padding-right: 22px;
+}
+.composer-field select option,
+.composer-toolbar select option,
+.rp-project option { color: var(--paper-text); background: var(--paper); }
 .composer-link {
   background: none;
   border: none;
@@ -1045,12 +1124,12 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .composer-toolbar button.active { background: var(--paper-active); border-color: var(--paper-border); color: var(--paper-strong); }
 .composer-toolbar select {
   height: 28px;
-  borderNone: var(--border-w) solid var(--paper-border);
+  border: var(--border-w) solid var(--paper-border);
   border-radius: var(--radius-sm);
-  background: var(--paper);
+  background-color: var(--paper);   /* not the shorthand: it would drop the chevron */
   color: var(--paper-text);
   font-size: 0.78rem;
-  padding: 0 4px;
+  padding: 0 22px 0 6px;   /* room for the chevron */
   cursor: pointer;
 }
 .tb-sep { width: 1px; height: 18px; background: var(--paper-border); margin: 0 4px; }
@@ -1062,7 +1141,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   bottom: calc(100% + 6px);
   left: 0;
   background: var(--paper);
-  borderNone: var(--border-w) solid var(--paper-border);
+  border: var(--border-w) solid var(--paper-border);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-pop);
   padding: 8px;
@@ -1082,7 +1161,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .tb-link-pop { width: 280px; display: flex; flex-direction: column; gap: 6px; }
 .tb-link-pop.hidden { display: none; }
 .tb-link-pop input {
-  borderNone: var(--border-w) solid var(--paper-border);
+  border: var(--border-w) solid var(--paper-border);
   border-radius: var(--radius-sm);
   padding: 6px 8px;
   font-size: 0.82rem;
@@ -1153,7 +1232,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 }
 .tb-gif-pop.hidden { display: none; }
 .tb-gif-pop input {
-  borderNone: var(--border-w) solid var(--paper-border);
+  border: var(--border-w) solid var(--paper-border);
   border-radius: var(--radius-sm);
   padding: 6px 8px;
   font-size: 0.82rem;
@@ -1178,7 +1257,11 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .tb-gif-footer { display: flex; justify-content: space-between; gap: 8px; font-size: 0.7rem; color: var(--paper-text-dim); }
 #tb-gif-status { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 #tb-gif-status.error { color: var(--danger); white-space: normal; }
-.tb-gif-attrib { color: var(--paper-text-faint); white-space: nowrap; }
+.tb-gif-footer { align-items: center; }
+.tb-gif-attrib { height: 28px; width: auto; flex: none; }
+.giphy-mark-dark { display: none; height: 19px; }
+[data-theme="terminal"] .giphy-mark-light { display: none; }
+[data-theme="terminal"] .giphy-mark-dark { display: inline; }
 
 /* AI writing menu */
 .composer-toolbar .tb-ai-btn { font-weight: 600; color: var(--ai); }
@@ -1230,6 +1313,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   --info:       #7a80a0;
   --ok:         #4caf7f;
   --paper:             #fff;
+  --paper-scheme:      light;   /* colour scheme of the paper areas' native controls */
   --paper-2:           #fafafa;
   --paper-3:           #f1f3f4;
   --paper-active:      #e2e6ea;
@@ -1264,16 +1348,62 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   color-scheme: dark;
 }
 
-/* ── White ── */
-[data-theme="white"] {
-  --bg: #f6f7f9; --bg2: #ffffff; --bg3: #eef1f5; --border: #e1e4ea;
-  --accent: #1a73e8; --accent-dim: #1765cc; --on-accent: #fff;
-  --text: #1f2328; --text-dim: #5f6b7a; --text-faint: #9aa4b2;
-  --urgent: #d93025; --high: #e37400; --task: #0b8bd6; --threat: #a142f4; --info: #5f6b7a; --ok: #188038;
-  --composer-head: #f2f6fc; --composer-head-text: #1f1f1f; --composer-head-dim: #444;
-  --shadow-win: 0 8px 32px rgba(60, 64, 67, 0.3);
-  color-scheme: light;
+/* ── Premium: graphite grey and champagne gold ── */
+[data-theme="premium"] {
+  --bg: #1b1b1d; --bg2: #232326; --bg3: #2b2b2f; --border: #3a3834;
+  --accent: #c9a54e; --accent-dim: #a8873a; --on-accent: #1b1b1d;
+  --text: #ece7dc; --text-dim: #a7a193; --text-faint: #6b665c;
+  --urgent: #e35d52; --high: #e08a3c; --task: #7fb2d9; --threat: #b98ad9; --info: #a7a193; --ok: #7fb58a;
+  --paper: #fdfbf6; --paper-2: #f8f4ea; --paper-3: #f1ebdc; --paper-active: #ece0c2;
+  --paper-strong: #1b1b1d; --paper-text: #26241f; --paper-text-dim: #5f5a4f; --paper-text-faint: #9b9484;
+  --paper-border: #d9cfb8; --paper-border-soft: #ebe4d3; --paper-chip: #f3ead2;
+  --link: #8f6b1f; --link-hover: #6f5215; --link-disabled: #cdb98a; --on-link: #fff;
+  --composer-head: #1b1b1d; --composer-head-text: #d9b968; --composer-head-dim: #cfc8b8;
+  --toast-bg: #1b1b1d; --toast-text: #d9b968;
+  --font-ui: "Inter", "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+  --radius: 10px; --radius-sm: 6px; --radius-pill: 999px;
+  --shadow-pop: 0 10px 28px rgba(0, 0, 0, 0.35);
+  --shadow-win: 0 24px 64px rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
 }
+/* Flat gold for the main actions; quiet tinted states for what is selected. */
+[data-theme="premium"] .compose-btn,
+[data-theme="premium"] #compose-send,
+[data-theme="premium"] .primary-btn,
+[data-theme="premium"] .search-ai-btn {
+  background: #c9a54e !important; color: #1b1b1d !important;
+  border: none; border-radius: 8px; box-shadow: none; font-weight: 600;
+  transition: background-color 0.15s ease;
+}
+[data-theme="premium"] .compose-btn:hover,
+[data-theme="premium"] #compose-send:hover,
+[data-theme="premium"] .primary-btn:hover,
+[data-theme="premium"] .search-ai-btn:hover { background: #d4b366 !important; }
+[data-theme="premium"] .compose-btn:active,
+[data-theme="premium"] #compose-send:active,
+[data-theme="premium"] .primary-btn:active,
+[data-theme="premium"] .search-ai-btn:active { background: #b8953f !important; }
+[data-theme="premium"] .nav-btn.active {
+  background: rgba(201, 165, 78, 0.12); color: #d9b968;
+  box-shadow: inset 2px 0 0 #c9a54e;
+}
+/* dir and data-theme are both on <html> */
+[data-theme="premium"][dir="rtl"] .nav-btn.active { box-shadow: inset -2px 0 0 #c9a54e; }
+[data-theme="premium"] .tab.active {
+  background: transparent; color: #d9b968;
+  box-shadow: inset 0 -2px 0 #c9a54e; border-radius: 0;
+}
+.theme-card[data-theme="premium"] .theme-card-bar { background: #c9a54e; }
+[data-theme="premium"] input[type="range"],
+[data-theme="premium"] input[type="checkbox"] { accent-color: var(--accent); }
+/* A serif greeting and gold hairlines on the boxes' titles. */
+[data-theme="premium"] .greeting { font-family: Georgia, "Times New Roman", serif; font-weight: 600; letter-spacing: 0.01em; color: #e8d3a0; }
+[data-theme="premium"] #sidebar-logo { color: #d9b968; letter-spacing: 0.04em; }
+[data-theme="premium"] .ov-box-title,
+[data-theme="premium"] .kanban-col-title,
+[data-theme="premium"] .list-title { color: #d9b968; letter-spacing: 0.08em; }
+[data-theme="premium"] .ov-box,
+[data-theme="premium"] .kanban-col { border-top: 1px solid rgba(201, 165, 78, 0.45); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3); }
 
 /* ── Modern ── */
 [data-theme="modern"] {
@@ -1327,17 +1457,28 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 [data-theme="brutalist"] .nav-btn.active,
 [data-theme="brutalist"] .compose-btn { border: 2px solid #000; box-shadow: 3px 3px 0 #000; }
 [data-theme="brutalist"] .rp-btn,
+[data-theme="brutalist"] .rp-project,
 [data-theme="brutalist"] .composer-send { border: 2px solid #000; box-shadow: 2px 2px 0 #000; font-weight: 700; }
 [data-theme="brutalist"] .rp-btn:active,
 [data-theme="brutalist"] .composer-send:active { transform: translate(2px, 2px); box-shadow: none; }
 [data-theme="brutalist"] .email-row.active { border-left-width: 6px; border-left-color: #000; }
-/* Yellow is a fill colour here, never a text colour (yellow on white/yellow is unreadable). */
+/* Hovered buttons invert: yellow text on black (the only place yellow is a text colour,
+   always on black). Colour swatches, theme cards, the red cross and small toggles keep their look. */
+[data-theme="brutalist"] button:hover:not(:disabled):not(.theme-card):not(.tb-swatch):not(.remove-account-btn):not(.row-mark):not(.pw-toggle),
+[data-theme="brutalist"] .rp-project:hover {
+  background-color: #000 !important;
+  color: #ffde00 !important;
+}
+/* Yellow is a fill colour here, never a text colour on light backgrounds (yellow on white/yellow is unreadable). */
 [data-theme="brutalist"] .today .week-day-num,
 [data-theme="brutalist"] .cal-cell.today .cal-day-num,
 [data-theme="brutalist"] .kanban-source:hover,
 [data-theme="brutalist"] .kanban-chip.ai { color: #000; }
 [data-theme="brutalist"] .kanban-chip.ai { background: var(--accent); border-color: #000; }
-[data-theme="brutalist"] .email-row.unread .row-read-toggle::after { background: #000; border-color: #000; }
+[data-theme="brutalist"] .row-mark::before,
+[data-theme="terminal"] .row-mark::before { border-radius: 0; }
+[data-theme="brutalist"] .row-mark { --mark: #000; }
+[data-theme="brutalist"] .row-mark::before { border-color: #000; }
 
 /* ── Frutiger Aero ── */
 [data-theme="aero"] {
@@ -1397,6 +1538,15 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   -webkit-backdrop-filter: blur(6px);
 }
 [data-theme="aero"] .dialog { box-shadow: var(--shadow-win), inset 0 1px 0 #fff; }
+[data-theme="aero"] .rp-project {
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%),
+    linear-gradient(180deg, #ffffff 0%, #e4f1fb 100%);
+  background-size: 4px 4px, 4px 4px, 100% 100%;
+  background-position: calc(100% - 14px) 52%, calc(100% - 10px) 52%, 0 0;
+  border-radius: var(--radius-pill);
+}
 [data-theme="aero"] .rp-btn { background: linear-gradient(180deg, #ffffff 0%, #e4f1fb 100%); border-radius: var(--radius-pill); }
 
 /* ── Terminal ── */
@@ -1405,6 +1555,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   --accent: #33ff66; --accent-dim: #22aa44; --on-accent: #000;
   --text: #33ff66; --text-dim: #1fbf4a; --text-faint: #137a2e;
   --urgent: #ff5555; --high: #ffb86c; --task: #8be9fd; --threat: #ff79c6; --info: #1fbf4a; --ok: #50fa7b;
+  --paper-scheme: dark;
   --paper: #000; --paper-2: #050a05; --paper-3: #0d1f0d; --paper-active: #134d22;
   --paper-strong: #66ff99; --paper-text: #33ff66; --paper-text-dim: #1fbf4a; --paper-text-faint: #137a2e;
   --paper-border: #1f7a33; --paper-border-soft: #134d22; --paper-chip: #0d1f0d;
@@ -1657,8 +1808,6 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 [dir="rtl"][data-theme="brutalist"] .email-row.active { border-right-width: 6px; border-right-color: #000; }
 [dir="rtl"] .cal-dl-pill { border-left: none; border-right: 3px solid var(--accent); }
 [dir="rtl"] .cal-dl-pill.high { border-right-color: var(--high); }
-[dir="rtl"] .priority-dot { margin-right: 0; margin-left: 5px; }
-[dir="rtl"] .row-read-toggle { margin: 0 0 0 3px; }
 [dir="rtl"] .rp-more,
 [dir="rtl"] .search-server { margin-left: 0; margin-right: auto; }
 [dir="rtl"] .rp-menu { right: auto; left: 0; }
@@ -1706,4 +1855,15 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 /* Settings → Accounts → Signature */
 .signature-section { margin-top: 18px; padding-top: 14px; border-top: var(--border-w) solid var(--border); display: flex; flex-direction: column; gap: 8px; }
 .sig-preview { width: 100%; height: 150px; border: var(--border-w) solid var(--border); border-radius: var(--radius-sm); background: #fff; }
-.sig-preview.hidden, #s-sig-hint.hidden, #s-sig-remove.hidden { display: none; }
+.sig-preview.hidden, .sig-hint.hidden, .sig-remove.hidden, .sig-marker.hidden { display: none; }
+.account-advanced .signature-section { margin-top: 14px; padding-top: 10px; }
+.sig-marker { margin-left: 8px; font-size: 0.75rem; color: var(--text); }
+
+/* Rows with an importance bar keep it when selected (instead of the accent bar). Last in the
+   file so it wins over the theme and right-to-left rules for .email-row.active. */
+.email-row.has-mark.active,
+[dir="rtl"] .email-row.has-mark.active,
+[data-theme] .email-row.has-mark.active {
+  border-left: none; border-right: none;
+  border-inline-start: 4px solid var(--prio, transparent);
+}

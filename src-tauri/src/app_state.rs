@@ -67,23 +67,35 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     let mut sent_raw = Vec::new();
     let mut drafts_raw = Vec::new();
     let mut trash_raw = Vec::new();
+    let mut spam_raw = Vec::new();
     let mut inbox_ok = false;
 
-    for account in &cfg.accounts {
+    for (index, account) in cfg.accounts.iter().enumerate() {
         let folders = guess_folder_names(&account.imap).await;
         let (sent_name, drafts_name, trash_name) = (folders.sent.clone(), folders.drafts.clone(), folders.trash.clone());
-        if std::ptr::eq(account, &cfg.accounts[0]) {
+        let spam_name = folders.spam.clone();
+        {
             let mut s = state.lock().unwrap();
-            s.trash_folder = trash_name.clone();
-            // No spam folder on the server: "Junk" is created when first needed.
-            s.spam_folder = folders.spam.unwrap_or_else(|| "Junk".into());
-            s.sent_folder = sent_name.clone();
+            s.sent_folders.resize(cfg.accounts.len(), "Sent".into());
+            s.sent_folders[index] = sent_name.clone();
+            if index == 0 {
+                s.trash_folder = trash_name.clone();
+                // No spam folder on the server: "Junk" is created when first needed.
+                s.spam_folder = folders.spam.unwrap_or_else(|| "Junk".into());
+            }
         }
-        let (inbox_res, sent_res, drafts_res, trash_res) = tokio::join!(
+        let (inbox_res, sent_res, drafts_res, trash_res, spam_res) = tokio::join!(
             fetch_emails(&account.imap),
             fetch_folder(&account.imap, &sent_name),
             fetch_folder(&account.imap, &drafts_name),
             fetch_folder(&account.imap, &trash_name),
+            async {
+                // No spam folder yet: nothing to show (it is created on the first "Spam").
+                match &spam_name {
+                    Some(name) => fetch_folder(&account.imap, name).await,
+                    None => Ok(Vec::new()),
+                }
+            },
         );
         match inbox_res {
             Ok(mut v) => { info!("Inbox[{}]: {} emails", account.name, v.len()); raw_emails.append(&mut v); inbox_ok = true; }
@@ -100,6 +112,10 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
         match trash_res {
             Ok(mut v) => { trash_raw.append(&mut v); }
             Err(e) => warn!("Trash[{}]: {}", account.name, e),
+        }
+        match spam_res {
+            Ok(mut v) => { spam_raw.append(&mut v); }
+            Err(e) => warn!("Spam[{}]: {}", account.name, e),
         }
     }
 
@@ -147,6 +163,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     let sent_cards_pre: Vec<EmailCard> = sent_raw.iter().map(|r| raw_to_card(r.clone())).collect();
     let drafts_cards_pre: Vec<EmailCard> = drafts_raw.iter().map(|r| raw_to_card(r.clone())).collect();
     let trash_cards_pre: Vec<EmailCard> = trash_raw.iter().map(|r| raw_to_card(r.clone())).collect();
+    let spam_cards_pre: Vec<EmailCard> = spam_raw.iter().map(|r| raw_to_card(r.clone())).collect();
     let mut pre_cards = cached_cards.clone();
     pre_cards.extend(new_raw_cards);
     let new_count = new_raw.len();
@@ -155,7 +172,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     } else {
         Briefing { kind: "up_to_date", hour: 0, minute: 0, count: 0 }
     };
-    populate(cfg, app, state, pre_cards, sent_cards_pre.clone(), drafts_cards_pre.clone(), trash_cards_pre.clone(), Some(briefing_pre));
+    populate(cfg, app, state, pre_cards, sent_cards_pre.clone(), drafts_cards_pre.clone(), trash_cards_pre.clone(), spam_cards_pre.clone(), Some(briefing_pre));
 
     // Classify only new emails.
     let new_cards: Vec<EmailCard> = if new_raw.is_empty() {
@@ -240,6 +257,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     let sent_cards: Vec<EmailCard> = sent_raw.into_iter().map(raw_to_card).collect();
     let drafts_cards: Vec<EmailCard> = drafts_raw.into_iter().map(raw_to_card).collect();
     let trash_cards: Vec<EmailCard> = trash_raw.into_iter().map(raw_to_card).collect();
+    let spam_cards: Vec<EmailCard> = spam_raw.into_iter().map(raw_to_card).collect();
 
     save_cache(&cards);
 
@@ -254,7 +272,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     let now = Local::now();
     let live_briefing = Briefing { kind: "live", hour: now.hour(), minute: now.minute(), count: attention };
 
-    populate(cfg, app, state, cards, sent_cards, drafts_cards, trash_cards, Some(live_briefing));
+    populate(cfg, app, state, cards, sent_cards, drafts_cards, trash_cards, spam_cards, Some(live_briefing));
     Ok(())
 }
 
@@ -268,7 +286,7 @@ pub fn load_and_display_cache(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<A
         Err(e) => { warn!("Cache parse error: {}", e); return; }
     };
     info!("Loaded {} emails from cache", cards.len());
-    populate(cfg, app, state, cards, vec![], vec![], vec![], None);
+    populate(cfg, app, state, cards, vec![], vec![], vec![], vec![], None);
 }
 
 fn populate(
@@ -279,6 +297,7 @@ fn populate(
     sent: Vec<EmailCard>,
     drafts: Vec<EmailCard>,
     trash: Vec<EmailCard>,
+    spam: Vec<EmailCard>,
     briefing_override: Option<Briefing>,
 ) {
     // Projects the user re-tagged by hand win over the AI's choice.
@@ -378,6 +397,7 @@ fn populate(
         all.extend(sent.clone());
         all.extend(drafts.clone());
         all.extend(trash.clone());
+        all.extend(spam.clone());
         s.emails = all;
         use crate::search::Folder;
         let tag = |f: Folder, v: &[EmailCard]| v.iter().cloned().map(move |c| (f, c)).collect::<Vec<_>>();
@@ -385,17 +405,18 @@ fn populate(
         index.extend(tag(Folder::Sent, &sent));
         index.extend(tag(Folder::Drafts, &drafts));
         index.extend(tag(Folder::Trash, &trash));
+        index.extend(tag(Folder::Spam, &spam));
         s.search_index = index;
     }
 
     use chrono::Timelike;
     let hour = Local::now().hour();
-    let greeting = i18n::greeting(hour, &cfg.user.display_name, i18n::lang());
+    let greeting = i18n::greeting(hour, &cfg.user_name(), i18n::lang());
 
     let snapshot = AppStateDto {
         greeting,
         briefing_time: briefing_text,
-        user_name: cfg.user.display_name.clone(),
+        user_name: cfg.user_name(),
         hour,
         briefing,
         loading: false,
@@ -413,6 +434,7 @@ fn populate(
         sent_emails:          to_dto_vec(&sent),
         drafts_emails:        to_dto_vec(&drafts),
         trash_emails:         to_dto_vec(&trash),
+        spam_emails:          to_dto_vec(&spam),
         deadlines:            deadline_dtos,
         week_days,
         projects:             project_dtos,

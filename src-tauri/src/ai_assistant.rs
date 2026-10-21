@@ -141,7 +141,7 @@ pub async fn assist(
         ));
     }
     let text = crate::ai::complete(&cfg.ai, crate::ai::Request {
-        system: &system_prompt(&cfg.user.display_name, lang),
+        system: &system_prompt(&cfg.user_name(), lang),
         user: &user,
         max_tokens: 2000,
         json: true,

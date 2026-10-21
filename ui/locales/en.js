@@ -3,6 +3,7 @@ STRINGS.en = {
     // Sidebar
     'nav.overview': 'Overview', 'nav.inbox': 'Inbox', 'nav.important': 'Important', 'nav.tasks': 'Tasks',
     'nav.meetings': 'Meetings', 'nav.calendar': 'Calendar', 'nav.projects': 'Projects',
+    "nav.spam": "Spam",
     'nav.sent': 'Sent', 'nav.drafts': 'Drafts', 'nav.trash': 'Trash',
     'nav.sponsor': '❤ Sponsor',
     'nav.search': '🔍 Search',
@@ -46,6 +47,7 @@ STRINGS.en = {
 
     // Reading pane
     'rp.select': 'Select an email to read',
+    "rp.notSpam": "Not spam", "rp.movedToInbox": "Moved back to the inbox",
     'rp.reply': 'Reply', 'rp.forward': 'Forward', 'rp.spam': 'Spam', 'rp.delete': 'Delete',
     'rp.project': 'Project', 'rp.noProject': 'No project', 'rp.more': 'More actions',
     'rp.markUnread': 'Mark as unread', 'rp.markRead': 'Mark as read', 'rp.saveAs': 'Save as…', 'rp.print': 'Print',
@@ -58,6 +60,7 @@ STRINGS.en = {
     // Composer
     'cmp.newMessage': 'New Message', 'cmp.resize': 'Drag to resize',
     'cmp.minimise': 'Minimise', 'cmp.expand': 'Expand', 'cmp.close': 'Close',
+    "cmp.from": "From",
     'cmp.to': 'To', 'cmp.cc': 'Cc', 'cmp.bcc': 'Bcc', 'cmp.subject': 'Subject',
     'cmp.font': 'Font', 'cmp.size': 'Size', 'cmp.fixedWidth': 'Fixed width',
     'cmp.small': 'Small', 'cmp.normal': 'Normal', 'cmp.large': 'Large', 'cmp.huge': 'Huge',
@@ -75,7 +78,7 @@ STRINGS.en = {
     'cmp.needRecipient': 'Please enter a recipient.', 'cmp.sending': 'Sending…',
     'cmp.sent': 'Message sent', 'cmp.sendFailed': 'Failed to send: {err}',
     'cmp.wrote': 'On {date}, {from} wrote:', 'cmp.forwarded': '---------- Forwarded message ----------',
-    'gif.loading': 'Loading…', 'gif.trending': 'Trending', 'gif.none': 'No GIFs found', 'gif.adding': 'Adding GIF…',
+    'gif.loading': 'Loading…', 'gif.trending': 'Trending', 'gif.none': 'No GIFs found', "gif.alt": "GIF: {title}",
     'ai.button': '✨ AI', 'ai.title': 'AI writing tools',
     'ai.formal': 'Make it formal', 'ai.translateEn': 'Translate to English', 'ai.translateFr': 'Translate to French',
     'ai.correct': 'Correct spelling & grammar', 'ai.auto': 'Auto answer',
@@ -88,23 +91,25 @@ STRINGS.en = {
 
     // Settings
     'set.title': 'Settings', 'set.general': 'General', 'set.accounts': 'Accounts', 'set.ai': 'AI',
-    'set.displayName': 'Display Name', 'set.fontScale': 'Font Scale', 'set.theme': 'Theme', 'set.language': 'Language',
+    'set.fontScale': 'Font Scale', 'set.theme': 'Theme', 'set.language': 'Language',
     "set.signature": "Signature", "set.sigChoose": "📄 Choose an HTML file…", "set.sigRemove": "Remove", "set.sigOnNew": "Add to new messages", "set.sigOnReply": "Add to replies and forwards", "set.sigHint": "No signature yet. Export it from your mail client (Outlook, Gmail…) as an HTML file, or create one with any signature generator.", "set.sigImported": "Signature imported", "set.sigRemoved": "Signature removed", "set.sigFileFilter": "HTML files",
+    "set.incoming": "📥 Incoming mail (IMAP)", "set.outgoing": "📤 Outgoing mail (SMTP)", "set.server": "Server", "set.port": "Port", "set.username": "Username", "set.usernamePh": "you@example.com", "set.password": "Password", "set.sameAsIncoming": "Same as incoming", "set.advanced": "Advanced options", "set.imapMailbox": "Folder to check", "set.fetchCount": "Number of emails to fetch",
+    "set.yourName": "Your name (seen by your recipients)", "set.yourNamePh": "First Last", "set.senderEmail": "Sender email address", "set.senderEmailHint": "The address your emails are sent from, when your username isn't it.", "set.togglePassword": "Show or hide the password",
+    "set.testConn": "🔌 Test the connection", "set.testing": "Testing…", "set.imapOk": "Incoming OK ({folder}: {n})", "set.smtpOk": "Outgoing OK",
+    "set.connErr.auth": "Username or password refused by the server.", "set.connErr.host": "Server not found: check its name.", "set.connErr.refused": "The server refused the connection: check the port.", "set.connErr.reset": "The server cut the connection. If it already answered on this port, it is probably blocking you for a while after failed logins: try again later, or check your account with your mail provider.", "set.connErr.tls": "Secure connection failed: check the port (993 for incoming, 465 or 587 for outgoing).", "set.connErr.folder": "This folder does not exist on the server (Advanced options).", "set.connErr.timeout": "No answer from the server after 20 s: check its name and port.", "set.connErr.other": "Connection failed.",
+    "set.sigMarker": "✍️ Signature",
+    "set.collapse": "Collapse", "set.expand": "Expand", "set.removeAccount": "Remove this account",
     'set.addAccount': '+ Add Account', 'set.model': 'Model',
-    'set.giphyKey': 'GIPHY API Key', 'set.giphyHint': '(for the GIF picker — free at developers.giphy.com)',
+    'set.giphyKey': 'GIPHY API Key', "set.giphyHint": "(optional: a key is built in; get your own free at developers.giphy.com)", "set.giphyDefaultPh": "Built-in key (leave blank to use it)",
     'set.showQr': 'Show QR Code', 'set.save': 'Save', 'set.saveFailed': 'Save failed: {err}',
-    'set.account': 'Account {n}', 'set.remove': 'Remove', 'set.label': 'Label',
-    'set.imapHost': 'IMAP Host', 'set.imapPort': 'IMAP Port', 'set.imapUser': 'IMAP Username',
-    'set.imapPass': 'IMAP Password', 'set.imapMailbox': 'IMAP Mailbox', 'set.fetchCount': 'Fetch Count',
-    'set.smtpHost': 'SMTP Host', 'set.smtpPort': 'SMTP Port', 'set.smtpUser': 'SMTP Username',
-    'set.smtpPass': 'SMTP Password', 'set.fromAddress': 'From Address',
+    'set.account': 'Account {n}',
     'set.cloud': 'Cloud', 'set.cloudUrl': 'Supabase project URL', 'set.cloudAnon': 'Anon (public) key',
     'set.cloudEmail': 'Email', 'set.cloudPassword': 'Password', 'set.cloudSignIn': 'Sign in', 'set.cloudSignUp': 'Create account',
     'set.cloudSignedInAs': 'Signed in as', 'set.cloudSync': 'Sync now', 'set.cloudSignOut': 'Sign out',
     'set.cloudWorking': 'Working…', 'set.cloudSynced': 'Synced.', 'set.cloudConfirm': 'Account created. Confirm it from the email Supabase sent you, then sign in.',
     'set.cloudNeedProject': 'Enter the project URL and anon key first.', 'set.cloudNeedCreds': 'Enter your email and password.',
     'set.cloudNote': 'Each account only sees its own data (row-level security). Synced: tasks, swipes, project tags, projects, preferences and AI results. Never synced: mail passwords, API keys and these Supabase settings.',
-    'theme.midnight': 'Midnight', 'theme.white': 'White', 'theme.modern': 'Modern',
+    'theme.midnight': 'Midnight', 'theme.premium': 'Premium', 'theme.modern': 'Modern',
     'theme.brutalist': 'Brutalist', 'theme.aero': 'Frutiger Aero', 'theme.terminal': 'Terminal',
 
     // Greeting and briefing (built from raw values sent by the backend)

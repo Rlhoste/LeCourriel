@@ -156,15 +156,19 @@ async fn send_email(
     subject: String,
     html: String,
     in_reply_to: Option<String>,
+    account: Option<usize>,
     shared: State<'_, SharedState>,
 ) -> Result<(), String> {
+    // The account chosen in the composer's "From" (the first one by default).
+    let index = account.unwrap_or(0);
     let (cfg, sent_folder) = {
         let s = shared.lock().unwrap();
-        (s.cfg.clone(), s.sent_folder.clone())
+        (s.cfg.clone(), s.sent_folders.get(index).cloned().unwrap_or_else(|| "Sent".into()))
     };
-    let account = cfg.accounts.first().ok_or("No accounts configured")?;
+    let account = cfg.accounts.get(index).ok_or("No accounts configured")?;
     let mail = smtp_sender::OutgoingMail { to, cc, bcc, subject, html, in_reply_to };
-    let raw = smtp_sender::send_message(&account.smtp, &mail)
+    let smtp = account.smtp_for_sending(&cfg.user_name());
+    let raw = smtp_sender::send_message(&smtp, &mail)
         .await
         .map_err(|e| format!("{:#}", e))?;
     // The SMTP relay doesn't keep a copy, so store one in Sent ourselves.
@@ -182,22 +186,22 @@ fn get_settings(shared: State<'_, SharedState>) -> dto::SettingsDto {
 
 #[tauri::command]
 fn save_settings(
-    display_name: String,
+    display_name: Option<String>,
     accounts: Vec<dto::AccountDto>,
     ai: dto::AiSettingsDto,
     giphy_key: Option<String>,
-    signature: Option<config::SignatureConfig>,
     font_scale: f32,
     theme: Option<String>,
     language: Option<String>,
     shared: State<'_, SharedState>,
 ) -> Result<(), String> {
     let giphy_key = giphy_key.unwrap_or_default();
-    settings::save_config(&display_name, &accounts, &ai, &giphy_key, signature.as_ref(), font_scale, theme.as_deref(), language.as_deref())
+    settings::save_config(display_name.as_deref(), &accounts, &ai, &giphy_key, font_scale, theme.as_deref(), language.as_deref())
         .map_err(|e| e.to_string())?;
     // Reload config into shared state.
     match Config::load() {
         Ok(new_cfg) => {
+            signature::remove_unused(&signature::data_dir(), &new_cfg);
             i18n::set_lang(&new_cfg.user.language);
             cloud::configure(&new_cfg);
             let mut s = shared.lock().unwrap();
@@ -210,20 +214,33 @@ fn save_settings(
 
 // ── Signature ──────────────────────────────────────────────────────────────
 
-/// Import an HTML signature file (local images are embedded). Returns the HTML.
+/// Import an HTML signature file (local images are embedded). Returns its new file name
+/// (set on the account when Settings are saved) and its HTML.
 #[tauri::command]
-fn signature_import(path: String) -> Result<String, String> {
-    signature::import(std::path::Path::new(&path)).map_err(|e| format!("{:#}", e))
+fn signature_import(path: String) -> Result<(String, String), String> {
+    signature::import(std::path::Path::new(&path), &signature::data_dir()).map_err(|e| format!("{:#}", e))
 }
 
+/// The HTML of a signature file ("" when there is none).
 #[tauri::command]
-fn signature_get() -> String {
-    signature::load()
+fn signature_get(file: String) -> String {
+    signature::load(&signature::data_dir(), &file)
 }
 
+/// Each account's sender and signature, for the composer's "From" choice.
 #[tauri::command]
-fn signature_remove() -> Result<(), String> {
-    signature::remove().map_err(|e| format!("{:#}", e))
+fn compose_accounts(shared: State<'_, SharedState>) -> Vec<dto::ComposeAccountDto> {
+    let cfg = shared.lock().unwrap().cfg.clone();
+    let dir = signature::data_dir();
+    cfg.accounts.iter().map(|a| {
+        let from = a.smtp_for_sending(&cfg.user_name()).from_address;
+        dto::ComposeAccountDto {
+            from: if from.trim().is_empty() { a.name.clone() } else { from },
+            signature_html: signature::load(&dir, &a.signature.file),
+            signature_on_new: a.signature.on_new,
+            signature_on_reply: a.signature.on_reply,
+        }
+    }).collect()
 }
 
 // ── AI provider ────────────────────────────────────────────────────────────
@@ -248,6 +265,29 @@ async fn ai_list_models(provider: String, base_url: String, api_key: String) -> 
         .await
         .map_err(|e| format!("{:#}", e))
 }
+
+/// Settings → Accounts → Test: log in to the incoming server and open the folder.
+/// Returns the number of emails in it. Uses the values typed, not the saved ones.
+#[tauri::command]
+async fn account_test_imap(account: dto::AccountDto) -> Result<u32, dto::ConnError> {
+    let acc = settings::account_from_dto(&account);
+    match tokio::time::timeout(CONN_TEST_TIMEOUT, imap_client::check_connection(&acc.imap)).await {
+        Ok(r) => r.map_err(|e| dto::ConnError::from_error(&e)),
+        Err(_) => Err(dto::ConnError::timeout()),
+    }
+}
+
+/// Settings → Accounts → Test: connect and log in to the outgoing server (no email is sent).
+#[tauri::command]
+async fn account_test_smtp(account: dto::AccountDto) -> Result<(), dto::ConnError> {
+    let smtp = settings::account_from_dto(&account).smtp_for_sending("");
+    match tokio::time::timeout(CONN_TEST_TIMEOUT, smtp_sender::check_connection(&smtp)).await {
+        Ok(r) => r.map_err(|e| dto::ConnError::from_error(&e)),
+        Err(_) => Err(dto::ConnError::timeout()),
+    }
+}
+
+const CONN_TEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 
 /// Send a tiny request; returns the answer and how long it took.
 #[tauri::command]
@@ -507,6 +547,26 @@ async fn trash_email(uid: u32, shared: State<'_, SharedState>) -> Result<(), Str
     move_email(shared.inner(), uid, folder).await
 }
 
+/// "Not spam": move an email from the Spam/Junk folder back to the inbox.
+#[tauri::command]
+async fn not_spam_email(uid: u32, shared: State<'_, SharedState>) -> Result<(), String> {
+    let (cfg, spam_folder) = {
+        let s = shared.lock().unwrap();
+        (s.cfg.clone(), s.spam_folder.clone())
+    };
+    let account = cfg.accounts.first().ok_or("No accounts configured")?;
+    // move_message moves from the configured mailbox: point it at the spam folder.
+    let from_spam = config::ImapConfig { mailbox: spam_folder, ..account.imap.clone() };
+    imap_client::move_message(&from_spam, uid, &account.imap.mailbox)
+        .await
+        .map_err(|e| format!("{:#}", e))?;
+    // Spam UIDs have their own numbering: forget only the spam entry. The email comes
+    // back in the inbox at the next refresh.
+    let mut s = shared.lock().unwrap();
+    s.search_index.retain(|(f, e)| !(*f == search::Folder::Spam && e.uid == uid));
+    Ok(())
+}
+
 /// Move an inbox email to the Spam/Junk folder on the server.
 #[tauri::command]
 async fn spam_email(uid: u32, shared: State<'_, SharedState>) -> Result<(), String> {
@@ -621,13 +681,8 @@ async fn ai_compose(
 
 #[tauri::command]
 async fn search_gifs(query: String, shared: State<'_, SharedState>) -> Result<Vec<gifs::GifDto>, String> {
-    let key = shared.lock().unwrap().cfg.gifs.giphy_api_key.clone();
+    let key = shared.lock().unwrap().cfg.gifs.key().to_string();
     gifs::search(&key, &query).await.map_err(|e| format!("{:#}", e))
-}
-
-#[tauri::command]
-async fn fetch_gif(url: String) -> Result<String, String> {
-    gifs::fetch_as_data_uri(&url).await.map_err(|e| format!("{:#}", e))
 }
 
 // ── Task board ─────────────────────────────────────────────────────────────
@@ -674,13 +729,20 @@ fn main() {
     }
 
     // A broken config.toml must not stop the app from opening: start empty and show why.
-    let (cfg, config_error) = match Config::load() {
+    let (mut cfg, config_error) = match Config::load() {
         Ok(cfg) => (cfg, None),
         Err(e) => {
             tracing::error!("Could not load config.toml: {:#}", e);
             (Config::default(), Some(format!("{:#}", e)))
         }
     };
+    // The old single signature.html becomes the first account's signature.
+    if config_error.is_none() && signature::migrate_legacy(&signature::data_dir(), &mut cfg) {
+        match config::save_config(&cfg) {
+            Ok(()) => info!("Signature moved to the first account"),
+            Err(e) => tracing::warn!("Could not save the migrated signature: {:#}", e),
+        }
+    }
     i18n::set_lang(&cfg.user.language);
     cloud::configure(&cfg);
     let cfg = Arc::new(cfg);
@@ -691,7 +753,7 @@ fn main() {
         search_index: vec![],
         trash_folder: "Trash".into(),
         spam_folder: "Junk".into(),
-        sent_folder: "Sent".into(),
+        sent_folders: Vec::new(),
         startup_error: config_error,
     }));
 
@@ -711,14 +773,17 @@ fn main() {
             add_project,
             trash_email,
             spam_email,
+            not_spam_email,
             set_read,
             set_email_project,
             save_email,
             signature_import,
             signature_get,
-            signature_remove,
+            compose_accounts,
             ai_list_models,
             ai_test,
+            account_test_imap,
+            account_test_smtp,
             search_local,
             search_server,
             get_search_email,
@@ -731,7 +796,6 @@ fn main() {
             cloud_sync_now,
             search_gifs,
             ai_compose,
-            fetch_gif,
             dismiss_item,
             create_task,
             set_task_status,
