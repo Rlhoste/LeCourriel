@@ -1664,6 +1664,15 @@ max_tokens = 10
     }
 
     #[test]
+    fn test_auto_setup_smtp_ssl_only_on_465() {
+        use crate::auto_setup::usable_port;
+        // The sender speaks implicit TLS on 465 only, STARTTLS on any other port.
+        assert_eq!(usable_port("smtp", "SSL", "465"), Ok("465".to_string()));
+        assert_eq!(usable_port("smtp", "SSL", ""), Ok("465".to_string()));
+        assert_eq!(usable_port("smtp", "SSL", "25"), Err("port"));
+    }
+
+    #[test]
     fn test_auto_setup_placeholders() {
         use crate::auto_setup::parse_autoconfig;
         let xml = r#"<clientConfig version="1.1">

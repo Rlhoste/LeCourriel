@@ -162,8 +162,9 @@ fn server(e: &Entry, port: String, email: &str) -> ServerDto {
 }
 
 /// The port this app can use for an entry, or why it cannot: incoming mail only speaks
-/// implicit TLS (`imap_client.rs:21`), outgoing one of 465 SSL or 587 STARTTLS
-/// (`smtp_sender.rs:14`). Auto-scan uses it for the servers a profile holds too.
+/// implicit TLS (`imap_client::connect`), outgoing one of 465 SSL or 587 STARTTLS (the
+/// SMTP sender picks implicit TLS by port 465 alone). Auto-scan uses it for the servers a
+/// profile holds too.
 pub(crate) fn usable_port(kind: &str, socket: &str, port: &str) -> Result<String, &'static str> {
     let ssl = socket.eq_ignore_ascii_case("SSL");
     let starttls = socket.eq_ignore_ascii_case("STARTTLS");
@@ -175,7 +176,10 @@ pub(crate) fn usable_port(kind: &str, socket: &str, port: &str) -> Result<String
         return Err(if starttls { "starttls" } else { "plain" });
     }
     if ssl {
-        return Ok(if port.is_empty() { "465".into() } else { port.into() });
+        if port.is_empty() || port == "465" {
+            return Ok("465".into());
+        }
+        return Err("port");
     }
     if starttls {
         if port.is_empty() || port == "587" {

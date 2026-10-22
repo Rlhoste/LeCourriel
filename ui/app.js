@@ -2391,7 +2391,9 @@ function renderScanRows() {
     box.type = 'checkbox';
     // Everything usable starts ticked, except what no longer accepts a password.
     box.checked = was[i] === undefined ? (!a.pop3 && !!a.imap && providerHint(key) !== 'ms') : was[i];
-    if (a.pop3) {
+    // POP3, or an incoming server this app cannot reach: nothing a block could use.
+    if (a.pop3 || !a.imap) {
+      box.checked = false;
       box.disabled = true;
       row.classList.add('disabled');
     }
@@ -2404,14 +2406,11 @@ function renderScanRows() {
     client.className = 'setup-scan-client';
     client.textContent = a.client;
     main.append(name, client);
-    const problems = [];
-    if (a.pop3) problems.push(t('setup.scan.pop3'));
-    if (!a.imap && a.imap_issue) problems.push(t(`setup.imapIssue.${a.imap_issue}`));
-    if (!a.smtp && a.smtp_issue) problems.push(t(`setup.smtpIssue.${a.smtp_issue}`));
-    if (problems.length) {
+    const problems = (a.pop3 ? t('setup.scan.pop3') + ' ' : '') + issueLines(a);
+    if (problems.trim()) {
       const issue = document.createElement('p');
       issue.className = 'setup-scan-issue';
-      issue.textContent = problems.join(' ');
+      issue.textContent = problems.trim();
       main.append(issue);
     }
     const hint = document.createElement('p');
@@ -2437,7 +2436,7 @@ function setupScanAdd() {
     email: a.email,
     imap: a.imap,
     smtp: a.smtp,
-    pass: '',   // passwords are never imported
+    pass: '',   // a password never comes from the other app
   })));
   closeSetupDialog();
   renderAccountBlocks(settingsData.accounts);
@@ -2489,7 +2488,11 @@ function renderSetupArea(email) {
   use.classList.add('hidden');
   manual.classList.add('hidden');
   line.textContent = setupNote ? t(setupNote.key, setupNote.vars || {}) : '';
-  if (setupFound === undefined) return;
+  if (setupFound === undefined) {
+    // A failed lookup still leaves a way forward.
+    if (setupNote && setupNote.key === 'setup.failed') manual.classList.remove('hidden');
+    return;
+  }
   if (setupFound === null) {
     line.textContent = t('setup.notFound', { domain });
     manual.classList.remove('hidden');
@@ -2499,15 +2502,21 @@ function renderSetupArea(email) {
   const servers = [s.imap, s.smtp].filter(Boolean).map(v => `${v.host}:${v.port}`).join(' · ');
   line.textContent = servers ? t('setup.found', { provider: s.provider || domain, servers }) : '';
   source.textContent = t('setup.source', { host: s.source });
-  const problems = [];
-  if (!s.imap && s.imap_issue) problems.push(t(`setup.imapIssue.${s.imap_issue}`));
-  if (!s.smtp && s.smtp_issue) problems.push(t(`setup.smtpIssue.${s.smtp_issue}`));
-  issues.textContent = problems.join(' ');
+  issues.textContent = issueLines(s);
   manual.classList.remove('hidden');
   // A custom domain hosted by Google or Microsoft only shows who it is through its servers.
   const key = hintKey(email, s.imap ? s.imap.host : '');
   renderSetupHint(key);
   if ((s.imap || s.smtp) && providerHint(key) !== 'ms') use.classList.remove('hidden');
+}
+
+// Why one side of what was found is missing: the same sentences for Auto-setup and
+// Auto-scan.
+function issueLines(a) {
+  const problems = [];
+  if (!a.imap && a.imap_issue) problems.push(t(`setup.imapIssue.${a.imap_issue}`));
+  if (!a.smtp && a.smtp_issue) problems.push(t(`setup.smtpIssue.${a.smtp_issue}`));
+  return problems.join(' ');
 }
 
 // The AccountDto of a block whose servers are known already: what Auto-setup looked up and
