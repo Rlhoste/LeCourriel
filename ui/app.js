@@ -2238,7 +2238,10 @@ function setupSettings() {
   addPasswordToggles(document.getElementById('setup-overlay'));
   document.getElementById('setup-close').addEventListener('click', closeSetupDialog);
   document.getElementById('setup-next').addEventListener('click', setupNext);
-  document.getElementById('setup-email').addEventListener('input', e => renderSetupHint(e.target.value));
+  document.getElementById('setup-email').addEventListener('input', e => {
+    renderSetupHint(e.target.value);
+    document.getElementById('setup-result').classList.add('hidden');   // the result was for the old address
+  });
   document.getElementById('setup-use').addEventListener('click', () => setupAddAccount(true));
   document.getElementById('setup-manual').addEventListener('click', () => setupAddAccount(false));
   // Step 1: the accounts Auto-scan found in another mail app.
@@ -2456,7 +2459,8 @@ async function setupNext() {
   const next = document.getElementById('setup-next');
   renderSetupHint(email);
   setupFound = undefined;
-  if (!isEmail(email)) { setupNote = { key: 'setup.badEmail' }; renderSetupArea(email); return; }
+  // A domain without a dot ("o2game" instead of "o2game.com") cannot be looked up.
+  if (!isEmail(email) || !email.split('@').pop().includes('.')) { setupNote = { key: 'setup.badEmail' }; renderSetupArea(email); return; }
   setupNote = { key: 'setup.looking' };
   renderSetupArea(email);
   next.disabled = true;
