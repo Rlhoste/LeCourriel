@@ -1982,6 +1982,247 @@ Version=2
         assert_eq!(all[2].client, "Betterbird");
     }
 
+    // ── Auto-scan: classic Outlook (registry) ─────────────────────────────────
+
+    /// A REG_BINARY value as `reg query` writes it: UTF-16LE, NUL-terminated, one hex line.
+    fn reg_u16(text: &str) -> String {
+        text.encode_utf16()
+            .chain(std::iter::once(0))
+            .map(|u| format!("{:02x}{:02x}", u & 0xff, u >> 8))
+            .collect()
+    }
+
+    /// One key of a `reg query … /s` output: its path, then its values.
+    fn reg_block(path: &str, values: &[(&str, &str, &str)]) -> String {
+        let mut out = format!("\n{path}\n");
+        for (name, kind, data) in values {
+            out.push_str(&format!("    {name}    {kind}    {data}\n"));
+        }
+        out
+    }
+
+    // One Outlook profile, three accounts: an IMAP one, a POP3 one and an Exchange one.
+    fn outlook_reg() -> String {
+        let base = r"HKEY_CURRENT_USER\Software\Microsoft\Office\16.0\Outlook\Profiles\Outlook\9375CFF0413111d3B88A00104B2A6676";
+        let b = reg_u16;
+        let mut out = String::new();
+        out.push_str(&reg_block(&format!(r"{base}\00000001"), &[
+            ("Account Name", "REG_BINARY", &b("john.doe@example.com")),
+            ("Display Name", "REG_BINARY", &b("John Doe")),
+            ("Email", "REG_BINARY", &b("john.doe@example.com")),
+            ("IMAP Server", "REG_BINARY", &b("imap.example.com")),
+            ("IMAP User", "REG_BINARY", &b("john.doe@example.com")),
+            ("IMAP Port", "REG_DWORD", "0x3e1"),
+            ("IMAP Use SSL", "REG_DWORD", "0x1"),
+            ("SMTP Server", "REG_BINARY", &b("smtp.example.com")),
+            ("SMTP User", "REG_BINARY", &b("john.doe@example.com")),
+            ("SMTP Port", "REG_DWORD", "0x24b"),
+            ("SMTP Use SSL", "REG_DWORD", "0x0"),
+            ("SMTP Secure Connection", "REG_DWORD", "0x1"),
+            ("Service UID", "REG_BINARY", "c3d19a7b801bc44a960ae5b63bf97c7e"),
+        ]));
+        out.push_str(&reg_block(&format!(r"{base}\00000002"), &[
+            ("Account Name", "REG_BINARY", &b("john@contoso.com")),
+            ("Display Name", "REG_BINARY", &b("John Doe")),
+            ("Email", "REG_BINARY", &b("john@contoso.com")),
+            ("POP3 Server", "REG_BINARY", &b("pop3.contoso.com")),
+            ("POP3 User", "REG_BINARY", &b("john@contoso.com")),
+            ("POP3 Password", "REG_BINARY", "01000000d08c9ddf0115d1118c7a00c04fc297eb"),
+            ("POP3 Port", "REG_DWORD", "0x3e3"),
+            ("POP3 Use SSL", "REG_DWORD", "0x1"),
+            ("SMTP Server", "REG_BINARY", &b("smtp.contoso.com")),
+            ("SMTP Port", "REG_DWORD", "0x1d1"),
+            ("SMTP Use SSL", "REG_DWORD", "0x1"),
+        ]));
+        out.push_str(&reg_block(&format!(r"{base}\00000003"), &[
+            ("Account Name", "REG_BINARY", &b("john@contoso.com")),
+            ("Display Name", "REG_BINARY", &b("John Doe")),
+            ("Email", "REG_BINARY", &b("john@contoso.com")),
+            ("Mdb Name", "REG_BINARY", &b("Mailbox On Contoso")),
+            ("Microsoft Exchange Server", "REG_BINARY", &b("mail.contoso.com")),
+        ]));
+        out.push_str("\nEnd of search: 3 different entries found.\n");
+        out
+    }
+
+    #[test]
+    fn test_auto_scan_outlook_reg_imap_pop3_and_exchange() {
+        use crate::auto_scan::parse_outlook_reg;
+        let found = parse_outlook_reg(&outlook_reg());
+        let emails: Vec<&str> = found.iter().map(|a| a.email.as_str()).collect();
+        // The Exchange account writes no IMAP server: this app could not use it.
+        assert_eq!(emails, vec!["john.doe@example.com", "john@contoso.com"]);
+
+        let a = &found[0];
+        assert_eq!((a.client.as_str(), a.label.as_str(), a.name.as_str()), ("Outlook", "john.doe@example.com", "John Doe"));
+        assert!(!a.pop3);
+        assert_eq!(srv(a.imap.as_ref()), ("imap.example.com", "993", "john.doe@example.com"));
+        assert_eq!(srv(a.smtp.as_ref()), ("smtp.example.com", "587", "john.doe@example.com"));
+        assert_eq!((a.imap_issue.as_str(), a.smtp_issue.as_str()), ("", ""));
+
+        let b = &found[1];
+        assert!(b.pop3, "a POP3 server is shown, but cannot be added");
+        assert!(b.imap.is_none());
+        assert_eq!(b.imap_issue, "", "the reason is that it is POP3, not its security");
+        assert_eq!(srv(b.smtp.as_ref()), ("smtp.contoso.com", "465", "john@contoso.com"), "no SMTP User: the address");
+    }
+
+    #[test]
+    fn test_auto_scan_outlook_reg_security_and_spellings() {
+        use crate::auto_scan::parse_outlook_reg;
+        let one = |reg: String| {
+            parse_outlook_reg(&reg).into_iter().find(|a| a.email == "john.doe@example.com").unwrap()
+        };
+        // Incoming mail only speaks implicit TLS: an account without SSL has nothing to offer.
+        let a = one(outlook_reg().replace("    IMAP Use SSL    REG_DWORD    0x1", "    IMAP Use SSL    REG_DWORD    0x0"));
+        assert!(a.imap.is_none());
+        assert_eq!(a.imap_issue, "plain");
+        assert_eq!(srv(a.smtp.as_ref()), ("smtp.example.com", "587", "john.doe@example.com"), "the other side is untouched");
+        // An IMAP account with SSL and no port written: the usual one.
+        let a = one(outlook_reg().replace("    IMAP Port    REG_DWORD    0x3e1\n", ""));
+        assert_eq!(srv(a.imap.as_ref()), ("imap.example.com", "993", "john.doe@example.com"));
+        // A string written as REG_SZ instead of a UTF-16 REG_BINARY is read as well,
+        // and a value name is matched whatever its capitals.
+        let a = one(outlook_reg()
+            .replace(&format!("    IMAP Server    REG_BINARY    {}\n", reg_u16("imap.example.com")), "    IMAP Server    REG_SZ    imap.example.com\n")
+            .replace("    Email    REG_BINARY", "    email    REG_BINARY"));
+        assert_eq!(srv(a.imap.as_ref()), ("imap.example.com", "993", "john.doe@example.com"));
+        // Nothing at all, or an output that names no key: nothing found.
+        assert!(parse_outlook_reg("").is_empty());
+        assert!(parse_outlook_reg("End of search: 0 different entries found.\n").is_empty());
+    }
+
+    // ── Auto-scan: Evolution (source keyfiles) ────────────────────────────────
+
+    // The three files of one Evolution account: itself, its identity, its transport.
+    const EVO_ACCOUNT: &str = r#"[Autoconfig]
+Revision=005
+
+[Data Source]
+DisplayName=Company Account
+Enabled=true
+Parent=
+
+[Authentication]
+Host=imap.example.com
+Method=plain/password
+Port=993
+RememberPassword=true
+User=me@example.com
+CredentialName=
+
+[Mail Account]
+BackendName=imapx
+IdentityUid=0-ac-002
+ArchiveFolder=folder://0-ac-001/INBOX/Archive
+
+[Security]
+Method=ssl-on-alternate-port
+"#;
+
+    const EVO_IDENTITY: &str = r#"[Data Source]
+DisplayName=Company Account
+Enabled=true
+Parent=0-ac-001
+
+[Mail Identity]
+Address=me@example.com
+Name=John Doe
+Organization=
+ReplyTo=
+
+[Mail Submission]
+TransportUid=0-ac-003
+RepliesToOriginFolder=false
+"#;
+
+    const EVO_TRANSPORT: &str = r#"[Data Source]
+DisplayName=smtp.example.com
+Enabled=true
+Parent=0-ac-001
+
+[Mail Transport]
+BackendName=smtp
+
+[Authentication]
+Host=smtp.example.com
+Method=plain/password
+Port=465
+User=me@example.com
+
+[Security]
+Method=ssl-on-alternate-port
+"#;
+
+    fn evo_files() -> Vec<(String, String)> {
+        vec![
+            ("0-ac-001".to_string(), EVO_ACCOUNT.to_string()),
+            ("0-ac-002".to_string(), EVO_IDENTITY.to_string()),
+            ("0-ac-003".to_string(), EVO_TRANSPORT.to_string()),
+            // Local Folders: a mail account, but one with no server at all.
+            ("0-ac-004".to_string(), "[Data Source]\nDisplayName=On This Computer\nParent=\n\n[Mail Account]\nBackendName=maildir\n".to_string()),
+        ]
+    }
+
+    #[test]
+    fn test_auto_scan_evolution_triplet() {
+        use crate::auto_scan::parse_evolution;
+        let found = parse_evolution(&evo_files());
+        assert_eq!(found.len(), 1, "{found:?}");
+        let a = &found[0];
+        assert_eq!((a.client.as_str(), a.label.as_str(), a.name.as_str(), a.email.as_str()),
+            ("Evolution", "Company Account", "John Doe", "me@example.com"));
+        assert!(!a.pop3);
+        assert!(!a.oauth, "plain/password is an ordinary password");
+        assert_eq!(srv(a.imap.as_ref()), ("imap.example.com", "993", "me@example.com"));
+        assert_eq!(srv(a.smtp.as_ref()), ("smtp.example.com", "465", "me@example.com"));
+        assert_eq!((a.imap_issue.as_str(), a.smtp_issue.as_str()), ("", ""));
+        // An account whose identity file is not there has no address, so it is no account.
+        assert!(parse_evolution(&evo_files()[..1]).is_empty());
+        assert!(parse_evolution(&[]).is_empty());
+    }
+
+    #[test]
+    fn test_auto_scan_evolution_starttls_pop_and_oauth() {
+        use crate::auto_scan::parse_evolution;
+        let one = |account: String| {
+            parse_evolution(&[
+                ("0-ac-001".to_string(), account),
+                ("0-ac-002".to_string(), EVO_IDENTITY.to_string()),
+                ("0-ac-003".to_string(), EVO_TRANSPORT.to_string()),
+            ])
+            .into_iter().next().unwrap()
+        };
+        // STARTTLS on 143: incoming mail only speaks implicit TLS.
+        let a = one(EVO_ACCOUNT
+            .replace("Method=ssl-on-alternate-port", "Method=starttls-on-standard-port")
+            .replace("Port=993", "Port=143"));
+        assert!(a.imap.is_none());
+        assert_eq!(a.imap_issue, "starttls");
+        assert_eq!(srv(a.smtp.as_ref()), ("smtp.example.com", "465", "me@example.com"), "the other side is untouched");
+        assert_eq!(one(EVO_ACCOUNT.replace("Method=ssl-on-alternate-port", "Method=none")).imap_issue, "plain");
+        // Outgoing: STARTTLS on 587 is one of the two ways this app can send.
+        let mut files = evo_files();
+        files[2] = ("0-ac-003".to_string(), EVO_TRANSPORT
+            .replace("Method=ssl-on-alternate-port", "Method=starttls-on-standard-port")
+            .replace("Port=465", "Port=587"));
+        let a = parse_evolution(&files).remove(0);
+        assert_eq!(srv(a.smtp.as_ref()), ("smtp.example.com", "587", "me@example.com"));
+        // A POP3 account is shown but cannot be added, a token login is told.
+        let a = one(EVO_ACCOUNT.replace("BackendName=imapx", "BackendName=pop"));
+        assert!(a.pop3);
+        assert!(a.imap.is_none());
+        assert!(one(EVO_ACCOUNT.replace("Method=plain/password", "Method=oauth2-with-plain")).oauth);
+        // An account with no transport of its own still comes as an incoming one.
+        let a = parse_evolution(&[
+            ("0-ac-001".to_string(), EVO_ACCOUNT.to_string()),
+            ("0-ac-002".to_string(), EVO_IDENTITY.replace("TransportUid=0-ac-003", "TransportUid="),),
+        ])[0].clone();
+        assert!(a.smtp.is_none());
+        assert_eq!(a.smtp_issue, "");
+        assert_eq!(srv(a.imap.as_ref()), ("imap.example.com", "993", "me@example.com"));
+    }
+
     /// Auto-scan against the mail apps on this computer.
     /// Run with: cargo test test_auto_scan_live -- --ignored --nocapture
     #[test]
@@ -1995,3 +2236,4 @@ Version=2
         }
     }
 }
+

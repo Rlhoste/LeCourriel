@@ -186,7 +186,7 @@ pub struct MailSetupDto {
 /// A password is never part of it.
 #[derive(Serialize, Clone, Debug, Default, PartialEq)]
 pub struct FoundAccountDto {
-    /// Which app holds it: "Thunderbird" or "Betterbird".
+    /// Which app holds it: "Thunderbird", "Betterbird", "Outlook" or "Evolution".
     pub client: String,
     /// The name the account has there, or its address.
     pub label: String,
