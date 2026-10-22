@@ -753,6 +753,21 @@ button.row-mark:hover::before { transform: scale(1.2); }
 .setup-link { color: var(--link); cursor: pointer; text-decoration: underline; }
 .setup-result.hidden, .setup-hint.hidden, #setup-use.hidden, #setup-manual.hidden { display: none; }
 
+/* ── Account Setup Dialog, step 1 (Auto-scan) ──────────────────────────────── */
+.setup-scan { display: flex; flex-direction: column; gap: 6px; }
+/* Step 2 keeps the spacing the dialog gives its fields, now that they sit in a step. */
+#setup-form { display: flex; flex-direction: column; gap: 10px; }
+.setup-scan.hidden, #setup-form.hidden { display: none; }
+.setup-scan-list { display: flex; flex-direction: column; gap: 4px; max-height: 45vh; overflow-y: auto; }
+.setup-scan-row { display: flex; gap: 8px; align-items: flex-start; border: var(--border-w) solid var(--border); border-radius: var(--radius-sm); padding: 6px 8px; cursor: pointer; }
+.setup-scan-row.disabled { opacity: 0.55; cursor: default; }
+.setup-scan-row input[type="checkbox"] { margin-top: 3px; flex: none; }
+.setup-scan-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.setup-scan-name { overflow-wrap: anywhere; }
+.setup-scan-client { font-size: 0.75rem; color: var(--text-dim); }
+.setup-scan-issue { font-size: 0.8rem; color: var(--urgent); }
+.setup-scan .settings-note { margin-top: 0; }
+
 /* ── Settings Tabs ─────────────────────────────────────────────────────────── */
 .tabs { display: flex; gap: 4px; border-bottom: var(--border-w) solid var(--border); padding-bottom: 8px; }
 .tab {

@@ -146,4 +146,8 @@ STRINGS.zh = {
     "setup.hint.gmail": "Gmail 需要应用专用密码，而不是您的 Google 账户密码。",
     "setup.hint.gmailLink": "Google 应用专用密码页面",
     "setup.hint.ms": "Outlook.com、Hotmail、Live 和 MSN 已不再接受密码：暂不支持。",
+    "setup.scan.note": "在此电脑上找到的账户：",
+    "setup.scan.add": "添加所选账户",
+    "setup.scan.skip": "跳过",
+    "setup.scan.pop3": "POP3，不受支持",
 };

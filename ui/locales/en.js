@@ -155,4 +155,8 @@ STRINGS.en = {
     "setup.hint.gmail": "Gmail needs an app password, not the password of your Google account.",
     "setup.hint.gmailLink": "Google app passwords page",
     "setup.hint.ms": "Outlook.com, Hotmail, Live and MSN no longer accept a password: not supported yet.",
+    "setup.scan.note": "Accounts found on this computer:",
+    "setup.scan.add": "Add selected",
+    "setup.scan.skip": "Skip",
+    "setup.scan.pop3": "POP3, not supported",
 };

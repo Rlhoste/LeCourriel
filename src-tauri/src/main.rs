@@ -26,6 +26,7 @@ mod ai_assistant;
 mod ai_classifier;
 mod ai_writer;
 mod app_state;
+mod auto_scan;
 mod auto_setup;
 #[cfg(test)]
 mod tests;
@@ -295,6 +296,14 @@ const CONN_TEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20
 #[tauri::command]
 async fn lookup_mail_settings(email: String) -> Result<Option<dto::MailSetupDto>, String> {
     auto_setup::lookup(&email).await.map_err(|e| format!("{:#}", e))
+}
+
+/// Account setup → Auto-scan: the accounts Thunderbird or Betterbird holds on this
+/// computer, with their server settings. Never a password; no app installed means nothing
+/// found rather than an error.
+#[tauri::command]
+fn scan_mail_clients() -> Vec<dto::FoundAccountDto> {
+    auto_scan::scan()
 }
 
 /// Send a tiny request; returns the answer and how long it took.
@@ -793,6 +802,7 @@ fn main() {
             account_test_imap,
             account_test_smtp,
             lookup_mail_settings,
+            scan_mail_clients,
             search_local,
             search_server,
             get_search_email,

@@ -146,4 +146,8 @@ STRINGS.ja = {
     "setup.hint.gmail": "Gmail では Google アカウントのパスワードではなくアプリパスワードが必要です。",
     "setup.hint.gmailLink": "Google のアプリパスワードページ",
     "setup.hint.ms": "Outlook.com、Hotmail、Live、MSN はパスワードを受け付けなくなったため、まだ対応していません。",
+    "setup.scan.note": "このコンピューターで見つかったアカウント:",
+    "setup.scan.add": "選択したものを追加",
+    "setup.scan.skip": "スキップ",
+    "setup.scan.pop3": "POP3 は未対応",
 };

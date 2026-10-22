@@ -146,4 +146,8 @@ STRINGS.de = {
     "setup.hint.gmail": "Gmail braucht ein App-Passwort, nicht das Passwort deines Google-Kontos.",
     "setup.hint.gmailLink": "Google-App-Passwörter",
     "setup.hint.ms": "Outlook.com, Hotmail, Live und MSN akzeptieren kein Passwort mehr: noch nicht unterstützt.",
+    "setup.scan.note": "Auf diesem Computer gefundene Konten:",
+    "setup.scan.add": "Auswahl hinzufügen",
+    "setup.scan.skip": "Überspringen",
+    "setup.scan.pop3": "POP3, nicht unterstützt",
 };

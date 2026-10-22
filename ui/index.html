@@ -453,6 +453,17 @@
       <span data-i18n="setup.title">Add an account</span>
       <button class="close-btn" id="setup-close">✕</button>
     </div>
+    <!-- Step 1 (Auto-scan): only there when another mail app holds accounts. -->
+    <div id="setup-scan" class="setup-scan hidden">
+      <p class="settings-note" data-i18n="setup.scan.note">Accounts found on this computer:</p>
+      <div id="setup-scan-list" class="setup-scan-list"></div>
+      <div class="dialog-actions">
+        <button id="setup-scan-add" class="primary-btn" data-i18n="setup.scan.add">Add selected</button>
+        <button id="setup-scan-skip" class="secondary-btn" data-i18n="setup.scan.skip">Skip</button>
+      </div>
+    </div>
+    <!-- Step 2 (Auto-setup): what to do when nothing was found or the user skipped it. -->
+    <div id="setup-form">
     <label data-i18n="setup.name">Your name</label>
     <input type="text" id="setup-name" dir="auto" autocomplete="name"
            placeholder="First Last" data-i18n-placeholder="set.yourNamePh" />
@@ -473,6 +484,7 @@
         <button id="setup-use" class="primary-btn hidden" data-i18n="setup.use">Use these</button>
         <button id="setup-manual" class="secondary-btn hidden" data-i18n="setup.manual">Enter manually</button>
       </div>
+    </div>
     </div>
   </div>
 </div>

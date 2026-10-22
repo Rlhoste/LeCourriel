@@ -146,4 +146,8 @@ STRINGS.es = {
     "setup.hint.gmail": "Gmail necesita una contraseña de aplicación, no la contraseña de tu cuenta de Google.",
     "setup.hint.gmailLink": "página de contraseñas de aplicación de Google",
     "setup.hint.ms": "Outlook.com, Hotmail, Live y MSN ya no aceptan contraseñas: todavía no son compatibles.",
+    "setup.scan.note": "Cuentas encontradas en este equipo:",
+    "setup.scan.add": "Añadir las seleccionadas",
+    "setup.scan.skip": "Omitir",
+    "setup.scan.pop3": "POP3, no admitido",
 };

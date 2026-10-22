@@ -1764,4 +1764,234 @@ max_tokens = 10
         assert!(lookup("").await.unwrap().is_none());
         assert!(lookup("not-an-address").await.unwrap().is_none());
     }
+
+    // ── Auto-scan ─────────────────────────────────────────────────────────────
+
+    // A real Thunderbird profile: two IMAP accounts, one POP3 account, Local Folders and
+    // one SMTP server shared by the three of them.
+    const TB_PREFS: &str = r#"user_pref("mail.accountmanager.accounts", "account1,account2,account3");
+user_pref("mail.accountmanager.defaultaccount", "account1");
+user_pref("mail.accountmanager.localfoldersserver", "server4");
+user_pref("mail.account.account1.identities", "id1");
+user_pref("mail.account.account1.server", "server1");
+user_pref("mail.account.account2.identities", "id2");
+user_pref("mail.account.account2.server", "server2");
+user_pref("mail.account.account3.identities", "id3");
+user_pref("mail.account.account3.server", "server3");
+user_pref("mail.identity.id1.fullName", "John Doe");
+user_pref("mail.identity.id1.smtpServer", "smtp1");
+user_pref("mail.identity.id1.useremail", "john.doe@gmail.com");
+user_pref("mail.identity.id1.valid", true);
+user_pref("mail.identity.id2.fullName", "John Doe");
+user_pref("mail.identity.id2.smtpServer", "smtp1");
+user_pref("mail.identity.id2.useremail", "john@example.com");
+user_pref("mail.identity.id2.valid", true);
+user_pref("mail.identity.id3.fullName", "John Doe");
+user_pref("mail.identity.id3.smtpServer", "smtp1");
+user_pref("mail.identity.id3.useremail", "john.doe@alice.it");
+user_pref("mail.identity.id3.valid", true);
+user_pref("mail.root.imap-rel", "[ProfD]ImapMail");
+user_pref("mail.root.pop3-rel", "[ProfD]Mail");
+user_pref("mail.server.server1.authMethod", 10);
+user_pref("mail.server.server1.directory-rel", "[ProfD]ImapMail/imap.gmail.com");
+user_pref("mail.server.server1.hostname", "imap.gmail.com");
+user_pref("mail.server.server1.login_at_startup", true);
+user_pref("mail.server.server1.name", "john.doe@gmail.com");
+user_pref("mail.server.server1.port", 993);
+user_pref("mail.server.server1.socketType", 3);
+user_pref("mail.server.server1.type", "imap");
+user_pref("mail.server.server1.userName", "john.doe@gmail.com");
+user_pref("mail.server.server2.authMethod", 3);
+user_pref("mail.server.server2.hostname", "imap.example.com");
+user_pref("mail.server.server2.name", "john@example.com");
+user_pref("mail.server.server2.port", 993);
+user_pref("mail.server.server2.socketType", 3);
+user_pref("mail.server.server2.type", "imap");
+user_pref("mail.server.server2.userName", "john@example.com");
+user_pref("mail.server.server3.authMethod", 3);
+user_pref("mail.server.server3.hostname", "in.alice.it");
+user_pref("mail.server.server3.name", "john.doe@alice.it");
+user_pref("mail.server.server3.port", 995);
+user_pref("mail.server.server3.socketType", 3);
+user_pref("mail.server.server3.type", "pop3");
+user_pref("mail.server.server3.userName", "john.doe@alice.it");
+user_pref("mail.server.server4.directory-rel", "[ProfD]Mail/Local Folders");
+user_pref("mail.server.server4.hostname", "Local Folders");
+user_pref("mail.server.server4.name", "Local Folders");
+user_pref("mail.server.server4.type", "none");
+user_pref("mail.server.server4.userName", "nobody");
+user_pref("mail.smtp.defaultserver", "smtp1");
+user_pref("mail.smtpserver.smtp1.authMethod", 3);
+user_pref("mail.smtpserver.smtp1.description", "smtp.gmail.com");
+user_pref("mail.smtpserver.smtp1.hostname", "smtp.gmail.com");
+user_pref("mail.smtpserver.smtp1.port", 465);
+user_pref("mail.smtpserver.smtp1.try_ssl", 3);
+user_pref("mail.smtpserver.smtp1.username", "john.doe@gmail.com");
+user_pref("mail.smtpservers", "smtp1");"#;
+
+    #[test]
+    fn test_auto_scan_prefs_two_imap_and_one_pop3() {
+        use crate::auto_scan::parse_prefs;
+        let found = parse_prefs(TB_PREFS, "Thunderbird");
+        let emails: Vec<&str> = found.iter().map(|a| a.email.as_str()).collect();
+        // Local Folders (type "none") is not an account, the three others are.
+        assert_eq!(emails, vec!["john.doe@gmail.com", "john@example.com", "john.doe@alice.it"]);
+
+        let a = &found[0];
+        assert_eq!((a.client.as_str(), a.label.as_str(), a.name.as_str()), ("Thunderbird", "john.doe@gmail.com", "John Doe"));
+        assert!(!a.pop3);
+        assert!(a.oauth, "authMethod 10 is OAuth2");
+        assert_eq!(srv(a.imap.as_ref()), ("imap.gmail.com", "993", "john.doe@gmail.com"));
+        assert_eq!(srv(a.smtp.as_ref()), ("smtp.gmail.com", "465", "john.doe@gmail.com"));
+        assert_eq!((a.imap_issue.as_str(), a.smtp_issue.as_str()), ("", ""));
+
+        let b = &found[1];
+        assert!(!b.oauth, "authMethod 3 is an ordinary password");
+        assert_eq!(srv(b.imap.as_ref()), ("imap.example.com", "993", "john@example.com"));
+        // The profile's one shared SMTP server goes to both IMAP accounts.
+        assert_eq!(srv(b.smtp.as_ref()), ("smtp.gmail.com", "465", "john.doe@gmail.com"));
+
+        let c = &found[2];
+        assert!(c.pop3, "POP3 is shown, but cannot be added");
+        assert!(c.imap.is_none(), "a POP3 server brings no incoming settings");
+        assert_eq!(c.imap_issue, "", "the reason is that it is POP3, not its security");
+    }
+
+    #[test]
+    fn test_auto_scan_server_with_a_security_this_app_cannot_use() {
+        use crate::auto_scan::parse_prefs;
+        let found = |prefs: String| {
+            parse_prefs(&prefs, "Betterbird").into_iter().find(|a| a.email == "john@example.com").unwrap()
+        };
+        let imap_socket = r#"user_pref("mail.server.server2.socketType", 3);"#;
+
+        // Incoming mail only speaks implicit TLS: STARTTLS on 143 has nothing to offer.
+        let b = found(TB_PREFS.replace(imap_socket, r#"user_pref("mail.server.server2.socketType", 2);"#));
+        assert!(b.imap.is_none());
+        assert_eq!(b.imap_issue, "starttls");
+        assert_eq!(b.client, "Betterbird");
+        assert_eq!(srv(b.smtp.as_ref()), ("smtp.gmail.com", "465", "john.doe@gmail.com"), "the other side is untouched");
+        assert_eq!(found(TB_PREFS.replace(imap_socket, r#"user_pref("mail.server.server2.socketType", 0);"#)).imap_issue, "plain");
+        // An IMAP server with no port written is the usual one.
+        let b = found(TB_PREFS.replace("user_pref(\"mail.server.server2.port\", 993);\n", ""));
+        assert_eq!(srv(b.imap.as_ref()), ("imap.example.com", "993", "john@example.com"));
+
+        // Outgoing: STARTTLS on a port other than 587, no encryption, and the old value 1.
+        let out = |socket: &str, port: &str| found(TB_PREFS
+            .replace(r#"user_pref("mail.smtpserver.smtp1.try_ssl", 3);"#, &format!("user_pref(\"mail.smtpserver.smtp1.try_ssl\", {socket});"))
+            .replace(r#"user_pref("mail.smtpserver.smtp1.port", 465);"#, &format!("user_pref(\"mail.smtpserver.smtp1.port\", {port});")));
+        let refused = out("2", "25");
+        assert!(refused.smtp.is_none());
+        assert_eq!(refused.smtp_issue, "port");
+        assert_eq!(out("0", "25").smtp_issue, "plain");
+        assert_eq!(srv(out("1", "587").smtp.as_ref()), ("smtp.gmail.com", "587", "john.doe@gmail.com"), "1 = try STARTTLS");
+    }
+
+    #[test]
+    fn test_auto_scan_oauth() {
+        use crate::auto_scan::parse_prefs;
+        // The profile's outgoing server logs in with a token: a password will not send
+        // anything, so the account is offered with the provider's hint instead.
+        let found = parse_prefs(&TB_PREFS.replace(
+            r#"user_pref("mail.smtpserver.smtp1.authMethod", 3);"#,
+            r#"user_pref("mail.smtpserver.smtp1.authMethod", 10);"#), "Thunderbird");
+        assert!(found.iter().all(|a| a.oauth));
+        assert!(!parse_prefs(TB_PREFS, "Thunderbird")[1].oauth);
+    }
+
+    #[test]
+    fn test_auto_scan_accounts_without_an_address_or_a_useful_server() {
+        use crate::auto_scan::parse_prefs;
+        // An account whose identity has no address, and one whose server is a news group.
+        let prefs = TB_PREFS
+            .replace(r#"user_pref("mail.identity.id2.useremail", "john@example.com");"#, "")
+            .replace(r#"user_pref("mail.server.server1.type", "imap");"#, r#"user_pref("mail.server.server1.type", "nntp");"#);
+        let found = parse_prefs(&prefs, "Thunderbird");
+        let emails: Vec<&str> = found.iter().map(|a| a.email.as_str()).collect();
+        assert_eq!(emails, vec!["john.doe@alice.it"]);
+        // Nothing at all in the file, or a line that is not a pref: nothing found.
+        assert!(parse_prefs("", "Thunderbird").is_empty());
+        assert!(parse_prefs("user_pref(mail.identity.id1.useremail, john.doe@gmail.com);", "Thunderbird").is_empty());
+    }
+
+    #[test]
+    fn test_auto_scan_pref_values() {
+        use crate::auto_scan::parse_prefs;
+        // A name with a \u escape, an escaped quote and a backslash, as prefs.js writes them.
+        let prefs = TB_PREFS.replace(
+            r#"user_pref("mail.identity.id2.fullName", "John Doe");"#,
+            r#"user_pref("mail.identity.id2.fullName", "Jos\u00e9 \"Jo\" O:\\Mail");"#);
+        let a = parse_prefs(&prefs, "Thunderbird").into_iter().find(|a| a.email == "john@example.com").unwrap();
+        assert_eq!(a.name, "José \"Jo\" O:\\Mail");
+        // The lines after it are still read.
+        assert_eq!(srv(a.imap.as_ref()), ("imap.example.com", "993", "john@example.com"));
+    }
+
+    #[test]
+    fn test_auto_scan_profile_dirs() {
+        use crate::auto_scan::profile_dirs;
+        let abs = if cfg!(windows) { "D:/Mail/Profiles/wxyz9876.default" } else { "/srv/Mail/Profiles/wxyz9876.default" };
+        let ini = format!(r#"[InstallF70CDFEFA1B9B2DEC310184631102A00]
+Default=1
+IsRelative=1
+Path=Profiles/ignored.default-release
+
+[Profile0]
+Name=default-release
+IsRelative=1
+Path=Profiles/abcd1234.default-release
+Default=1
+
+[Profile1]
+Name=old
+IsRelative=0
+Path={abs}
+
+[General]
+StartWithLastProfile=1
+Version=2
+"#);
+        let base = std::path::Path::new(if cfg!(windows) { "C:/Users/Me/AppData/Roaming/Thunderbird" } else { "/home/me/.thunderbird" });
+        let dirs = profile_dirs(&ini, base);
+        // The [Install…] section points at the default profile again: not a second one.
+        assert_eq!(dirs.len(), 2, "{dirs:?}");
+        assert_eq!(dirs[0], base.join("Profiles").join("abcd1234.default-release"));
+        assert_eq!(dirs[1], std::path::PathBuf::from(abs));
+        // A file with no profile section, or no Path, gives nothing.
+        assert!(profile_dirs("[General]\nVersion=2\n", base).is_empty());
+        assert!(profile_dirs("", base).is_empty());
+    }
+
+    #[test]
+    fn test_auto_scan_dedupe_by_email() {
+        use crate::auto_scan::{dedupe, parse_prefs};
+        // The same profile seen twice (Betterbird reads Thunderbird's directory), the
+        // address written with other capitals, and alice.it as an IMAP account too.
+        let again = TB_PREFS
+            .replace("john@example.com", "JOHN@EXAMPLE.com")
+            .replace(r#"user_pref("mail.server.server3.type", "pop3");"#, r#"user_pref("mail.server.server3.type", "imap");"#)
+            .replace(r#"user_pref("mail.server.server3.hostname", "in.alice.it");"#, r#"user_pref("mail.server.server3.hostname", "imap.alice.it");"#)
+            .replace(r#"user_pref("mail.server.server3.port", 995);"#, r#"user_pref("mail.server.server3.port", 993);"#);
+        let all = dedupe([parse_prefs(TB_PREFS, "Thunderbird"), parse_prefs(&again, "Betterbird")].concat());
+        let emails: Vec<&str> = all.iter().map(|a| a.email.as_str()).collect();
+        assert_eq!(emails, vec!["john.doe@gmail.com", "john@example.com", "john.doe@alice.it"]);
+        assert_eq!(all[1].email, "john@example.com", "the first spelling wins");
+        // An IMAP entry beats the POP3 one for the same address.
+        assert!(!all[2].pop3);
+        assert_eq!(srv(all[2].imap.as_ref()), ("imap.alice.it", "993", "john.doe@alice.it"));
+        assert_eq!(all[2].client, "Betterbird");
+    }
+
+    /// Auto-scan against the mail apps on this computer.
+    /// Run with: cargo test test_auto_scan_live -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn test_auto_scan_live() {
+        use crate::auto_scan::scan;
+        let found = scan();
+        println!("{} account(s) found", found.len());
+        for a in &found {
+            println!("{} | {} | {} | pop3={} oauth={} imap={:?} ({}) smtp={:?} ({})", a.client, a.label, a.email, a.pop3, a.oauth, srv(a.imap.as_ref()), a.imap_issue, srv(a.smtp.as_ref()), a.smtp_issue);
+        }
+    }
 }

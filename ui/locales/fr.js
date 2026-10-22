@@ -146,4 +146,8 @@ STRINGS.fr = {
     "setup.hint.gmail": "Gmail demande un mot de passe d’application, et non le mot de passe de votre compte Google.",
     "setup.hint.gmailLink": "page des mots de passe d’application Google",
     "setup.hint.ms": "Outlook.com, Hotmail, Live et MSN n’acceptent plus de mot de passe : pas encore pris en charge.",
+    "setup.scan.note": "Comptes trouvés sur cet ordinateur :",
+    "setup.scan.add": "Ajouter la sélection",
+    "setup.scan.skip": "Passer",
+    "setup.scan.pop3": "POP3, non pris en charge",
 };

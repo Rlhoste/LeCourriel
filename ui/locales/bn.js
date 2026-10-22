@@ -146,4 +146,8 @@ STRINGS.bn = {
     "setup.hint.gmail": "Gmail-এ অ্যাপ পাসওয়ার্ড দরকার, আপনার Google অ্যাকাউন্টের পাসওয়ার্ড নয়।",
     "setup.hint.gmailLink": "Google অ্যাপ পাসওয়ার্ড পাতা",
     "setup.hint.ms": "Outlook.com, Hotmail, Live ও MSN এখন পাসওয়ার্ড গ্রহণ করে না: এখনও সমর্থিত নয়।",
+    "setup.scan.note": "এই কম্পিউটারে পাওয়া অ্যাকাউন্টগুলো:",
+    "setup.scan.add": "নির্বাচিতগুলো যোগ করুন",
+    "setup.scan.skip": "এড়িয়ে যান",
+    "setup.scan.pop3": "POP3, সমর্থিত নয়",
 };

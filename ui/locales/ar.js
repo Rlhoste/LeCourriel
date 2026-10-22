@@ -162,4 +162,8 @@ STRINGS.ar = {
     "setup.hint.gmail": "يحتاج Gmail إلى كلمة سر للتطبيقات وليس كلمة سر حساب Google.",
     "setup.hint.gmailLink": "صفحة كلمات سر تطبيقات Google",
     "setup.hint.ms": "لم تعد Outlook.com وHotmail وLive وMSN تقبل كلمة السر: غير مدعومة بعد.",
+    "setup.scan.note": "الحسابات الموجودة على هذا الكمبيوتر:",
+    "setup.scan.add": "إضافة المحددة",
+    "setup.scan.skip": "تخطي",
+    "setup.scan.pop3": "POP3 غير مدعوم",
 };

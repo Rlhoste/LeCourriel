@@ -146,4 +146,8 @@ STRINGS.pt = {
     "setup.hint.gmail": "O Gmail precisa de uma senha de app, e não da senha da sua Conta Google.",
     "setup.hint.gmailLink": "página de senhas de app do Google",
     "setup.hint.ms": "Outlook.com, Hotmail, Live e MSN não aceitam mais senha: ainda não são compatíveis.",
+    "setup.scan.note": "Contas encontradas neste computador:",
+    "setup.scan.add": "Adicionar as selecionadas",
+    "setup.scan.skip": "Ignorar",
+    "setup.scan.pop3": "POP3, não compatível",
 };

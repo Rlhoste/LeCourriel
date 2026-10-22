@@ -147,4 +147,8 @@ STRINGS.ur = {
     "setup.hint.gmail": "Gmail کو ایپ پاس ورڈ چاہیے، آپ کے Google اکاؤنٹ کا پاس ورڈ نہیں۔",
     "setup.hint.gmailLink": "Google ایپ پاس ورڈز کا صفحہ",
     "setup.hint.ms": "Outlook.com، Hotmail، Live اور MSN اب پاس ورڈ قبول نہیں کرتے: ابھی سپورٹڈ نہیں۔",
+    "setup.scan.note": "اس کمپیوٹر پر ملنے والے اکاؤنٹ:",
+    "setup.scan.add": "منتخب شامل کریں",
+    "setup.scan.skip": "چھوڑ دیں",
+    "setup.scan.pop3": "POP3، معاون نہیں",
 };

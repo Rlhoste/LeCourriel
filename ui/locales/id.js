@@ -146,4 +146,8 @@ STRINGS.id = {
     "setup.hint.gmail": "Gmail memerlukan kata sandi aplikasi, bukan kata sandi akun Google Anda.",
     "setup.hint.gmailLink": "halaman kata sandi aplikasi Google",
     "setup.hint.ms": "Outlook.com, Hotmail, Live, dan MSN tidak lagi menerima kata sandi: belum didukung.",
+    "setup.scan.note": "Akun yang ditemukan di komputer ini:",
+    "setup.scan.add": "Tambahkan yang dipilih",
+    "setup.scan.skip": "Lewati",
+    "setup.scan.pop3": "POP3, tidak didukung",
 };

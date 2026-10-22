@@ -180,6 +180,27 @@ pub struct MailSetupDto {
     pub smtp_issue: String,
 }
 
+/// One account Auto-scan found in another mail app, with the server settings this app can
+/// use. `imap_issue` and `smtp_issue` say why a side is empty, `pop3` that the account
+/// cannot be added at all, and `oauth` that its login is a token rather than a password.
+/// A password is never part of it.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+pub struct FoundAccountDto {
+    /// Which app holds it: "Thunderbird" or "Betterbird".
+    pub client: String,
+    /// The name the account has there, or its address.
+    pub label: String,
+    /// The sender's name.
+    pub name: String,
+    pub email: String,
+    pub pop3: bool,
+    pub imap: Option<ServerDto>,
+    pub smtp: Option<ServerDto>,
+    pub imap_issue: String,
+    pub smtp_issue: String,
+    pub oauth: bool,
+}
+
 /// Why a connection test failed: `kind` picks the sentence the UI shows (auth, host,
 /// refused, reset, tls, folder, timeout, other) and `detail` is the server's own message.
 #[derive(Serialize, Clone, Debug, PartialEq)]

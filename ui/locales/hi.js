@@ -146,4 +146,8 @@ STRINGS.hi = {
     "setup.hint.gmail": "Gmail को ऐप पासवर्ड चाहिए, आपके Google खाते का पासवर्ड नहीं।",
     "setup.hint.gmailLink": "Google ऐप पासवर्ड पृष्ठ",
     "setup.hint.ms": "Outlook.com, Hotmail, Live और MSN अब पासवर्ड स्वीकार नहीं करते: अभी समर्थित नहीं।",
+    "setup.scan.note": "इस कंप्यूटर पर मिले खाते:",
+    "setup.scan.add": "चुने गए खाते जोड़ें",
+    "setup.scan.skip": "छोड़ें",
+    "setup.scan.pop3": "POP3, समर्थित नहीं",
 };

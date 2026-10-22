@@ -1987,6 +1987,7 @@ function applyLanguage(code) {
   }
   if (!document.getElementById('setup-overlay').classList.contains('hidden')) {
     renderSetupHint(document.getElementById('setup-email').value);
+    if (!document.getElementById('setup-scan').classList.contains('hidden')) renderScanRows();
     if (!document.getElementById('setup-result').classList.contains('hidden')) {
       renderSetupArea(document.getElementById('setup-email').value);
     }
@@ -2240,9 +2241,14 @@ function setupSettings() {
   document.getElementById('setup-email').addEventListener('input', e => renderSetupHint(e.target.value));
   document.getElementById('setup-use').addEventListener('click', () => setupAddAccount(true));
   document.getElementById('setup-manual').addEventListener('click', () => setupAddAccount(false));
-  // Enter goes on with what was typed, as long as no result is shown yet.
+  // Step 1: the accounts Auto-scan found in another mail app.
+  document.getElementById('setup-scan-add').addEventListener('click', setupScanAdd);
+  document.getElementById('setup-scan-skip').addEventListener('click', setupScanSkip);
+  // Enter goes on with what was typed: it adds the ticked accounts on step 1.
   document.getElementById('setup-overlay').addEventListener('keydown', e => {
-    if (e.key === 'Enter' && document.getElementById('setup-result').classList.contains('hidden')) setupNext();
+    if (e.key !== 'Enter' || e.target.tagName === 'A') return;
+    if (!document.getElementById('setup-scan').classList.contains('hidden')) { setupScanAdd(); return; }
+    if (document.getElementById('setup-result').classList.contains('hidden')) setupNext();
   });
 
   document.getElementById('settings-save').addEventListener('click', saveSettings);
@@ -2281,14 +2287,14 @@ function providerHint(key) {
   return null;
 }
 
-// The note under the password field; Gmail's comes with a link to its own page.
-function renderSetupHint(key) {
-  const hint = document.getElementById('setup-hint');
+// The note a provider needs beyond a password, written into the element it is given:
+// Auto-setup's password field and every Auto-scan row have one of their own.
+function fillHint(el, key) {
   const kind = providerHint(key);
-  hint.innerHTML = '';
-  hint.classList.toggle('hidden', !kind);
+  el.innerHTML = '';
+  el.classList.toggle('hidden', !kind);
   if (!kind) return;
-  hint.textContent = t(kind === 'gmail' ? 'setup.hint.gmail' : 'setup.hint.ms');
+  el.textContent = t(kind === 'gmail' ? 'setup.hint.gmail' : 'setup.hint.ms');
   if (kind !== 'gmail') return;
   const link = document.createElement('a');
   link.className = 'setup-link';
@@ -2299,10 +2305,23 @@ function renderSetupHint(key) {
     e.preventDefault();
     window.__TAURI__.shell.open(GMAIL_APP_PASSWORDS_URL).catch(err => console.error('open app passwords page', err));
   });
-  hint.append(' ', link);
+  el.append(' ', link);
 }
 
-function openSetupDialog() {
+// What the hint is about: a custom domain hosted by Google or Microsoft only shows who it
+// is through its incoming server.
+function hintKey(email, host) {
+  return providerHint(email) ? email : (host || '');
+}
+
+// The note under the password field.
+function renderSetupHint(key) {
+  fillHint(document.getElementById('setup-hint'), key);
+}
+
+// Step 1 (Auto-scan) when another mail app holds an account this one does not have yet,
+// step 2 (Auto-setup) otherwise.
+async function openSetupDialog() {
   setupFound = undefined;
   setupNote = null;
   document.getElementById('setup-name').value = '';
@@ -2313,12 +2332,121 @@ function openSetupDialog() {
   document.getElementById('setup-next').disabled = false;
   document.getElementById('setup-result').classList.add('hidden');
   renderSetupHint('');
+  scanFound = await scanMailClients();
+  scanBoxes = [];
+  renderScanStep();
   document.getElementById('setup-overlay').classList.remove('hidden');
-  document.getElementById('setup-email').focus();
+  document.getElementById(scanFound.length ? 'setup-scan-add' : 'setup-email').focus();
 }
 
 function closeSetupDialog() {
   document.getElementById('setup-overlay').classList.add('hidden');
+}
+
+// ── Auto-scan ─────────────────────────────────────────────────────────────────
+
+let scanFound = [];   // the accounts the other mail apps hold, none of them in this app
+let scanBoxes = [];   // their checkboxes, in the same order
+
+// The accounts Auto-scan found, less the ones already set up here. A mail app that is not
+// installed gives nothing, so the dialog opens on Auto-setup as if none was found.
+async function scanMailClients() {
+  let found;
+  try {
+    found = await cmd('scan_mail_clients', {});
+  } catch (e) {
+    console.error('scan mail clients', e);
+    return [];
+  }
+  const known = new Set(collectAccounts()
+    .flatMap(a => [splitSender(a.smtp_from).email, a.imap_user])
+    .map(s => (s || '').trim().toLowerCase())
+    .filter(Boolean));
+  return (found || []).filter(a => !known.has((a.email || '').toLowerCase()));
+}
+
+// Which step to show: the list only when it has something to show.
+function renderScanStep() {
+  const found = !!scanFound.length;
+  document.getElementById('setup-scan').classList.toggle('hidden', !found);
+  document.getElementById('setup-form').classList.toggle('hidden', found);
+  if (found) renderScanRows();
+}
+
+// One row per account: its name and address, the app it was found in, what it needs and
+// what it cannot do. Ticking is kept when the labels are redrawn in another language.
+function renderScanRows() {
+  const was = scanBoxes.map(b => b.checked);
+  const list = document.getElementById('setup-scan-list');
+  list.innerHTML = '';
+  scanBoxes = [];
+  scanFound.forEach((a, i) => {
+    const key = hintKey(a.email, a.imap ? a.imap.host : '');
+    const row = document.createElement('label');
+    row.className = 'setup-scan-row';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    // Everything usable starts ticked, except what no longer accepts a password.
+    box.checked = was[i] === undefined ? (!a.pop3 && !!a.imap && providerHint(key) !== 'ms') : was[i];
+    if (a.pop3) {
+      box.disabled = true;
+      row.classList.add('disabled');
+    }
+    const main = document.createElement('span');
+    main.className = 'setup-scan-main';
+    const name = document.createElement('span');
+    name.className = 'setup-scan-name';
+    name.textContent = `${a.label} \u2014 ${a.email}`;
+    const client = document.createElement('span');
+    client.className = 'setup-scan-client';
+    client.textContent = a.client;
+    main.append(name, client);
+    const problems = [];
+    if (a.pop3) problems.push(t('setup.scan.pop3'));
+    if (!a.imap && a.imap_issue) problems.push(t(`setup.imapIssue.${a.imap_issue}`));
+    if (!a.smtp && a.smtp_issue) problems.push(t(`setup.smtpIssue.${a.smtp_issue}`));
+    if (problems.length) {
+      const issue = document.createElement('p');
+      issue.className = 'setup-scan-issue';
+      issue.textContent = problems.join(' ');
+      main.append(issue);
+    }
+    const hint = document.createElement('p');
+    hint.className = 'settings-note setup-hint';
+    fillHint(hint, key);
+    main.append(hint);
+    row.append(box, main);
+    list.append(row);
+    scanBoxes.push(box);
+  });
+}
+
+// Add selected: one filled block each, without any password. Nothing is saved: the user
+// still presses Save. Nothing ticked goes on to Auto-setup, like Skip.
+function setupScanAdd() {
+  const picked = scanFound.filter((a, i) => scanBoxes[i] && scanBoxes[i].checked);
+  if (!picked.length) { setupScanSkip(); return; }
+  settingsData.accounts = collectAccounts();   // keep what was typed in the other blocks
+  const first = settingsData.accounts.length;
+  picked.forEach(a => settingsData.accounts.push(accountFromServers({
+    label: a.label,
+    name: (a.name || '').replace(/["<>]/g, ''),
+    email: a.email,
+    imap: a.imap,
+    smtp: a.smtp,
+    pass: '',   // passwords are never imported
+  })));
+  closeSetupDialog();
+  renderAccountBlocks(settingsData.accounts);
+  const block = document.querySelectorAll('.account-block')[first];
+  if (block) block.querySelector('.a-imap-pass').focus();   // the one thing still missing
+}
+
+// Skip: on to Auto-setup.
+function setupScanSkip() {
+  document.getElementById('setup-scan').classList.add('hidden');
+  document.getElementById('setup-form').classList.remove('hidden');
+  document.getElementById('setup-email').focus();
 }
 
 // Next: only the domain of the address goes to the backend, which tries its sources
@@ -2373,9 +2501,26 @@ function renderSetupArea(email) {
   issues.textContent = problems.join(' ');
   manual.classList.remove('hidden');
   // A custom domain hosted by Google or Microsoft only shows who it is through its servers.
-  const hintKey = providerHint(email) ? email : (s.imap ? s.imap.host : '');
-  renderSetupHint(hintKey);
-  if ((s.imap || s.smtp) && providerHint(hintKey) !== 'ms') use.classList.remove('hidden');
+  const key = hintKey(email, s.imap ? s.imap.host : '');
+  renderSetupHint(key);
+  if ((s.imap || s.smtp) && providerHint(key) !== 'ms') use.classList.remove('hidden');
+}
+
+// The AccountDto of a block whose servers are known already: what Auto-setup looked up and
+// what Auto-scan read from a profile are the same three values. No block is ever filled
+// with a password it did not get from the user.
+function accountFromServers({ label, name, email, imap, smtp, pass }) {
+  const field = (side, f) => (side ? side[f] : '');
+  return {
+    label: label || email,
+    imap_host: field(imap, 'host'), imap_port: field(imap, 'port'),
+    imap_user: imap ? imap.user : email, imap_pass: pass,
+    imap_mailbox: '', imap_fetch: '',
+    smtp_host: field(smtp, 'host'), smtp_port: field(smtp, 'port'),
+    smtp_user: smtp ? smtp.user : email, smtp_pass: pass,
+    smtp_from: name ? `"${name}" <${email}>` : email,
+    signature_file: '', signature_on_new: true, signature_on_reply: true,
+  };
 }
 
 // The usual account block, filled with what is known, then the usual Test. Nothing is
@@ -2385,18 +2530,11 @@ function setupAddAccount(withSettings) {
   const email = document.getElementById('setup-email').value.trim();
   const pass = document.getElementById('setup-pass').value;
   const s = withSettings ? setupFound : null;
-  const srv = side => (s && s[side]) ? s[side] : null;
   settingsData.accounts = collectAccounts();   // keep what was typed in the other blocks
-  settingsData.accounts.push({
-    label: email,
-    imap_host: srv('imap') ? srv('imap').host : '', imap_port: srv('imap') ? srv('imap').port : '',
-    imap_user: srv('imap') ? srv('imap').user : email, imap_pass: pass,
-    imap_mailbox: '', imap_fetch: '',
-    smtp_host: srv('smtp') ? srv('smtp').host : '', smtp_port: srv('smtp') ? srv('smtp').port : '',
-    smtp_user: srv('smtp') ? srv('smtp').user : email, smtp_pass: pass,
-    smtp_from: name ? `"${name}" <${email}>` : email,
-    signature_file: '', signature_on_new: true, signature_on_reply: true,
-  });
+  settingsData.accounts.push(accountFromServers({
+    label: email, name, email,
+    imap: s ? s.imap : null, smtp: s ? s.smtp : null, pass,
+  }));
   closeSetupDialog();
   renderAccountBlocks(settingsData.accounts);
   const blocks = document.querySelectorAll('.account-block');

@@ -156,4 +156,8 @@ STRINGS.ru = {
     "setup.hint.gmail": "Gmail требует пароль приложения, а не пароль аккаунта Google.",
     "setup.hint.gmailLink": "страница паролей приложений Google",
     "setup.hint.ms": "Outlook.com, Hotmail, Live и MSN больше не принимают пароли: поддержка пока не добавлена.",
+    "setup.scan.note": "Аккаунты, найденные на этом компьютере:",
+    "setup.scan.add": "Добавить выбранные",
+    "setup.scan.skip": "Пропустить",
+    "setup.scan.pop3": "POP3 не поддерживается",
 };
