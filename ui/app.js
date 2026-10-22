@@ -2237,7 +2237,10 @@ function setupSettings() {
   addPasswordToggles(document.getElementById('setup-overlay'));
   document.getElementById('setup-close').addEventListener('click', closeSetupDialog);
   document.getElementById('setup-next').addEventListener('click', setupNext);
-  document.getElementById('setup-email').addEventListener('input', e => renderSetupHint(e.target.value));
+  document.getElementById('setup-email').addEventListener('input', e => {
+    renderSetupHint(e.target.value);
+    document.getElementById('setup-result').classList.add('hidden');   // the result was for the old address
+  });
   document.getElementById('setup-use').addEventListener('click', () => setupAddAccount(true));
   document.getElementById('setup-manual').addEventListener('click', () => setupAddAccount(false));
   // Enter goes on with what was typed, as long as no result is shown yet.
