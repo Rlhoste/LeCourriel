@@ -2328,7 +2328,8 @@ async function setupNext() {
   const next = document.getElementById('setup-next');
   renderSetupHint(email);
   setupFound = undefined;
-  if (!isEmail(email)) { setupNote = { key: 'setup.badEmail' }; renderSetupArea(email); return; }
+  // A domain without a dot ("o2game" instead of "o2game.com") cannot be looked up.
+  if (!isEmail(email) || !email.split('@').pop().includes('.')) { setupNote = { key: 'setup.badEmail' }; renderSetupArea(email); return; }
   setupNote = { key: 'setup.looking' };
   renderSetupArea(email);
   next.disabled = true;
