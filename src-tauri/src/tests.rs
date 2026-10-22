@@ -1533,4 +1533,235 @@ max_tokens = 10
         gifs.giphy_api_key = " mine ".into();
         assert_eq!(gifs.key(), "mine");
     }
+
+    // ── Auto-setup ────────────────────────────────────────────────────────────
+
+    // (host, port, user) of a server Auto-setup found, blanks when it found none.
+    fn srv(s: Option<&crate::dto::ServerDto>) -> (&str, &str, &str) {
+        match s {
+            Some(s) => (s.host.as_str(), s.port.as_str(), s.user.as_str()),
+            None => ("", "", ""),
+        }
+    }
+
+    const GMAIL_XML: &str = r#"<clientConfig version="1.1">
+  <emailProvider id="googlemail.com">
+    <domain>gmail.com</domain>
+    <domain>googlemail.com</domain>
+    <displayName>Google Mail</displayName>
+    <displayShortName>GMail</displayShortName>
+    <incomingServer type="imap">
+      <hostname>imap.gmail.com</hostname>
+      <port>993</port>
+      <socketType>SSL</socketType>
+      <username>%EMAILADDRESS%</username>
+      <authentication>OAuth2</authentication>
+      <authentication>password-cleartext</authentication>
+    </incomingServer>
+    <incomingServer type="pop3">
+      <hostname>pop.gmail.com</hostname>
+      <port>995</port>
+      <socketType>SSL</socketType>
+      <username>%EMAILADDRESS%</username>
+      <pop3>
+        <leaveMessagesOnServer>true</leaveMessagesOnServer>
+      </pop3>
+    </incomingServer>
+    <outgoingServer type="smtp">
+      <hostname>smtp.gmail.com</hostname>
+      <port>465</port>
+      <socketType>SSL</socketType>
+      <username>%EMAILADDRESS%</username>
+      <authentication>OAuth2</authentication>
+      <authentication>password-cleartext</authentication>
+    </outgoingServer>
+  </emailProvider>
+  <webMail>
+    <loginPageInfo url="https://accounts.google.com/ServiceLogin?service=mail">
+      <username>%EMAILADDRESS%</username>
+      <usernameField id="Email"/>
+    </loginPageInfo>
+  </webMail>
+</clientConfig>"#;
+
+    #[test]
+    fn test_auto_setup_gmail_xml() {
+        use crate::auto_setup::parse_autoconfig;
+        let s = parse_autoconfig(GMAIL_XML, "john.doe@gmail.com").unwrap();
+        assert_eq!(s.provider, "Google Mail");
+        assert_eq!(srv(s.imap.as_ref()), ("imap.gmail.com", "993", "john.doe@gmail.com"));
+        assert_eq!(srv(s.smtp.as_ref()), ("smtp.gmail.com", "465", "john.doe@gmail.com"));
+        assert_eq!((s.imap_issue.as_str(), s.smtp_issue.as_str()), ("", ""));
+    }
+
+    const OUTLOOK_XML: &str = r#"<clientConfig version="1.1">
+  <emailProvider id="hotmail.com">
+    <domain>outlook.com</domain>
+    <displayName>Outlook.com (Microsoft)</displayName>
+    <incomingServer type="imap">
+      <hostname>outlook.office365.com</hostname>
+      <port>993</port>
+      <socketType>SSL</socketType>
+      <authentication>OAuth2</authentication>
+      <username>%EMAILADDRESS%</username>
+    </incomingServer>
+    <outgoingServer type="smtp">
+      <hostname>smtp-mail.outlook.com</hostname>
+      <port>587</port>
+      <socketType>STARTTLS</socketType>
+      <authentication>OAuth2</authentication>
+      <username>%EMAILADDRESS%</username>
+    </outgoingServer>
+  </emailProvider>
+</clientConfig>"#;
+
+    #[test]
+    fn test_auto_setup_outlook_xml() {
+        use crate::auto_setup::parse_autoconfig;
+        let s = parse_autoconfig(OUTLOOK_XML, "someone@outlook.com").unwrap();
+        assert_eq!(s.provider, "Outlook.com (Microsoft)");
+        assert_eq!(srv(s.imap.as_ref()), ("outlook.office365.com", "993", "someone@outlook.com"));
+        // SMTP 587/STARTTLS is one of the two ports this app can send from.
+        assert_eq!(srv(s.smtp.as_ref()), ("smtp-mail.outlook.com", "587", "someone@outlook.com"));
+        assert_eq!((s.imap_issue.as_str(), s.smtp_issue.as_str()), ("", ""));
+    }
+
+    const ALICE_XML: &str = r#"<clientConfig version="1.1">
+  <emailProvider id="alice.it">
+    <domain>alice.it</domain>
+    <displayName>Alice Italy</displayName>
+    <incomingServer type="imap">
+      <hostname>in.alice.it</hostname>
+      <port>143</port>
+      <socketType>STARTTLS</socketType>
+      <username>%EMAILADDRESS%</username>
+      <authentication>password-cleartext</authentication>
+    </incomingServer>
+    <incomingServer type="pop3">
+      <hostname>in.alice.it</hostname>
+      <port>110</port>
+      <socketType>STARTTLS</socketType>
+      <username>%EMAILADDRESS%</username>
+    </incomingServer>
+    <outgoingServer type="smtp">
+      <hostname>out.alice.it</hostname>
+      <port>587</port>
+      <socketType>STARTTLS</socketType>
+      <username>%EMAILADDRESS%</username>
+    </outgoingServer>
+  </emailProvider>
+</clientConfig>"#;
+
+    #[test]
+    fn test_auto_setup_starttls_only_imap_is_refused() {
+        use crate::auto_setup::parse_autoconfig;
+        let s = parse_autoconfig(ALICE_XML, "john.doe@alice.it").unwrap();
+        // Incoming mail needs implicit TLS: nothing usable here, and the answer says why.
+        assert_eq!(srv(s.imap.as_ref()), ("", "", ""));
+        assert_eq!(s.imap_issue, "starttls");
+        assert_eq!(srv(s.smtp.as_ref()), ("out.alice.it", "587", "john.doe@alice.it"));
+        assert_eq!(s.smtp_issue, "");
+    }
+
+    #[test]
+    fn test_auto_setup_placeholders() {
+        use crate::auto_setup::parse_autoconfig;
+        let xml = r#"<clientConfig version="1.1">
+  <emailProvider id="example.com">
+    <domain>example.com</domain>
+    <displayName>Example</displayName>
+    <incomingServer type="imap">
+      <hostname>imap.example.com</hostname>
+      <port>993</port>
+      <socketType>SSL</socketType>
+      <username>%EMAILLOCALPART%@%EMAILDOMAIN%</username>
+    </incomingServer>
+    <outgoingServer type="smtp">
+      <hostname>smtp.example.com</hostname>
+      <port>465</port>
+      <socketType>SSL</socketType>
+      <username>%EMAILLOCALPART%</username>
+    </outgoingServer>
+  </emailProvider>
+</clientConfig>"#;
+        let s = parse_autoconfig(xml, "john.doe@example.com").unwrap();
+        assert_eq!(srv(s.imap.as_ref()), ("imap.example.com", "993", "john.doe@example.com"));
+        assert_eq!(srv(s.smtp.as_ref()), ("smtp.example.com", "465", "john.doe"));
+        // No username at all: the full address is what providers expect.
+        let bare = xml.replace("<username>%EMAILLOCALPART%</username>", "");
+        let s = parse_autoconfig(&bare, "john.doe@example.com").unwrap();
+        assert_eq!(srv(s.smtp.as_ref()), ("smtp.example.com", "465", "john.doe@example.com"));
+    }
+
+    #[test]
+    fn test_auto_setup_refuses_other_answers() {
+        use crate::auto_setup::parse_autoconfig;
+        // An HTML error page, a clientConfig without any server, and broken XML all mean
+        // "this source has nothing": the lookup then tries the next one.
+        assert!(parse_autoconfig("<html><body>Not found</body></html>", "a@example.com").is_err());
+        assert!(parse_autoconfig(r#"<clientConfig version="1.1"><emailProvider id="x"/></clientConfig>"#, "a@example.com").is_err());
+        assert!(parse_autoconfig("<clientConfig version=\"1.1\"><emailProvider", "a@example.com").is_err());
+    }
+
+    #[test]
+    fn test_auto_setup_mx_from_doh_json() {
+        use crate::auto_setup::mx_host;
+        let json = r#"{"Status":0,"Question":[{"name":"gmail.com.","type":15}],
+          "Answer":[{"name":"gmail.com.","type":15,"TTL":1864,"data":"30 alt3.gmail-smtp-in.l.google.com."},
+                    {"name":"gmail.com.","type":15,"TTL":1864,"data":"5 gmail-smtp-in.l.google.com."},
+                    {"name":"gmail.com.","type":15,"TTL":1864,"data":"10 alt1.gmail-smtp-in.l.google.com."}]}"#;
+        // The lowest preference wins, and the trailing dot of the FQDN goes.
+        assert_eq!(mx_host(json).as_deref(), Some("gmail-smtp-in.l.google.com"));
+        // A domain with no MX record (NXDOMAIN) has no Answer.
+        let none = r#"{"Status":3,"Question":[{"name":"projet-o2game.fr.","type":15}],
+          "Authority":[{"name":"fr.","type":6,"TTL":600,"data":"a.nic.fr. dnsmaster.afnic.fr."}]}"#;
+        assert_eq!(mx_host(none), None);
+        assert_eq!(mx_host("not json"), None);
+    }
+
+    #[test]
+    fn test_auto_setup_mx_base_domain() {
+        use crate::auto_setup::base_domain;
+        assert_eq!(base_domain("aspmx.l.google.com."), "google.com");
+        assert_eq!(base_domain("mx1.mailbox.org"), "mailbox.org");
+        assert_eq!(base_domain("smtp."), "smtp");
+        assert_eq!(base_domain(""), "");
+        // shortcut: only the last two labels; a provider on mail.foo.co.uk gives co.uk,
+        // which ISPDB does not list, so that lookup simply finds nothing.
+        assert_eq!(base_domain("mail.foo.co.uk."), "co.uk");
+    }
+
+    /// Auto-setup against the real autoconfig servers and Cloudflare DNS.
+    /// Run with: cargo test test_auto_setup_live -- --ignored --nocapture
+    #[tokio::test]
+    #[ignore]
+    async fn test_auto_setup_live() {
+        use crate::auto_setup::lookup;
+        // A domain with its own autoconfig, ISPDB, a Google Workspace domain found
+        // through its MX, and a domain nobody knows.
+        let mb = lookup("someone@mailbox.org").await.unwrap().expect("mailbox.org publishes its own autoconfig");
+        println!("mailbox.org: {:?} on {}", srv(mb.imap.as_ref()), mb.source);
+        assert_eq!(srv(mb.imap.as_ref()), ("imap.mailbox.org", "993", "someone@mailbox.org"));
+
+        let g = lookup("someone@gmail.com").await.unwrap().expect("gmail.com is in ISPDB");
+        println!("gmail.com: {:?} / {:?} on {}", srv(g.imap.as_ref()), srv(g.smtp.as_ref()), g.source);
+        assert_eq!(srv(g.imap.as_ref()), ("imap.gmail.com", "993", "someone@gmail.com"));
+        assert_eq!(srv(g.smtp.as_ref()), ("smtp.gmail.com", "465", "someone@gmail.com"));
+        assert_eq!(g.source, "autoconfig.thunderbird.net");
+
+        let o = lookup("someone@outlook.com").await.unwrap().expect("outlook.com is in ISPDB");
+        println!("outlook.com: {:?} / {:?} on {}", srv(o.imap.as_ref()), srv(o.smtp.as_ref()), o.source);
+        assert_eq!(srv(o.imap.as_ref()), ("outlook.office365.com", "993", "someone@outlook.com"));
+        assert_eq!(srv(o.smtp.as_ref()), ("smtp-mail.outlook.com", "587", "someone@outlook.com"));
+
+        // signal.org is not in ISPDB: its MX is Google's, so ISPDB answers for google.com.
+        let w = lookup("someone@signal.org").await.unwrap().expect("signal.org forwards to Gmail");
+        println!("signal.org: {:?} on {}", srv(w.imap.as_ref()), w.source);
+        assert_eq!(srv(w.imap.as_ref()), ("imap.gmail.com", "993", "someone@signal.org"));
+
+        assert!(lookup("someone@no-such-domain-9f8a7b.invalid").await.unwrap().is_none());
+        // A blank or broken address sends nothing out.
+        assert!(lookup("").await.unwrap().is_none());
+        assert!(lookup("not-an-address").await.unwrap().is_none());
+    }
 }

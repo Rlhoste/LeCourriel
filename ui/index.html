@@ -446,6 +446,37 @@
   </div>
 </div>
 
+<!-- ── Account Setup Dialog (Auto-setup) ───────────────────────────────────── -->
+<div id="setup-overlay" class="overlay setup-overlay hidden">
+  <div class="dialog" role="dialog" aria-modal="true">
+    <div class="dialog-header">
+      <span data-i18n="setup.title">Add an account</span>
+      <button class="close-btn" id="setup-close">✕</button>
+    </div>
+    <label data-i18n="setup.name">Your name</label>
+    <input type="text" id="setup-name" dir="auto" autocomplete="name"
+           placeholder="First Last" data-i18n-placeholder="set.yourNamePh" />
+    <label data-i18n="setup.email">Email address</label>
+    <input type="text" id="setup-email" dir="auto" autocomplete="email" spellcheck="false"
+           placeholder="you@example.com" data-i18n-placeholder="set.usernamePh" />
+    <label data-i18n="set.password">Password</label>
+    <input type="password" id="setup-pass" autocomplete="new-password" placeholder=" " />
+    <p class="settings-note setup-hint hidden" id="setup-hint"></p>
+    <div class="dialog-actions">
+      <button id="setup-next" class="primary-btn" data-i18n="setup.next">Next</button>
+    </div>
+    <div id="setup-result" class="setup-result hidden">
+      <p class="setup-line" id="setup-line" dir="auto"></p>
+      <p class="setup-line setup-issues" id="setup-issues" dir="auto"></p>
+      <p class="settings-note" id="setup-source" dir="auto"></p>
+      <div class="dialog-actions">
+        <button id="setup-use" class="primary-btn hidden" data-i18n="setup.use">Use these</button>
+        <button id="setup-manual" class="secondary-btn hidden" data-i18n="setup.manual">Enter manually</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Reading pane (shared for email panels) -->
 <template id="tpl-split-panel">
   <div class="email-list-col">

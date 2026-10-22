@@ -744,6 +744,15 @@ button.row-mark:hover::before { transform: scale(1.2); }
 }
 .secondary-btn:hover { background: var(--border); }
 
+/* ── Account Setup Dialog (Auto-setup) ─────────────────────────────────────── */
+/* Stacked over Settings (100); the toast (200) stays above it. */
+.setup-overlay { z-index: 150; }
+.setup-result { display: flex; flex-direction: column; gap: 4px; border-top: var(--border-w) solid var(--border); padding-top: 10px; }
+.setup-line { font-size: 0.9rem; }
+.setup-issues { color: var(--urgent); font-size: 0.8rem; }
+.setup-link { color: var(--link); cursor: pointer; text-decoration: underline; }
+.setup-result.hidden, .setup-hint.hidden, #setup-use.hidden, #setup-manual.hidden { display: none; }
+
 /* ── Settings Tabs ─────────────────────────────────────────────────────────── */
 .tabs { display: flex; gap: 4px; border-bottom: var(--border-w) solid var(--border); padding-bottom: 8px; }
 .tab {

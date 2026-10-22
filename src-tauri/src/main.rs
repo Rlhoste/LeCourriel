@@ -26,6 +26,7 @@ mod ai_assistant;
 mod ai_classifier;
 mod ai_writer;
 mod app_state;
+mod auto_setup;
 #[cfg(test)]
 mod tests;
 mod config;
@@ -288,6 +289,13 @@ async fn account_test_smtp(account: dto::AccountDto) -> Result<(), dto::ConnErro
 }
 
 const CONN_TEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+
+/// Account setup → Auto-setup: look up the server settings of an email address.
+/// Only its domain is sent. Ok(None) means no source knows that domain.
+#[tauri::command]
+async fn lookup_mail_settings(email: String) -> Result<Option<dto::MailSetupDto>, String> {
+    auto_setup::lookup(&email).await.map_err(|e| format!("{:#}", e))
+}
 
 /// Send a tiny request; returns the answer and how long it took.
 #[tauri::command]
@@ -784,6 +792,7 @@ fn main() {
             ai_test,
             account_test_imap,
             account_test_smtp,
+            lookup_mail_settings,
             search_local,
             search_server,
             get_search_email,

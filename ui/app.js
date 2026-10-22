@@ -53,12 +53,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     applyTheme(s.theme);
     if (s.language && s.language !== LANG) applyLanguage(s.language);
     await loadComposeAccounts();
-    // First start (or no account yet): open Settings on Accounts, with an empty account to fill in.
+    // First start (or no account yet): open Settings on Accounts, with the setup dialog on top.
     if (!s.accounts || !s.accounts.length) {
       document.getElementById('ov-briefing').textContent = t('ov.noAccount');
       await openSettings();
       switchSettingsTab('accounts');
-      if (!settingsData.accounts.length) document.getElementById('s-add-account').click();
+      if (!settingsData.accounts.length) openSetupDialog();
     }
   } catch (_) {}
 
@@ -1985,6 +1985,12 @@ function applyLanguage(code) {
     settingsData.accounts = collectAccounts();   // keep unsaved edits while re-rendering labels
     renderAccountBlocks(settingsData.accounts);
   }
+  if (!document.getElementById('setup-overlay').classList.contains('hidden')) {
+    renderSetupHint(document.getElementById('setup-email').value);
+    if (!document.getElementById('setup-result').classList.contains('hidden')) {
+      renderSetupArea(document.getElementById('setup-email').value);
+    }
+  }
 }
 
 let savedLang = 'en';   // last saved; restored if Settings closes without saving
@@ -2225,15 +2231,18 @@ function setupSettings() {
     document.documentElement.style.fontSize = `${fontScale * 14}px`;
   });
 
-  document.getElementById('s-add-account').addEventListener('click', () => {
-    settingsData.accounts.push({
-      // All blank: the placeholders show the defaults used for blank fields.
-      label: '', imap_host: '', imap_port: '', imap_user: '', imap_pass: '',
-      imap_mailbox: '', imap_fetch: '',
-      smtp_host: '', smtp_port: '', smtp_user: '', smtp_pass: '', smtp_from: '',
-      signature_file: '', signature_on_new: true, signature_on_reply: true,
-    });
-    renderAccountBlocks(settingsData.accounts);
+  document.getElementById('s-add-account').addEventListener('click', openSetupDialog);
+
+  // The setup dialog: name, email and password, then Auto-setup looks for the servers.
+  addPasswordToggles(document.getElementById('setup-overlay'));
+  document.getElementById('setup-close').addEventListener('click', closeSetupDialog);
+  document.getElementById('setup-next').addEventListener('click', setupNext);
+  document.getElementById('setup-email').addEventListener('input', e => renderSetupHint(e.target.value));
+  document.getElementById('setup-use').addEventListener('click', () => setupAddAccount(true));
+  document.getElementById('setup-manual').addEventListener('click', () => setupAddAccount(false));
+  // Enter goes on with what was typed, as long as no result is shown yet.
+  document.getElementById('setup-overlay').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && document.getElementById('setup-result').classList.contains('hidden')) setupNext();
   });
 
   document.getElementById('settings-save').addEventListener('click', saveSettings);
@@ -2252,6 +2261,146 @@ function setupSettings() {
 function switchSettingsTab(tab) {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === `tab-${tab}`));
+}
+
+// ── Account setup dialog (Auto-setup) ───────────────────────────────────────
+const GMAIL_APP_PASSWORDS_URL = 'https://myaccount.google.com/apppasswords';
+
+let setupFound;   // what Auto-setup returned: undefined = not asked yet, null = nothing found
+let setupNote;    // { key, vars }: one quiet line shown instead of a result
+
+// What a provider needs beyond a password, in one place (Auto-scan reuses this):
+// 'gmail' → an app password, 'ms' → no password any more, so not supported yet.
+// The key is an email address or an incoming server's host; null = nothing special.
+function providerHint(key) {
+  const s = (key || '').toLowerCase().trim();
+  const labels = (s.includes('@') ? s.slice(s.lastIndexOf('@') + 1) : s).split('.');
+  const listed = list => labels.some(l => list.some(d => l === d || l.startsWith(`${d}-`)));
+  if (listed(['gmail', 'googlemail', 'google'])) return 'gmail';
+  if (listed(['outlook', 'hotmail', 'live', 'msn', 'office365', 'microsoftonline'])) return 'ms';
+  return null;
+}
+
+// The note under the password field; Gmail's comes with a link to its own page.
+function renderSetupHint(key) {
+  const hint = document.getElementById('setup-hint');
+  const kind = providerHint(key);
+  hint.innerHTML = '';
+  hint.classList.toggle('hidden', !kind);
+  if (!kind) return;
+  hint.textContent = t(kind === 'gmail' ? 'setup.hint.gmail' : 'setup.hint.ms');
+  if (kind !== 'gmail') return;
+  const link = document.createElement('a');
+  link.className = 'setup-link';
+  link.href = GMAIL_APP_PASSWORDS_URL;
+  link.textContent = t('setup.hint.gmailLink');
+  // Opens in the system browser (Tauri shell plugin), not inside the app window.
+  link.addEventListener('click', e => {
+    e.preventDefault();
+    window.__TAURI__.shell.open(GMAIL_APP_PASSWORDS_URL).catch(err => console.error('open app passwords page', err));
+  });
+  hint.append(' ', link);
+}
+
+function openSetupDialog() {
+  setupFound = undefined;
+  setupNote = null;
+  document.getElementById('setup-name').value = '';
+  document.getElementById('setup-email').value = '';
+  const pass = document.getElementById('setup-pass');
+  pass.value = '';
+  pass.type = 'password';   // the eye button keeps its place
+  document.getElementById('setup-next').disabled = false;
+  document.getElementById('setup-result').classList.add('hidden');
+  renderSetupHint('');
+  document.getElementById('setup-overlay').classList.remove('hidden');
+  document.getElementById('setup-email').focus();
+}
+
+function closeSetupDialog() {
+  document.getElementById('setup-overlay').classList.add('hidden');
+}
+
+// Next: only the domain of the address goes to the backend, which tries its sources
+// one after the other.
+async function setupNext() {
+  const email = document.getElementById('setup-email').value.trim();
+  const next = document.getElementById('setup-next');
+  renderSetupHint(email);
+  setupFound = undefined;
+  if (!isEmail(email)) { setupNote = { key: 'setup.badEmail' }; renderSetupArea(email); return; }
+  setupNote = { key: 'setup.looking' };
+  renderSetupArea(email);
+  next.disabled = true;
+  try {
+    setupFound = await cmd('lookup_mail_settings', { email });   // null: nobody knows that domain
+    setupNote = null;
+  } catch (e) {
+    setupNote = { key: 'setup.failed', vars: { err: e } };
+  }
+  next.disabled = false;
+  renderSetupArea(email);
+}
+
+// The result area: what was found, why one side is missing, where the settings came
+// from, then Use these / Enter manually.
+function renderSetupArea(email) {
+  const domain = (email.split('@').pop() || '').toLowerCase();
+  const line = document.getElementById('setup-line');
+  const issues = document.getElementById('setup-issues');
+  const source = document.getElementById('setup-source');
+  const use = document.getElementById('setup-use');
+  const manual = document.getElementById('setup-manual');
+  document.getElementById('setup-result').classList.remove('hidden');
+  issues.textContent = '';
+  source.textContent = '';
+  use.classList.add('hidden');
+  manual.classList.add('hidden');
+  line.textContent = setupNote ? t(setupNote.key, setupNote.vars || {}) : '';
+  if (setupFound === undefined) return;
+  if (setupFound === null) {
+    line.textContent = t('setup.notFound', { domain });
+    manual.classList.remove('hidden');
+    return;
+  }
+  const s = setupFound;
+  const servers = [s.imap, s.smtp].filter(Boolean).map(v => `${v.host}:${v.port}`).join(' · ');
+  line.textContent = servers ? t('setup.found', { provider: s.provider || domain, servers }) : '';
+  source.textContent = t('setup.source', { host: s.source });
+  const problems = [];
+  if (!s.imap && s.imap_issue) problems.push(t(`setup.imapIssue.${s.imap_issue}`));
+  if (!s.smtp && s.smtp_issue) problems.push(t(`setup.smtpIssue.${s.smtp_issue}`));
+  issues.textContent = problems.join(' ');
+  manual.classList.remove('hidden');
+  // A custom domain hosted by Google or Microsoft only shows who it is through its servers.
+  const hintKey = providerHint(email) ? email : (s.imap ? s.imap.host : '');
+  renderSetupHint(hintKey);
+  if ((s.imap || s.smtp) && providerHint(hintKey) !== 'ms') use.classList.remove('hidden');
+}
+
+// The usual account block, filled with what is known, then the usual Test. Nothing is
+// saved: the user still presses Save.
+function setupAddAccount(withSettings) {
+  const name = document.getElementById('setup-name').value.trim().replace(/["<>]/g, '');
+  const email = document.getElementById('setup-email').value.trim();
+  const pass = document.getElementById('setup-pass').value;
+  const s = withSettings ? setupFound : null;
+  const srv = side => (s && s[side]) ? s[side] : null;
+  settingsData.accounts = collectAccounts();   // keep what was typed in the other blocks
+  settingsData.accounts.push({
+    label: email,
+    imap_host: srv('imap') ? srv('imap').host : '', imap_port: srv('imap') ? srv('imap').port : '',
+    imap_user: srv('imap') ? srv('imap').user : email, imap_pass: pass,
+    imap_mailbox: '', imap_fetch: '',
+    smtp_host: srv('smtp') ? srv('smtp').host : '', smtp_port: srv('smtp') ? srv('smtp').port : '',
+    smtp_user: srv('smtp') ? srv('smtp').user : email, smtp_pass: pass,
+    smtp_from: name ? `"${name}" <${email}>` : email,
+    signature_file: '', signature_on_new: true, signature_on_reply: true,
+  });
+  closeSetupDialog();
+  renderAccountBlocks(settingsData.accounts);
+  const blocks = document.querySelectorAll('.account-block');
+  if (s && (s.imap || s.smtp)) testAccount(blocks[blocks.length - 1]);
 }
 
 function collectAccounts() {
