@@ -11,6 +11,7 @@ pub fn config_to_dto(cfg: &Config) -> SettingsDto {
         font_scale: cfg.user.font_scale,
         theme: cfg.user.theme.clone(),
         language: cfg.user.language.clone(),
+        notify_new_mail: cfg.user.notify_new_mail,
         ai: AiSettingsDto {
             provider: cfg.ai.provider().to_string(),
             model: cfg.ai.model.clone(),
@@ -48,9 +49,10 @@ pub fn save_config(
     font_scale: f32,
     theme: Option<&str>,
     language: Option<&str>,
+    notify_new_mail: Option<bool>,
 ) -> Result<()> {
     let cfg = apply_to_config(
-        Config::load()?, display_name, accounts, ai, giphy_key, font_scale, theme, language,
+        Config::load()?, display_name, accounts, ai, giphy_key, font_scale, theme, language, notify_new_mail,
     );
     crate::config::save_config(&cfg)
 }
@@ -66,6 +68,7 @@ pub fn apply_to_config(
     font_scale: f32,
     theme: Option<&str>,
     language: Option<&str>,
+    notify_new_mail: Option<bool>,
 ) -> Config {
 
     cfg.user = UserConfig {
@@ -77,6 +80,7 @@ pub fn apply_to_config(
             .filter(|l| crate::i18n::is_supported(l))
             .map(str::to_string)
             .unwrap_or_else(|| cfg.user.language.clone()),
+        notify_new_mail: notify_new_mail.unwrap_or(cfg.user.notify_new_mail),
     };
 
     cfg.accounts = accounts.iter().map(account_from_dto).collect();

@@ -96,6 +96,7 @@ STRINGS.zh = {
     'ai.done': '完成 — 按 Ctrl+Z 撤消',
 
     'set.title': '设置', 'set.general': '常规', 'set.accounts': '帐户', 'set.ai': 'AI',
+    'set.notify': '收到新邮件时通知我',
     'set.fontScale': '字体缩放', 'set.theme': '主题', 'set.language': '语言',
     "set.signature": "签名", "set.sigChoose": "📄 选择 HTML 文件…", "set.sigRemove": "移除", "set.sigOnNew": "添加到新邮件", "set.sigOnReply": "添加到回复和转发", "set.sigHint": "还没有签名。可从您的邮件客户端（Outlook、Gmail…）导出为 HTML 文件，或用任意签名生成器创建。", "set.sigImported": "签名已导入", "set.sigRemoved": "签名已移除", "set.sigFileFilter": "HTML 文件",
     "set.incoming": "📥 收件 (IMAP)", "set.outgoing": "📤 发件 (SMTP)", "set.server": "服务器", "set.port": "端口", "set.username": "用户名", "set.usernamePh": "you@example.com", "set.password": "密码", "set.sameAsIncoming": "与收件相同", "set.advanced": "高级选项", "set.imapMailbox": "要检查的文件夹", "set.fetchCount": "获取的邮件数量",

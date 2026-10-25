@@ -112,6 +112,9 @@ pub struct UserConfig {
     /// UI language: "en" or "fr".
     #[serde(default = "default_language")]
     pub language: String,
+    /// Desktop notification when new unread emails arrive.
+    #[serde(default = "yes")]
+    pub notify_new_mail: bool,
 }
 
 fn default_font_scale() -> f32 { 1.0 }
@@ -125,6 +128,7 @@ impl Default for UserConfig {
             font_scale: default_font_scale(),
             theme: default_theme(),
             language: default_language(),
+            notify_new_mail: true,
         }
     }
 }

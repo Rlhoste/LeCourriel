@@ -96,6 +96,7 @@ STRINGS.bn = {
     'ai.done': 'সম্পন্ন — পূর্বাবস্থায় ফেরাতে Ctrl+Z',
 
     'set.title': 'সেটিংস', 'set.general': 'সাধারণ', 'set.accounts': 'অ্যাকাউন্ট', 'set.ai': 'AI',
+    'set.notify': 'নতুন ইমেল এলে আমাকে জানান',
     'set.fontScale': 'ফন্টের আকার', 'set.theme': 'থিম', 'set.language': 'ভাষা',
     "set.signature": "স্বাক্ষর", "set.sigChoose": "📄 একটি HTML ফাইল বেছে নিন…", "set.sigRemove": "সরান", "set.sigOnNew": "নতুন বার্তায় যোগ করুন", "set.sigOnReply": "উত্তর ও ফরোয়ার্ডে যোগ করুন", "set.sigHint": "এখনও কোনো স্বাক্ষর নেই। আপনার মেইল ক্লায়েন্ট (Outlook, Gmail…) থেকে HTML ফাইল হিসেবে রপ্তানি করুন, অথবা যেকোনো স্বাক্ষর জেনারেটর দিয়ে তৈরি করুন।", "set.sigImported": "স্বাক্ষর আমদানি হয়েছে", "set.sigRemoved": "স্বাক্ষর সরানো হয়েছে", "set.sigFileFilter": "HTML ফাইল",
     "set.incoming": "📥 আগত মেইল (IMAP)", "set.outgoing": "📤 বহির্গামী মেইল (SMTP)", "set.server": "সার্ভার", "set.port": "পোর্ট", "set.username": "ব্যবহারকারীর নাম", "set.usernamePh": "apni@udaharon.com", "set.password": "পাসওয়ার্ড", "set.sameAsIncoming": "আগত মেইলের মতো", "set.advanced": "উন্নত বিকল্প", "set.imapMailbox": "যে ফোল্ডার দেখা হবে", "set.fetchCount": "কতগুলো ইমেইল আনা হবে",

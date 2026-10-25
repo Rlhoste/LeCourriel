@@ -96,6 +96,7 @@ STRINGS.fr = {
     'ai.done': 'Terminé — Ctrl+Z pour annuler',
 
     'set.title': 'Paramètres', 'set.general': 'Général', 'set.accounts': 'Comptes', 'set.ai': 'IA',
+    'set.notify': 'Me prévenir quand de nouveaux e-mails arrivent',
     'set.fontScale': 'Taille du texte', 'set.theme': 'Thème', 'set.language': 'Langue',
     "set.signature": "Signature", "set.sigChoose": "📄 Choisir un fichier HTML…", "set.sigRemove": "Supprimer", "set.sigOnNew": "Ajouter aux nouveaux messages", "set.sigOnReply": "Ajouter aux réponses et transferts", "set.sigHint": "Pas encore de signature. Exportez-la depuis votre messagerie (Outlook, Gmail…) en fichier HTML, ou créez-en une avec un générateur de signature.", "set.sigImported": "Signature importée", "set.sigRemoved": "Signature supprimée", "set.sigFileFilter": "Fichiers HTML",
     "set.incoming": "📥 Réception (IMAP)", "set.outgoing": "📤 Envoi (SMTP)", "set.server": "Serveur", "set.port": "Port", "set.username": "Identifiant", "set.usernamePh": "vous@exemple.fr", "set.password": "Mot de passe", "set.sameAsIncoming": "Comme pour la réception", "set.advanced": "Options avancées", "set.imapMailbox": "Dossier à relever", "set.fetchCount": "Nombre d'e-mails récupérés",

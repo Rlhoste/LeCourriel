@@ -20,6 +20,12 @@ use crate::state::AppState;
 const CACHE_PATH: &str = "cache-v2.json";
 
 pub async fn refresh(cfg: Arc<Config>, app: AppHandle, state: Arc<Mutex<AppState>>) {
+    // One refresh at a time: the 2-minute check is skipped while another one runs.
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static REFRESHING: AtomicBool = AtomicBool::new(false);
+    if REFRESHING.swap(true, Ordering::SeqCst) {
+        return;
+    }
     app.emit("loading", true).ok();
 
     match do_refresh(&cfg, &app, &state).await {
@@ -31,6 +37,36 @@ pub async fn refresh(cfg: Arc<Config>, app: AppHandle, state: Arc<Mutex<AppState
     }
     // Hide the loading bar whether the refresh succeeded or failed.
     app.emit("loading", false).ok();
+    REFRESHING.store(false, Ordering::SeqCst);
+}
+
+/// Notifications for newly arrived emails as (title, body): one per email (sender, subject)
+/// for up to 3, otherwise a single "N new emails" listing the first senders. Read ones are skipped.
+pub fn notification_texts(cards: &[EmailCard], l: i18n::Lang) -> Vec<(String, String)> {
+    let unread: Vec<&EmailCard> = cards.iter().filter(|c| !c.is_read).collect();
+    if unread.len() <= 3 {
+        return unread.iter().map(|c| {
+            let from = if c.from_name.is_empty() { c.from_email.clone() } else { c.from_name.clone() };
+            (from, c.subject.clone())
+        }).collect();
+    }
+    let mut senders: Vec<&str> = Vec::new();
+    for c in &unread {
+        let from = if c.from_name.is_empty() { c.from_email.as_str() } else { c.from_name.as_str() };
+        if !senders.contains(&from) { senders.push(from); }
+    }
+    let mut body = senders.iter().take(3).copied().collect::<Vec<_>>().join(", ");
+    if senders.len() > 3 { body.push_str(", …"); }
+    vec![(i18n::new_emails(unread.len(), l), body)]
+}
+
+fn notify_new_mail(app: &AppHandle, cards: &[EmailCard]) {
+    use tauri_plugin_notification::NotificationExt;
+    for (title, body) in notification_texts(cards, i18n::lang()) {
+        if let Err(e) = app.notification().builder().title(title).body(body).show() {
+            warn!("Notification failed: {}", e);
+        }
+    }
 }
 
 pub fn raw_to_card(raw: crate::models::RawEmail) -> EmailCard {
@@ -245,6 +281,11 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
         crate::cloud::store_ai(&to_store).await;
         cards
     };
+
+    // No notification on the very first fill (empty cache): every email would look new.
+    if cfg.user.notify_new_mail && !cached_uids.is_empty() {
+        notify_new_mail(app, &new_cards);
+    }
 
     // Merge: cached + newly classified. Remove UIDs no longer in inbox.
     let all_uids: std::collections::HashSet<u32> = cached_uids.iter()

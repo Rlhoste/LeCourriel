@@ -96,6 +96,7 @@ STRINGS.de = {
     'ai.done': 'Fertig — Ctrl+Z zum Rückgängigmachen',
 
     'set.title': 'Einstellungen', 'set.general': 'Allgemein', 'set.accounts': 'Konten', 'set.ai': 'KI',
+    'set.notify': 'Benachrichtigen, wenn neue E-Mails eintreffen',
     'set.fontScale': 'Schriftgröße', 'set.theme': 'Design', 'set.language': 'Sprache',
     "set.signature": "Signatur", "set.sigChoose": "📄 HTML-Datei auswählen…", "set.sigRemove": "Entfernen", "set.sigOnNew": "Zu neuen Nachrichten hinzufügen", "set.sigOnReply": "Zu Antworten und Weiterleitungen hinzufügen", "set.sigHint": "Noch keine Signatur. Exportieren Sie sie aus Ihrem Mailprogramm (Outlook, Gmail…) als HTML-Datei oder erstellen Sie eine mit einem Signaturgenerator.", "set.sigImported": "Signatur importiert", "set.sigRemoved": "Signatur entfernt", "set.sigFileFilter": "HTML-Dateien",
     "set.incoming": "📥 Posteingang (IMAP)", "set.outgoing": "📤 Postausgang (SMTP)", "set.server": "Server", "set.port": "Port", "set.username": "Benutzername", "set.usernamePh": "sie@beispiel.de", "set.password": "Passwort", "set.sameAsIncoming": "Wie beim Posteingang", "set.advanced": "Erweiterte Optionen", "set.imapMailbox": "Zu prüfender Ordner", "set.fetchCount": "Anzahl abzurufender E-Mails",

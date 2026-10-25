@@ -170,8 +170,56 @@ async fn app_ready(
     tauri::async_runtime::spawn(async move {
         let cfg = sync_from_database(&app, &shared_clone).await.unwrap_or(cfg);
         // Kick off live refresh in background
-        app_state::refresh(cfg, app, shared_clone).await;
+        app_state::refresh(cfg, app.clone(), shared_clone.clone()).await;
+        start_auto_refresh(app, shared_clone);
     });
+    Ok(())
+}
+
+/// Checks for new mail every 2 minutes, with the current settings. Started once, even if
+/// the page is reloaded and calls app_ready again.
+fn start_auto_refresh(app: AppHandle, shared: SharedState) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static STARTED: AtomicBool = AtomicBool::new(false);
+    if STARTED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    tauri::async_runtime::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(120));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        tick.tick().await;   // the first tick is immediate; the startup refresh just ran
+        loop {
+            tick.tick().await;
+            let cfg = shared.lock().unwrap().cfg.clone();
+            if !cfg.accounts.is_empty() {
+                app_state::refresh(cfg, app.clone(), shared.clone()).await;
+            }
+        }
+    });
+}
+
+/// The number of unread inbox emails, shown on the app icon: a number on Linux and macOS,
+/// a red dot on Windows (it has no number badge), and "(n)" in the window title everywhere.
+#[tauri::command]
+fn set_unread_count(app: AppHandle, count: u32) -> Result<(), String> {
+    use tauri::Manager;
+    let Some(win) = app.get_webview_window("main") else { return Ok(()) };
+    let title = if count > 0 { format!("Le courriel ({count})") } else { "Le courriel".to_string() };
+    win.set_title(&title).map_err(|e| e.to_string())?;
+    #[cfg(target_os = "windows")]
+    {
+        let dot = if count > 0 {
+            Some(tauri::image::Image::from_bytes(include_bytes!("../icons/badge.png")).map_err(|e| e.to_string())?)
+        } else {
+            None
+        };
+        win.set_overlay_icon(dot).map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Not every Linux desktop shows badges; the title still carries the count.
+        let _ = win.set_badge_count(if count > 0 { Some(count as i64) } else { None });
+    }
     Ok(())
 }
 
@@ -288,10 +336,11 @@ fn save_settings(
     font_scale: f32,
     theme: Option<String>,
     language: Option<String>,
+    notify_new_mail: Option<bool>,
     shared: State<'_, SharedState>,
 ) -> Result<(), String> {
     let giphy_key = giphy_key.unwrap_or_default();
-    settings::save_config(display_name.as_deref(), &accounts, &ai, &giphy_key, font_scale, theme.as_deref(), language.as_deref())
+    settings::save_config(display_name.as_deref(), &accounts, &ai, &giphy_key, font_scale, theme.as_deref(), language.as_deref(), notify_new_mail)
         .map_err(|e| e.to_string())?;
     // Reload config into shared state.
     match Config::load() {
@@ -1009,12 +1058,14 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(shared.clone())
         .invoke_handler(tauri::generate_handler![
             app_ready,
             app_version,
             open_compose_window,
+            set_unread_count,
             check_for_update,
             install_update,
             refresh_emails,

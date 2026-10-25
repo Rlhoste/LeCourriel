@@ -290,7 +290,7 @@ api_key = "k" model = "m" max_tokens = 100
 
     fn make_test_config() -> Config {
         Config {
-            user: UserConfig { display_name: "Test".to_string(), font_scale: 1.0, theme: "midnight".to_string(), language: "en".to_string() },
+            user: UserConfig { display_name: "Test".to_string(), font_scale: 1.0, theme: "midnight".to_string(), language: "en".to_string(), notify_new_mail: true },
             accounts: vec![AccountConfig {
                 name: "Work".to_string(),
                 imap: ImapConfig {
@@ -1035,6 +1035,32 @@ max_tokens = 10
     }
 
     #[test]
+    fn test_new_mail_notification_texts() {
+        use crate::app_state::notification_texts;
+        use crate::i18n::Lang;
+        let card = |uid: u32, from: &str, subject: &str, read: bool| {
+            let mut c = make_test_card(uid, Priority::Information);
+            c.from_name = from.into();
+            c.subject = subject.into();
+            c.is_read = read;
+            c
+        };
+        assert!(notification_texts(&[], Lang::En).is_empty());
+        assert!(notification_texts(&[card(1, "Ana", "Hi", true)], Lang::En).is_empty());
+
+        let few = [card(1, "Ana", "Hi", false), card(2, "Bob", "Report", false), card(3, "Cyd", "Lunch", false)];
+        assert_eq!(notification_texts(&few, Lang::En), vec![
+            ("Ana".to_string(), "Hi".to_string()),
+            ("Bob".to_string(), "Report".to_string()),
+            ("Cyd".to_string(), "Lunch".to_string()),
+        ]);
+
+        let many: Vec<EmailCard> = (1..=10).map(|i| card(i, &format!("P{}", i % 5), "x", false)).collect();
+        assert_eq!(notification_texts(&many, Lang::Fr),
+                   vec![("10 nouveaux e-mails".to_string(), "P1, P2, P3, …".to_string())]);
+    }
+
+    #[test]
     fn test_inline_signature_image_is_embedded() {
         let raw = concat!(
             "Subject: Hi\r\nMIME-Version: 1.0\r\n",
@@ -1655,7 +1681,7 @@ max_tokens = 10
             ]),
         };
         let mut configured = crate::settings::apply_to_config(
-            empty, None, &accounts, &ai, " custom-giphy ", 1.25, Some("aero"), Some("fr"),
+            empty, None, &accounts, &ai, " custom-giphy ", 1.25, Some("aero"), Some("fr"), None,
         );
         configured.projects = vec![
             ProjectConfig { name: "Research".into(), description: "Paper and experiments".into(), urgency: "high".into() },
@@ -1700,7 +1726,7 @@ max_tokens = 10
         original.ai.provider = "mistral".into();
         let ai = AiSettingsDto { provider: "evil-provider".into(), ..Default::default() };
         let updated = crate::settings::apply_to_config(
-            original, None, &[], &ai, "", 1.0, None, Some("xx"),
+            original, None, &[], &ai, "", 1.0, None, Some("xx"), None,
         );
         assert_eq!(updated.user.language, "ja");
         assert_eq!(updated.ai.provider(), "mistral");
@@ -1711,7 +1737,7 @@ max_tokens = 10
         use crate::dto::AiSettingsDto;
         for (language, _) in crate::i18n::LANGUAGES {
             let updated = crate::settings::apply_to_config(
-                Config::default(), None, &[], &AiSettingsDto::default(), "", 1.0, None, Some(language),
+                Config::default(), None, &[], &AiSettingsDto::default(), "", 1.0, None, Some(language), None,
             );
             assert_eq!(&updated.user.language, language);
         }

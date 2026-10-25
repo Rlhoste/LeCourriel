@@ -234,6 +234,17 @@ function renderOverview() {
 
   // Week strip
   renderWeekStrip();
+  updateUnreadCount();
+}
+
+// Unread inbox emails, shown on the app icon and in the window title. Runs after every
+// change of the list (refresh, read/unread, deletion), which all redraw the Overview.
+let shownUnreadCount = null;
+function updateUnreadCount() {
+  const count = appState.all_emails.filter(e => !e.is_read).length;
+  if (count === shownUnreadCount) return;
+  shownUnreadCount = count;
+  cmd('set_unread_count', { count }).catch(() => {});
 }
 
 // ── Swipe right to delete (Overview) ───────────────────────────────────────
@@ -2312,6 +2323,7 @@ async function openSettings() {
   const langSelect = document.getElementById('s-language');
   langSelect.innerHTML = LANGUAGES.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
   langSelect.value = LANG;
+  document.getElementById('s-notify').checked = settingsData.notify_new_mail !== false;
   savedFontScale = settingsData.font_scale || 1.0;
   renderThemePicker();
   fontScale = settingsData.font_scale;
@@ -2688,6 +2700,7 @@ async function saveSettings() {
       accounts, ai: collectAiSettings(), giphyKey, fontScale,
       theme: document.documentElement.dataset.theme,
       language: LANG,
+      notifyNewMail: document.getElementById('s-notify').checked,
     });
     await saveCloudProject();   // Supabase settings are local-only: they have their own command
     savedTheme = document.documentElement.dataset.theme;
