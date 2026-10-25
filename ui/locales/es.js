@@ -5,7 +5,7 @@ STRINGS.es = {
     "nav.spam": "Spam",
     'nav.sent': 'Enviados', 'nav.drafts': 'Borradores', 'nav.trash': 'Papelera',
     'nav.sponsor': '❤ Patrocinar',
-    'nav.search': '🔍 Buscar',
+    'nav.search': '✨ Preguntar',
     'search.placeholder': 'Busca o pregunta a la IA…', 'search.ask': '✨ Preguntar a la IA', 'search.aiTitle': 'Preguntar a la IA (Ctrl+Intro)',
     'search.mode.auto': 'Auto', 'search.mode.find': '🔎 Buscar', 'search.mode.compose': '✉ Redactar',
     'search.mode.summarize': '🧾 Resumir', 'search.mode.answer': '❓ Pregunta',
@@ -25,6 +25,7 @@ STRINGS.es = {
 
     'ov.greeting': 'Buenos días.', 'ov.loading': 'Cargando…', 'ov.noAccount': '¡Bienvenido! Añade tu cuenta de correo en Configuración para empezar.',
     'ov.urgent': 'Urgente e importante', 'ov.deadlines': 'Plazos', 'ov.tasks': 'Tareas', 'ov.meetings': 'Reuniones',
+    "ov.showOpened": "Mostrar leídos", "ov.hideOpened": "Ocultar leídos",
     'ov.inDays': 'en {n} d', 'ov.daysAgo': 'hace {n} d', 'ov.couldNotDelete': 'No se pudo eliminar: {err}',
 
     'kanban.title': 'Tareas', 'kanban.todo': 'Por hacer', 'kanban.inProgress': 'En curso',
@@ -34,10 +35,22 @@ STRINGS.es = {
     'kanban.aiMoved': 'Movida automáticamente por la IA', 'kanban.aiDone': 'IA: hecha', 'kanban.aiObsolete': 'IA: obsoleta',
 
     'cal.title': 'Calendario', 'cal.more': '+{n} más',
+    'cal.newTask': 'Nueva tarea', 'cal.taskTitle': 'Tarea', 'cal.taskPlaceholder': '¿Qué hay que hacer?',
+    'cal.date': 'Fecha', 'cal.project': 'Proyecto', 'cal.noProject': 'Sin proyecto',
+    'cal.createTask': 'Crear tarea', 'cal.enterTask': 'Introduce una tarea.',
+    'mail.thread': 'Conversación: {n} correos',
+    'mail.newestFirst': 'Más recientes ↓', 'mail.oldestFirst': 'Más antiguos ↑',
+    'mail.sortBy': 'Ordenar por', 'mail.sort.date': 'Fecha', 'mail.sort.sender': 'Remitente',
+    'mail.sort.subject': 'Asunto', 'mail.sort.read': 'Estado de lectura', 'mail.sort.priority': 'Prioridad',
+    'mail.sort.project': 'Proyecto', 'mail.ascending': 'Ascendente', 'mail.descending': 'Descendente',
 
     'proj.new': '+ Nuevo proyecto', 'proj.namePlaceholder': 'Nombre del proyecto',
+    'proj.sentencePlaceholder': 'Describe el proyecto en una frase breve…',
     'proj.urgency.normal': 'Normal', 'proj.urgency.high': 'Alta',
     'proj.create': 'Crear', 'proj.cancel': 'Cancelar', 'proj.descPlaceholder': 'Descripción del proyecto…', 'proj.save': 'Guardar',
+    'proj.analysing': 'Analizando…', 'proj.enterSentence': 'Describe el proyecto en una frase breve.',
+    'proj.delete': 'Eliminar proyecto', 'proj.deleteConfirm': '¿Seguro que quieres eliminar «{name}»?',
+    'proj.rename': 'Renombrar', 'proj.renamePrompt': 'Nuevo nombre del proyecto:',
     'proj.emails.one': '1 correo', 'proj.emails.other': '{n} correos', 'proj.enterName': 'Introduce un nombre.',
 
     'rp.select': 'Selecciona un correo para leerlo',
@@ -101,6 +114,12 @@ STRINGS.es = {
     'set.cloudWorking': 'Procesando…', 'set.cloudSynced': 'Sincronizado.', 'set.cloudConfirm': 'Cuenta creada. Confírmala desde el correo que te envió Supabase y luego inicia sesión.',
     'set.cloudNeedProject': 'Introduce primero la URL del proyecto y la clave anon.', 'set.cloudNeedCreds': 'Introduce tu correo y tu contraseña.',
     'set.cloudNote': 'Cada cuenta solo ve sus propios datos (seguridad a nivel de fila). Se sincronizan: tareas, deslizamientos, etiquetas de proyecto, proyectos, preferencias y resultados de la IA. Nunca se sincronizan: contraseñas de correo, claves API ni esta configuración de Supabase.',
+    "set.updates": "Actualizaciones", "set.updateCurrent": "Versión actual",
+    "set.updateAuto": "Descargar, instalar y reiniciar automáticamente cuando haya una actualización disponible", "set.updateCheck": "Buscar actualizaciones",
+    "set.updateInstall": "Instalar actualización", "set.updateSigned": "Las actualizaciones se descargan del canal oficial de GitHub Releases y se verifican con la clave de firma de Courriel antes de instalarlas.",
+    "set.updateChecking": "Buscando actualizaciones…", "set.updateLatest": "Courriel está actualizado.",
+    "set.updateAvailable": "La versión {version} está disponible.", "set.updateError": "Error de actualización: {err}",
+    "set.updateDownloading": "Descargando e instalando la actualización…", "set.updateRestarting": "Actualización instalada. Reiniciando Courriel…",
     'theme.midnight': 'Medianoche', 'theme.premium': 'Premium', 'theme.modern': 'Moderno',
     'theme.brutalist': 'Brutalista', 'theme.aero': 'Frutiger Aero', 'theme.terminal': 'Terminal',
 

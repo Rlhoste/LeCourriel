@@ -11,6 +11,7 @@ pub struct EmailCardDto {
     pub reply_to: String,
     pub bcc: String,
     pub message_id: String,
+    pub references: String,
     pub date_str: String,
     pub date_full: String,
     /// Unix time of the email (0 when unknown); the UI formats it in its language.

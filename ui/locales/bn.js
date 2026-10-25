@@ -5,7 +5,7 @@ STRINGS.bn = {
     "nav.spam": "স্প্যাম",
     'nav.sent': 'পাঠানো', 'nav.drafts': 'খসড়া', 'nav.trash': 'ট্র্যাশ',
     'nav.sponsor': '❤ সমর্থন করুন',
-    'nav.search': '🔍 খুঁজুন',
+    'nav.search': '✨ জিজ্ঞাসা করুন',
     'search.placeholder': 'খুঁজুন, বা AI-কে জিজ্ঞাসা করুন…', 'search.ask': '✨ AI-কে জিজ্ঞাসা করুন', 'search.aiTitle': 'AI-কে জিজ্ঞাসা করুন (Ctrl+Enter)',
     'search.mode.auto': 'অটো', 'search.mode.find': '🔎 খুঁজুন', 'search.mode.compose': '✉ লিখুন',
     'search.mode.summarize': '🧾 সারাংশ', 'search.mode.answer': '❓ প্রশ্ন',
@@ -25,6 +25,7 @@ STRINGS.bn = {
 
     'ov.greeting': 'সুপ্রভাত।', 'ov.loading': 'লোড হচ্ছে…', 'ov.noAccount': 'স্বাগতম! শুরু করতে সেটিংসে আপনার মেল অ্যাকাউন্ট যোগ করুন।',
     'ov.urgent': 'জরুরি ও উচ্চ', 'ov.deadlines': 'সময়সীমা', 'ov.tasks': 'কাজ', 'ov.meetings': 'মিটিং',
+    "ov.showOpened": "পঠিত দেখান", "ov.hideOpened": "পঠিত লুকান",
     'ov.inDays': '{n} দিনের মধ্যে', 'ov.daysAgo': '{n} দিন আগে', 'ov.couldNotDelete': 'মোছা যায়নি: {err}',
 
     'kanban.title': 'কাজ', 'kanban.todo': 'করণীয়', 'kanban.inProgress': 'চলছে',
@@ -34,10 +35,22 @@ STRINGS.bn = {
     'kanban.aiMoved': 'AI স্বয়ংক্রিয়ভাবে সরিয়েছে', 'kanban.aiDone': 'AI: সম্পন্ন', 'kanban.aiObsolete': 'AI: অপ্রাসঙ্গিক',
 
     'cal.title': 'ক্যালেন্ডার', 'cal.more': 'আরও {n}টি',
+    'cal.newTask': 'নতুন কাজ', 'cal.taskTitle': 'কাজ', 'cal.taskPlaceholder': 'কী করতে হবে?',
+    'cal.date': 'তারিখ', 'cal.project': 'প্রজেক্ট', 'cal.noProject': 'কোনো প্রজেক্ট নেই',
+    'cal.createTask': 'কাজ তৈরি করুন', 'cal.enterTask': 'অনুগ্রহ করে একটি কাজ লিখুন।',
+    'mail.thread': 'আলোচনা: {n}টি ইমেল',
+    'mail.newestFirst': 'নতুন আগে ↓', 'mail.oldestFirst': 'পুরোনো আগে ↑',
+    'mail.sortBy': 'সাজান', 'mail.sort.date': 'তারিখ', 'mail.sort.sender': 'প্রেরক',
+    'mail.sort.subject': 'বিষয়', 'mail.sort.read': 'পঠিত অবস্থা', 'mail.sort.priority': 'অগ্রাধিকার',
+    'mail.sort.project': 'প্রজেক্ট', 'mail.ascending': 'ঊর্ধ্বক্রম', 'mail.descending': 'নিম্নক্রম',
 
     'proj.new': '+ নতুন প্রজেক্ট', 'proj.namePlaceholder': 'প্রজেক্টের নাম',
+    'proj.sentencePlaceholder': 'একটি ছোট বাক্যে প্রজেক্টটি বর্ণনা করুন…',
     'proj.urgency.normal': 'সাধারণ', 'proj.urgency.high': 'উচ্চ',
     'proj.create': 'তৈরি করুন', 'proj.cancel': 'বাতিল', 'proj.descPlaceholder': 'প্রজেক্টের বিবরণ…', 'proj.save': 'সংরক্ষণ করুন',
+    'proj.analysing': 'বিশ্লেষণ করা হচ্ছে…', 'proj.enterSentence': 'একটি ছোট বাক্যে প্রজেক্টটি বর্ণনা করুন।',
+    'proj.delete': 'প্রজেক্ট মুছুন', 'proj.deleteConfirm': 'আপনি কি “{name}” প্রজেক্টটি মুছতে চান?',
+    'proj.rename': 'নাম পরিবর্তন করুন', 'proj.renamePrompt': 'প্রজেক্টের নতুন নাম:',
     'proj.emails.one': '{n}টি ইমেল', 'proj.emails.other': '{n}টি ইমেল', 'proj.enterName': 'অনুগ্রহ করে একটি নাম লিখুন।',
 
     'rp.select': 'পড়ার জন্য একটি ইমেল বেছে নিন',
@@ -101,6 +114,12 @@ STRINGS.bn = {
     'set.cloudWorking': 'কাজ চলছে…', 'set.cloudSynced': 'সিঙ্ক হয়েছে।', 'set.cloudConfirm': 'অ্যাকাউন্ট তৈরি হয়েছে। Supabase-এর পাঠানো ইমেল থেকে এটি নিশ্চিত করুন, তারপর সাইন ইন করুন।',
     'set.cloudNeedProject': 'আগে প্রজেক্ট URL ও anon কী লিখুন।', 'set.cloudNeedCreds': 'আপনার ইমেল ও পাসওয়ার্ড লিখুন।',
     'set.cloudNote': 'প্রতিটি অ্যাকাউন্ট শুধু নিজের ডেটা দেখতে পায় (row-level security)। সিঙ্ক হয়: কাজ, সোয়াইপ, প্রজেক্ট ট্যাগ, প্রজেক্ট, পছন্দসমূহ ও AI-এর ফলাফল। কখনো সিঙ্ক হয় না: মেলের পাসওয়ার্ড, API কী এবং এই Supabase সেটিংস।',
+    "set.updates": "আপডেট", "set.updateCurrent": "বর্তমান সংস্করণ",
+    "set.updateAuto": "আপডেট পাওয়া গেলে স্বয়ংক্রিয়ভাবে ডাউনলোড ও ইনস্টল করে অ্যাপ পুনরায় চালু করুন", "set.updateCheck": "আপডেট পরীক্ষা করুন",
+    "set.updateInstall": "আপডেট ইনস্টল করুন", "set.updateSigned": "আপডেট অফিসিয়াল GitHub Releases চ্যানেল থেকে ডাউনলোড করা হয় এবং ইনস্টলের আগে Courriel-এর স্বাক্ষর কী দিয়ে যাচাই করা হয়।",
+    "set.updateChecking": "আপডেট পরীক্ষা করা হচ্ছে…", "set.updateLatest": "Courriel হালনাগাদ আছে।",
+    "set.updateAvailable": "সংস্করণ {version} পাওয়া যাচ্ছে।", "set.updateError": "আপডেট ব্যর্থ: {err}",
+    "set.updateDownloading": "আপডেট ডাউনলোড ও ইনস্টল করা হচ্ছে…", "set.updateRestarting": "আপডেট ইনস্টল হয়েছে। Courriel পুনরায় চালু হচ্ছে…",
     'theme.midnight': 'মিডনাইট', 'theme.premium': 'প্রিমিয়াম', 'theme.modern': 'আধুনিক',
     'theme.brutalist': 'ব্রুটালিস্ট', 'theme.aero': 'Frutiger Aero', 'theme.terminal': 'টার্মিনাল',
 

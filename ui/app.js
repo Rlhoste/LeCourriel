@@ -3,12 +3,13 @@ const invoke = window.__TAURI__.core.invoke;
 const { listen } = window.__TAURI__.event;
 
 const BUG_REPORT_TO = 'remi.lhoste@o2game.com';
-const SPONSOR_URL = 'https://github.com/sponsors/Rlhoste';
+const SPONSOR_URL = 'https://ko-fi.com/rlhoste';
 
 // ── State ──────────────────────────────────────────────────────────────────
 let appState = null;
 let activePanel = 'overview';
 let fontScale = 1.0;
+let showOpenedAttention = false;
 
 // ── Tauri helpers ──────────────────────────────────────────────────────────
 async function cmd(name, args = {}) {
@@ -18,6 +19,9 @@ async function cmd(name, args = {}) {
 
 // ── Startup ────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
+  // A composer window (see openCompose) shows only the composer.
+  if (window.__COMPOSE__) { startComposeWindow(window.__COMPOSE__); return; }
+
   // Register listeners FIRST before anything else to avoid race condition
   await listen('state-updated', e => {
     appState = e.payload;
@@ -33,14 +37,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('ov-briefing').textContent = e.payload;
   });
 
+  await listen('update-progress', e => renderUpdateProgress(e.payload || {}));
+  await listen('compose-sent', () => showToast(t('cmp.sent')));
+
   initLang();          // language from the last session, until settings arrive
   applyStaticI18n();
   updateTranslateButton();
   setupSidebar();
+  setupOverview();
   setupSplitPanels();
   setupCompose();
   setupSettings();
   setupCalendarNav();
+  setupCalendarTaskDialog();
   setupNewProject();
   setupKanban();
   setupSearch();
@@ -54,7 +63,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (s.language && s.language !== LANG) applyLanguage(s.language);
     await loadComposeAccounts();
     // First start (or no account yet): open Settings on Accounts, with an empty account to fill in.
-    if (!s.accounts || !s.accounts.length) {
+    if (CourrielCore.needsAccountSetup(s)) {
       document.getElementById('ov-briefing').textContent = t('ov.noAccount');
       await openSettings();
       switchSettingsTab('accounts');
@@ -64,6 +73,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Tell backend we're ready — it will now send cache then start live refresh
   await invoke('app_ready');
+  checkAutomaticUpdates();
 });
 
 // ── Sidebar navigation ─────────────────────────────────────────────────────
@@ -102,6 +112,21 @@ function switchPanel(panel) {
   if (appState) renderPanel(panel);
 }
 
+function setupOverview() {
+  document.getElementById('ov-toggle-opened').addEventListener('click', () => {
+    showOpenedAttention = !showOpenedAttention;
+    if (appState) renderOverview();
+    else renderOverviewOpenedToggle();
+  });
+}
+
+function renderOverviewOpenedToggle() {
+  const button = document.getElementById('ov-toggle-opened');
+  button.textContent = t(showOpenedAttention ? 'ov.hideOpened' : 'ov.showOpened');
+  button.classList.toggle('active', showOpenedAttention);
+  button.setAttribute('aria-pressed', String(showOpenedAttention));
+}
+
 // ── Split panels bootstrap ─────────────────────────────────────────────────
 const SPLIT_PANELS = {
   inbox:     { title: 'Inbox',     key: 'all_emails' },
@@ -112,6 +137,13 @@ const SPLIT_PANELS = {
   spam:      { title: 'Spam',      key: 'spam_emails' },
   trash:     { title: 'Trash',     key: 'trash_emails' },
 };
+const emailSort = Object.fromEntries(Object.keys(SPLIT_PANELS).map(panel => [panel, {
+  key: 'date', ascending: false,
+}]));
+const EMAIL_SORT_OPTIONS = [
+  ['date', 'mail.sort.date'], ['sender', 'mail.sort.sender'], ['subject', 'mail.sort.subject'],
+  ['read', 'mail.sort.read'], ['priority', 'mail.sort.priority'], ['project', 'mail.sort.project'],
+];
 
 function setupSplitPanels() {
   const tpl = document.getElementById('tpl-split-panel');
@@ -121,8 +153,32 @@ function setupSplitPanels() {
     const title = clone.querySelector('.list-title');
     title.dataset.i18n = `nav.${panelId}`;
     title.textContent = t(title.dataset.i18n);
+    clone.querySelector('.list-sort-label').textContent = t('mail.sortBy');
+    const sortButton = clone.querySelector('.list-sort-button');
+    const sortMenu = clone.querySelector('.list-sort-menu');
+    sortButton.addEventListener('click', e => {
+      e.stopPropagation();
+      document.querySelectorAll('.list-sort-menu').forEach(menu => {
+        if (menu !== sortMenu) menu.classList.add('hidden');
+      });
+      sortMenu.classList.toggle('hidden');
+    });
+    sortMenu.addEventListener('click', e => {
+      const option = e.target.closest('.list-sort-option');
+      if (!option) return;
+      emailSort[panelId].key = option.dataset.sort;
+      emailSort[panelId].ascending = option.dataset.sort !== 'date';
+      sortMenu.classList.add('hidden');
+      renderSplitPanel(panelId, meta);
+    });
+    clone.querySelector('.list-sort-direction').addEventListener('click', () => {
+      emailSort[panelId].ascending = !emailSort[panelId].ascending;
+      renderSplitPanel(panelId, meta);
+    });
     section.appendChild(clone);
   }
+  document.addEventListener('click', () =>
+    document.querySelectorAll('.list-sort-menu').forEach(menu => menu.classList.add('hidden')));
 }
 
 // ── Render all ─────────────────────────────────────────────────────────────
@@ -143,11 +199,12 @@ function renderPanel(panel) {
 // ── Overview ────────────────────────────────────────────────────────────────
 function renderOverview() {
   if (!appState) return;
+  renderOverviewOpenedToggle();
   document.getElementById('ov-greeting').textContent = appState.user_name !== undefined ? greetingText(appState) : appState.greeting;
   document.getElementById('ov-briefing').textContent = appState.briefing ? briefingText(appState.briefing) : appState.briefing_time;
 
   // Urgent + High
-  const urgent = [...appState.urgent_emails, ...appState.high_emails].filter(e => !e.is_read);
+  const urgent = CourrielCore.attentionEmails(appState, showOpenedAttention);
   const urgentList = document.getElementById('ov-urgent-list');
   renderEmailRows(urgentList, urgent, uid => switchToEmail(uid));
   attachSwipes(urgentList, urgent, e => trashFromOverview(e.uid));
@@ -165,7 +222,7 @@ function renderOverview() {
   attachSwipes(dl, appState.deadlines, d => dismissFromOverview('deadline', d.uid));
 
   // Tasks
-  const taskList = appState.tasks.filter(t => t.status === 'todo' || t.status === 'in_progress');
+  const taskList = CourrielCore.activeTasks(appState);
   const tasksEl = document.getElementById('ov-tasks-list');
   renderTaskRows(tasksEl, taskList);
   attachSwipes(tasksEl, taskList, t => setTaskStatus(t.id, 'given_up'));
@@ -288,23 +345,7 @@ async function dismissFromOverview(kind, uid) {
 
 // kind = null: the email is gone, drop it everywhere; otherwise only from that list.
 function removeFromState(uid, kind) {
-  const drop = key => { appState[key] = appState[key].filter(e => e.uid !== uid); };
-  if (kind === 'meeting') drop('meeting_items');
-  else if (kind === 'deadline') drop('deadlines');
-  else {
-    // Sent/Drafts/Trash have their own UID numbering, so leave them alone.
-    const skip = ['week_days', 'projects', 'sent_emails', 'drafts_emails', 'trash_emails', 'spam_emails'];
-    for (const [key, val] of Object.entries(appState)) {
-      if (Array.isArray(val) && !skip.includes(key)) drop(key);
-    }
-  }
-  if (kind === null || kind === 'deadline') {
-    for (const day of appState.week_days) {
-      for (const n of [1, 2, 3]) {
-        if (day[`dl${n}_uid`] === uid) day[`dl${n}_subject`] = '';
-      }
-    }
-  }
+  CourrielCore.removeEmailFromState(appState, uid, kind);
   renderAll();
 }
 
@@ -354,19 +395,34 @@ function renderWeekStrip() {
 }
 
 // ── Split panel rendering ──────────────────────────────────────────────────
+// Unfolded discussions ("panel:message-id"), kept when the list is redrawn.
+const openThreads = new Set();
 function renderSplitPanel(panelId, meta) {
   const section = document.getElementById(`panel-${panelId}`);
-  const emails = appState[meta.key] || [];
+  const sort = emailSort[panelId];
+  const emails = CourrielCore.sortEmails(appState[meta.key], sort, langInfo().locale);
   const listEl = section.querySelector('.email-list');
   const countEl = section.querySelector('.list-count');
+  const sortCurrent = section.querySelector('.list-sort-current');
+  const sortMenu = section.querySelector('.list-sort-menu');
+  const directionBtn = section.querySelector('.list-sort-direction');
   countEl.textContent = emails.length;
+  const selectedSort = EMAIL_SORT_OPTIONS.find(([value]) => value === sort.key);
+  sortCurrent.textContent = t(selectedSort?.[1] || 'mail.sort.date');
+  sortMenu.innerHTML = EMAIL_SORT_OPTIONS
+    .map(([value, key]) => `<button class="list-sort-option${value === sort.key ? ' active' : ''}" data-sort="${value}"><span>${t(key)}</span>${value === sort.key ? '<span>✓</span>' : ''}</button>`)
+    .join('');
+  directionBtn.textContent = sort.ascending ? '↑' : '↓';
+  directionBtn.title = sort.key === 'date'
+    ? (sort.ascending ? t('mail.oldestFirst') : t('mail.newestFirst'))
+    : t(sort.ascending ? 'mail.ascending' : 'mail.descending');
 
   // Remember active uid
   const active = section.querySelector('.email-row.active');
   const activeUid = active ? +active.dataset.uid : null;
 
   listEl.innerHTML = '';
-  for (const e of emails) {
+  const addRow = e => {
     const row = emailRow(e);
     row.dataset.uid = e.uid;
     if (e.uid === activeUid) row.classList.add('active');
@@ -376,6 +432,37 @@ function renderSplitPanel(panelId, meta) {
       showEmail(section, e);
     });
     listEl.appendChild(row);
+    return row;
+  };
+  // A discussion shows its latest email; the arrow unfolds the other ones below it.
+  for (const { lead, replies } of CourrielCore.groupThreads(emails)) {
+    const leadRow = addRow(lead);
+    if (!replies.length) continue;
+    const key = `${panelId}:${lead.message_id || lead.uid}`;
+    if (replies.some(e => e.uid === activeUid)) openThreads.add(key);
+    const childRows = replies.map(e => {
+      const row = addRow(e);
+      row.classList.add('thread-child');
+      return row;
+    });
+    const toggle = document.createElement('button');
+    toggle.className = 'thread-toggle';
+    toggle.title = t('mail.thread', { n: replies.length + 1 });
+    toggle.innerHTML = `<span class="thread-arrow">▸</span>${replies.length + 1}`;
+    const setOpen = open => {
+      leadRow.classList.toggle('thread-open', open);
+      toggle.setAttribute('aria-expanded', String(open));
+      childRows.forEach(r => r.classList.toggle('collapsed', !open));
+    };
+    setOpen(openThreads.has(key));
+    toggle.addEventListener('pointerdown', e => e.stopPropagation());   // not the start of a swipe
+    toggle.addEventListener('click', e => {
+      e.stopPropagation();   // don't open the email
+      const open = !openThreads.has(key);
+      if (open) openThreads.add(key); else openThreads.delete(key);
+      setOpen(open);
+    });
+    leadRow.querySelector('.email-row-top').prepend(toggle);
   }
 }
 
@@ -524,6 +611,7 @@ function retagInState(uid, project) {
     for (const e of val) if (e.uid === uid && 'project' in e) e.project = project;
   }
   for (const t of appState.tasks) if (t.source_uid === uid) t.project = project || null;
+  setRowProject(uid, project);
   for (const p of appState.projects) {
     p.email_count = appState.all_emails.filter(e => e.project === p.name).length;
   }
@@ -623,7 +711,10 @@ function setIframeContent(iframe, email) {
   const html = email.body_html
     ? wrapHtml(email.body_html)
     : `<html><body style="font-family:system-ui,sans-serif;font-size:14px;padding:16px;white-space:pre-wrap;color:#111">${esc(email.body_text)}</body></html>`;
-  const blob = new Blob([html], { type: 'text/html' });
+  // The backend has already decoded MIME charsets into a Unicode string. Declare
+  // UTF-8 explicitly so stale charset meta tags in the original mail cannot turn
+  // French characters such as é into mojibake.
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   iframe.src = url;
   iframe.onload = () => URL.revokeObjectURL(url);
@@ -951,6 +1042,62 @@ function setupCalendarNav() {
   });
 }
 
+function setupCalendarTaskDialog() {
+  const overlay = document.getElementById('calendar-task-overlay');
+  const title = document.getElementById('calendar-task-title');
+  const date = document.getElementById('calendar-task-date');
+  const project = document.getElementById('calendar-task-project');
+  const error = document.getElementById('calendar-task-error');
+  const create = document.getElementById('calendar-task-create');
+
+  const close = () => {
+    overlay.classList.add('hidden');
+    error.textContent = '';
+  };
+  const save = async () => {
+    const taskTitle = title.value.trim();
+    if (!taskTitle) { error.textContent = t('cal.enterTask'); return; }
+    create.disabled = true;
+    try {
+      const tasks = await cmd('create_task', {
+        title: taskTitle,
+        project: project.value || null,
+        dueDate: date.value,
+      });
+      close();
+      setTasks(tasks);
+    } catch (e) {
+      error.textContent = String(e);
+    } finally {
+      create.disabled = false;
+    }
+  };
+
+  document.getElementById('calendar-task-close').onclick = close;
+  document.getElementById('calendar-task-cancel').onclick = close;
+  create.onclick = save;
+  title.onkeydown = e => {
+    if (e.key === 'Enter') save();
+    if (e.key === 'Escape') close();
+  };
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !overlay.classList.contains('hidden')) close();
+  });
+}
+
+function openCalendarTaskDialog(iso) {
+  const overlay = document.getElementById('calendar-task-overlay');
+  const project = document.getElementById('calendar-task-project');
+  document.getElementById('calendar-task-title').value = '';
+  document.getElementById('calendar-task-date').value = iso;
+  document.getElementById('calendar-task-error').textContent = '';
+  project.innerHTML = `<option value="">${t('cal.noProject')}</option>`
+    + appState.projects.map(p => `<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('');
+  overlay.classList.remove('hidden');
+  document.getElementById('calendar-task-title').focus();
+}
+
 function renderCalendar() {
   if (!appState) return;
   if (!calYear) { calYear = appState.calendar_year; calMonth = appState.calendar_month; }
@@ -978,7 +1125,14 @@ function renderCalendar() {
   // Deadlines by YYYY-MM-DD, placed in their day's cell.
   const byDay = {};
   for (const d of appState.deadlines) {
-    (byDay[d.date_iso] ||= []).push(d);
+    (byDay[d.date_iso] ||= []).push({ ...d, kind: 'email' });
+  }
+  for (const task of appState.tasks) {
+    if (task.due_date && (task.status === 'todo' || task.status === 'in_progress')) {
+      (byDay[task.due_date] ||= []).push({
+        kind: 'task', id: task.id, subject: task.title, project: task.project || '',
+      });
+    }
   }
   const urgencyOf = Object.fromEntries(appState.projects.map(p => [p.name, p.urgency]));
   const pad = n => String(n).padStart(2, '0');
@@ -1010,6 +1164,7 @@ function renderCalendar() {
     cell.innerHTML = `<div class="cal-day-num">${day}</div>`;
     const iso = isoOf(year, month, day);
     renderCalendarEvents(cell, byDay[iso] || [], iso < todayIso, urgencyOf);
+    cell.addEventListener('click', () => openCalendarTaskDialog(iso));
     grid.appendChild(cell);
   }
 }
@@ -1023,11 +1178,20 @@ function renderCalendarEvents(cell, events, past, urgencyOf, expanded = false) {
   for (const d of shown) {
     const pill = document.createElement('div');
     pill.className = 'cal-dl-pill'
+      + (d.kind === 'task' ? ' task' : '')
       + (urgencyOf[d.project] === 'high' ? ' high' : '')
       + (past ? ' past' : '');
     pill.textContent = d.subject;
     pill.title = d.project ? `${d.project} · ${d.subject}` : d.subject;
-    pill.addEventListener('click', () => switchToEmail(d.uid));
+    pill.addEventListener('click', e => {
+      e.stopPropagation();
+      if (d.kind === 'task') {
+        activeBoard = d.project || null;
+        switchPanel('tasks');
+      } else {
+        switchToEmail(d.uid);
+      }
+    });
     cell.appendChild(pill);
   }
   const hidden = events.length - shown.length;
@@ -1035,7 +1199,10 @@ function renderCalendarEvents(cell, events, past, urgencyOf, expanded = false) {
     const more = document.createElement('div');
     more.className = 'cal-more';
     more.textContent = t('cal.more', { n: hidden });
-    more.addEventListener('click', () => renderCalendarEvents(cell, events, past, urgencyOf, true));
+    more.addEventListener('click', e => {
+      e.stopPropagation();
+      renderCalendarEvents(cell, events, past, urgencyOf, true);
+    });
     cell.appendChild(more);
   }
 }
@@ -1052,7 +1219,7 @@ function setupKanban() {
     const title = input.value.trim();
     if (!title) return;
     try {
-      setTasks(await cmd('create_task', { title, project: activeBoard }));
+      setTasks(await cmd('create_task', { title, project: activeBoard, dueDate: null }));
       input.value = '';
     } catch (err) {
       input.placeholder = String(err);
@@ -1126,6 +1293,7 @@ function kanbanCard(task) {
 
   const chips = [];
   if (activeBoard === null && task.project) chips.push(`<span class="kanban-chip">${esc(task.project)}</span>`);
+  if (task.due_date) chips.push(`<span class="kanban-chip">${esc(fmtDayMonth(task.due_date))}</span>`);
   if (task.ai_verdict) chips.push(`<span class="kanban-chip ai" title="${t('kanban.aiMoved')}">${esc(task.ai_verdict === 'done' ? t('kanban.aiDone') : t('kanban.aiObsolete'))}</span>`);
   const source = task.source_uid
     ? `<div class="kanban-source" title="${t('kanban.openEmail')}">✉ ${esc(task.source_from)} · ${esc(task.source_subject)}</div>`
@@ -1179,29 +1347,42 @@ function renderProjects() {
 
 function setupNewProject() {
   const form = document.getElementById('projects-new-form');
-  const nameEl = document.getElementById('projects-new-name');
+  const sentenceEl = document.getElementById('projects-new-sentence');
   const errEl = document.getElementById('projects-new-error');
+  const createBtn = document.getElementById('projects-new-create');
+  const cancelBtn = document.getElementById('projects-new-cancel');
+  let creating = false;
 
   const closeForm = () => {
+    if (creating) return;
     form.classList.add('hidden');
-    nameEl.value = '';
+    sentenceEl.value = '';
     errEl.textContent = '';
   };
 
   const create = async () => {
-    const name = nameEl.value.trim();
-    const urgency = document.getElementById('projects-new-urgency').value;
-    if (!name) { errEl.textContent = t('proj.enterName'); return; }
+    if (creating) return;
+    const sentence = sentenceEl.value.trim();
+    if (!sentence) { errEl.textContent = t('proj.enterSentence'); return; }
+    creating = true;
+    createBtn.disabled = true;
+    cancelBtn.disabled = true;
+    createBtn.textContent = t('proj.analysing');
+    let project;
     try {
-      await cmd('add_project', { name, urgency });
+      project = await cmd('add_project', { sentence });
     } catch (e) {
       errEl.textContent = String(e);
       return;
+    } finally {
+      creating = false;
+      createBtn.disabled = false;
+      cancelBtn.disabled = false;
+      createBtn.textContent = t('proj.create');
     }
-    const project = { name, urgency, description: '', email_count: 0 };
     if (appState) appState.projects.push(project);
     closeForm();
-    activeProject = name;
+    activeProject = project.name;
     renderProjects();
     showProject(project);
     document.getElementById('projects-desc').focus();
@@ -1209,11 +1390,11 @@ function setupNewProject() {
 
   document.getElementById('projects-new').addEventListener('click', () => {
     form.classList.remove('hidden');
-    nameEl.focus();
+    sentenceEl.focus();
   });
-  document.getElementById('projects-new-cancel').addEventListener('click', closeForm);
-  document.getElementById('projects-new-create').addEventListener('click', create);
-  nameEl.addEventListener('keydown', e => {
+  cancelBtn.addEventListener('click', closeForm);
+  createBtn.addEventListener('click', create);
+  sentenceEl.addEventListener('keydown', e => {
     if (e.key === 'Enter') create();
     if (e.key === 'Escape') closeForm();
   });
@@ -1224,6 +1405,95 @@ function showProject(p) {
   document.getElementById('projects-detail-name').textContent = p.name;
   document.getElementById('projects-detail-urgency').textContent = t('proj.urgency.' + (p.urgency === 'high' ? 'high' : 'normal'));
   document.getElementById('projects-desc').value = p.description || '';
+
+  const renameBtn = document.getElementById('projects-rename');
+  const deleteBtn = document.getElementById('projects-delete');
+  const titleDisplay = document.getElementById('projects-title-display');
+  const renameForm = document.getElementById('projects-rename-form');
+  const renameInput = document.getElementById('projects-rename-input');
+  const renameError = document.getElementById('projects-rename-error');
+  const renameSave = document.getElementById('projects-rename-save');
+  const renameCancel = document.getElementById('projects-rename-cancel');
+  deleteBtn.setAttribute('aria-label', t('proj.delete'));
+  titleDisplay.classList.remove('hidden');
+  renameForm.classList.add('hidden');
+  renameBtn.classList.remove('hidden');
+  renameError.textContent = '';
+  renameBtn.disabled = false;
+  deleteBtn.disabled = false;
+  renameBtn.onclick = () => {
+    renameInput.value = p.name;
+    titleDisplay.classList.add('hidden');
+    renameForm.classList.remove('hidden');
+    renameBtn.classList.add('hidden');
+    renameInput.focus();
+    renameInput.select();
+  };
+  const closeRename = () => {
+    titleDisplay.classList.remove('hidden');
+    renameForm.classList.add('hidden');
+    renameBtn.classList.remove('hidden');
+    renameError.textContent = '';
+  };
+  const saveRename = async () => {
+    const oldName = p.name;
+    const newName = renameInput.value.trim();
+    if (!newName) { renameError.textContent = t('proj.enterName'); return; }
+    if (newName === oldName) { closeRename(); return; }
+    renameInput.disabled = true;
+    renameSave.disabled = true;
+    renameCancel.disabled = true;
+    deleteBtn.disabled = true;
+    try {
+      p.name = await cmd('rename_project', { name: oldName, newName });
+      for (const [key, value] of Object.entries(appState)) {
+        if (key === 'projects' || !Array.isArray(value)) continue;
+        for (const item of value) if (item?.project === oldName) item.project = p.name;
+      }
+      renameProjectChips(oldName, p.name);
+      if (activeBoard === oldName) activeBoard = p.name;
+      activeProject = p.name;
+      renderProjects();
+      showProject(p);
+    } catch (e) {
+      renameError.textContent = String(e);
+      renameInput.disabled = false;
+      renameSave.disabled = false;
+      renameCancel.disabled = false;
+      deleteBtn.disabled = false;
+    }
+  };
+  renameInput.disabled = false;
+  renameSave.disabled = false;
+  renameCancel.disabled = false;
+  renameSave.onclick = saveRename;
+  renameCancel.onclick = closeRename;
+  renameInput.onkeydown = e => {
+    if (e.key === 'Enter') saveRename();
+    if (e.key === 'Escape') closeRename();
+  };
+  deleteBtn.onclick = async () => {
+    if (!confirm(t('proj.deleteConfirm', { name: p.name }))) return;
+    deleteBtn.disabled = true;
+    try {
+      await cmd('delete_project', { name: p.name });
+      appState.projects = appState.projects.filter(project => project.name !== p.name);
+      for (const [key, value] of Object.entries(appState)) {
+        if (key === 'projects' || key === 'tasks' || !Array.isArray(value)) continue;
+        for (const item of value) if (item?.project === p.name) item.project = '';
+      }
+      for (const task of appState.tasks) if (task.project === p.name) task.project = null;
+      renameProjectChips(p.name, null);
+      if (activeBoard === p.name) activeBoard = null;
+      activeProject = null;
+      document.getElementById('projects-detail').classList.add('hidden');
+      document.getElementById('projects-reading-pane').classList.add('hidden');
+      renderProjects();
+    } catch (e) {
+      deleteBtn.disabled = false;
+      flash(String(e));
+    }
+  };
 
   document.getElementById('projects-save-desc').onclick = async () => {
     const desc = document.getElementById('projects-desc').value;
@@ -1770,7 +2040,44 @@ function senderLabel(email) {
 // openCompose()                         new message
 // openCompose({ mode: 'reply', email })  reply with the original quoted
 // openCompose({ mode: 'forward', email }) forward with the original below
-function openCompose({ mode = 'new', email = null, to: presetTo = '', subject: presetSubject = '',
+// Each call opens a new window, so several emails can be written at the same time.
+function openCompose(options = {}) {
+  const { mode = 'new', email = null, subject = '' } = options;
+  const title = email && mode === 'reply' ? `Re: ${email.subject}`
+    : email && mode === 'forward' ? `Fwd: ${email.subject}`
+    : subject || t('cmp.newMessage');
+  cmd('open_compose_window', { args: options, title }).catch(e => showToast(String(e)));
+}
+
+// Runs in a composer window: the composer fills the window, nothing else is set up.
+async function startComposeWindow(options) {
+  document.body.classList.add('compose-window');
+  initLang();
+  applyStaticI18n();
+  updateTranslateButton();
+  setupCompose();
+  try {
+    const s = await invoke('get_settings');
+    fontScale = s.font_scale || 1.0;
+    document.documentElement.style.fontSize = `${fontScale * 14}px`;
+    applyTheme(s.theme);
+    if (s.language && s.language !== LANG) applyLanguage(s.language);
+  } catch (_) {}
+  await loadComposeAccounts();
+  fillCompose(options);
+
+  const win = window.__TAURI__.window.getCurrentWindow();
+  const setTitle = () => win.setTitle($c('compose-subject').value.trim() || t('cmp.newMessage')).catch(() => {});
+  $c('compose-subject').addEventListener('input', setTitle);
+  setTitle();
+  // Closing the window with something typed asks first, like the discard button.
+  win.onCloseRequested(e => {
+    if (composeDirty && !composeClosing) { e.preventDefault(); requestCloseCompose(); }
+  });
+}
+let composeClosing = false;   // the composer window is closing on purpose (sent or discarded)
+
+function fillCompose({ mode = 'new', email = null, to: presetTo = '', subject: presetSubject = '',
                        cc: presetCc = '', html: presetHtml = '', inReplyTo: presetInReplyTo = null } = {}) {
   let to = presetTo, subject = presetSubject, html = presetHtml || '<div><br></div>';
   composeInReplyTo = presetInReplyTo;
@@ -1867,6 +2174,11 @@ function requestCloseCompose(force = false) {
 }
 
 function closeCompose() {
+  if (window.__COMPOSE__) {
+    composeClosing = true;
+    window.__TAURI__.window.getCurrentWindow().close();
+    return;
+  }
   $c('composer').classList.add('hidden');
   $c('composer').classList.remove('minimized', 'expanded');
   $c('compose-body').innerHTML = '';
@@ -1893,8 +2205,9 @@ async function sendEmail() {
   try {
     await cmd('send_email', { to, cc, bcc, subject, html, inReplyTo: composeInReplyTo,
                               account: Number($c('compose-from').value) || 0 });
+    if (window.__COMPOSE__) window.__TAURI__.event.emit('compose-sent').catch(() => {});
+    else showToast(t('cmp.sent'));
     closeCompose();
-    showToast(t('cmp.sent'));
   } catch (e) {
     btn.disabled = false;
     setComposeStatus(t('cmp.sendFailed', { err: e }), true);
@@ -2012,6 +2325,8 @@ async function openSettings() {
   document.getElementById('s-cloud-password').value = '';
   setCloudStatus('');
   renderCloudStatus(await cmd('cloud_status'));
+  document.getElementById('s-update-auto').checked = autoUpdatesEnabled();
+  document.getElementById('s-update-current').textContent = await cmd('app_version');
 
   renderAccountBlocks(settingsData.accounts);
   document.getElementById('settings-overlay').classList.remove('hidden');
@@ -2240,6 +2555,7 @@ function setupSettings() {
   document.getElementById('s-language').addEventListener('change', e => applyLanguage(e.target.value));   // live preview
   setupCloudSettings();
   setupAiSettings();
+  setupUpdateSettings();
 
   document.getElementById('s-show-qr').addEventListener('click', async () => {
     const qr = await cmd('get_qr');
@@ -2247,6 +2563,86 @@ function setupSettings() {
     out.textContent = qr;
     out.style.display = out.style.display === 'none' ? 'block' : 'none';
   });
+}
+
+function autoUpdatesEnabled() {
+  return CourrielCore.autoUpdatesEnabled(localStorage);
+}
+
+function setupUpdateSettings() {
+  document.getElementById('s-update-auto').addEventListener('change', e => {
+    CourrielCore.saveAutoUpdates(localStorage, e.target.checked);
+  });
+  document.getElementById('s-update-check').addEventListener('click', () => checkForUpdates(true));
+  document.getElementById('s-update-install').addEventListener('click', installAvailableUpdate);
+}
+
+async function checkForUpdates(manual = false) {
+  const checkBtn = document.getElementById('s-update-check');
+  const installBtn = document.getElementById('s-update-install');
+  const status = document.getElementById('s-update-status');
+  const notes = document.getElementById('s-update-notes');
+  if (manual) {
+    checkBtn.disabled = true;
+    status.textContent = t('set.updateChecking');
+    notes.classList.add('hidden');
+  }
+  try {
+    const info = await cmd('check_for_update');
+    document.getElementById('s-update-current').textContent = info.current_version;
+    if (!info.available) {
+      installBtn.classList.add('hidden');
+      if (manual) status.textContent = t('set.updateLatest');
+      return info;
+    }
+    installBtn.classList.remove('hidden');
+    status.textContent = t('set.updateAvailable', { version: info.version });
+    notes.textContent = info.notes || '';
+    notes.classList.toggle('hidden', !info.notes);
+    return info;
+  } catch (e) {
+    if (manual) status.textContent = t('set.updateError', { err: String(e) });
+    else console.warn('automatic update check', e);
+    return null;
+  } finally {
+    checkBtn.disabled = false;
+  }
+}
+
+async function installAvailableUpdate() {
+  const checkBtn = document.getElementById('s-update-check');
+  const installBtn = document.getElementById('s-update-install');
+  const status = document.getElementById('s-update-status');
+  checkBtn.disabled = true;
+  installBtn.disabled = true;
+  status.textContent = t('set.updateDownloading');
+  document.getElementById('s-update-progress').classList.remove('hidden');
+  try {
+    await cmd('install_update');
+  } catch (e) {
+    status.textContent = t('set.updateError', { err: String(e) });
+    checkBtn.disabled = false;
+    installBtn.disabled = false;
+  }
+}
+
+function renderUpdateProgress(progress) {
+  const bar = document.getElementById('s-update-progress');
+  const fill = bar.querySelector('div');
+  bar.classList.remove('hidden');
+  const percent = CourrielCore.updateProgressPercent(progress);
+  if (progress.finished) {
+    fill.style.width = `${percent}%`;
+    document.getElementById('s-update-status').textContent = t('set.updateRestarting');
+  } else if (percent !== null) {
+    fill.style.width = `${percent}%`;
+  }
+}
+
+async function checkAutomaticUpdates() {
+  if (!autoUpdatesEnabled()) return;
+  const info = await checkForUpdates(false);
+  if (info?.available) installAvailableUpdate();
 }
 
 function switchSettingsTab(tab) {
@@ -2580,6 +2976,7 @@ function emailRow(email) {
     <div class="email-row-body">
       <div class="email-row-top">
         <span class="email-from">${esc(email.from_name)}</span>
+        ${projectChip(email.project)}
         <span class="email-date">${esc(emailDateShort(email))}</span>
       </div>
       <div class="email-subject">${esc(email.subject)}</div>
@@ -2595,6 +2992,27 @@ function emailRow(email) {
     });
   }
   return row;
+}
+
+function projectChip(project) {
+  return project ? `<span class="email-project" title="${esc(project)}">${esc(project)}</span>` : '';
+}
+
+// Updates the project chip of the inbox rows showing this email.
+function setRowProject(uid, project) {
+  document.querySelectorAll(`.email-row[data-uid="${uid}"]`).forEach(row => {
+    if (row.closest(NON_INBOX_PANELS)) return;
+    row.querySelector('.email-project')?.remove();
+    row.querySelector('.email-date')?.insertAdjacentHTML('beforebegin', projectChip(project));
+  });
+}
+
+// After a project is renamed (newName) or deleted (null).
+function renameProjectChips(oldName, newName) {
+  document.querySelectorAll('.email-project').forEach(chip => {
+    if (chip.textContent !== oldName) return;
+    if (newName) { chip.textContent = newName; chip.title = newName; } else chip.remove();
+  });
 }
 
 function readToggleTitle(isRead) {

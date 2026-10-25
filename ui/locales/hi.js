@@ -5,7 +5,7 @@ STRINGS.hi = {
     "nav.spam": "स्पैम",
     'nav.sent': 'भेजे गए', 'nav.drafts': 'ड्राफ़्ट', 'nav.trash': 'ट्रैश',
     'nav.sponsor': '❤ सहयोग करें',
-    'nav.search': '🔍 खोजें',
+    'nav.search': '✨ पूछें',
     'search.placeholder': 'खोजें, या AI से पूछें…', 'search.ask': '✨ AI से पूछें', 'search.aiTitle': 'AI से पूछें (Ctrl+Enter)',
     'search.mode.auto': 'ऑटो', 'search.mode.find': '🔎 ढूँढें', 'search.mode.compose': '✉ लिखें',
     'search.mode.summarize': '🧾 सारांश', 'search.mode.answer': '❓ प्रश्न',
@@ -25,6 +25,7 @@ STRINGS.hi = {
 
     'ov.greeting': 'सुप्रभात।', 'ov.loading': 'लोड हो रहा है…', 'ov.noAccount': 'स्वागत है! शुरू करने के लिए सेटिंग में अपना मेल खाता जोड़ें।',
     'ov.urgent': 'अत्यावश्यक और उच्च', 'ov.deadlines': 'समय-सीमाएँ', 'ov.tasks': 'कार्य', 'ov.meetings': 'मीटिंग',
+    "ov.showOpened": "पढ़े हुए दिखाएँ", "ov.hideOpened": "पढ़े हुए छिपाएँ",
     'ov.inDays': '{n} दिन में', 'ov.daysAgo': '{n} दिन पहले', 'ov.couldNotDelete': 'हटाया नहीं जा सका: {err}',
 
     'kanban.title': 'कार्य', 'kanban.todo': 'करना है', 'kanban.inProgress': 'जारी है',
@@ -34,10 +35,22 @@ STRINGS.hi = {
     'kanban.aiMoved': 'AI द्वारा अपने-आप ले जाया गया', 'kanban.aiDone': 'AI: पूरा', 'kanban.aiObsolete': 'AI: अप्रचलित',
 
     'cal.title': 'कैलेंडर', 'cal.more': '+{n} और',
+    'cal.newTask': 'नया कार्य', 'cal.taskTitle': 'कार्य', 'cal.taskPlaceholder': 'क्या करना है?',
+    'cal.date': 'तारीख', 'cal.project': 'प्रोजेक्ट', 'cal.noProject': 'कोई प्रोजेक्ट नहीं',
+    'cal.createTask': 'कार्य बनाएँ', 'cal.enterTask': 'कृपया कार्य दर्ज करें।',
+    'mail.thread': 'बातचीत: {n} ईमेल',
+    'mail.newestFirst': 'नवीनतम ↓', 'mail.oldestFirst': 'सबसे पुराने ↑',
+    'mail.sortBy': 'क्रमबद्ध करें', 'mail.sort.date': 'तारीख', 'mail.sort.sender': 'प्रेषक',
+    'mail.sort.subject': 'विषय', 'mail.sort.read': 'पढ़ने की स्थिति', 'mail.sort.priority': 'प्राथमिकता',
+    'mail.sort.project': 'प्रोजेक्ट', 'mail.ascending': 'आरोही', 'mail.descending': 'अवरोही',
 
     'proj.new': '+ नया प्रोजेक्ट', 'proj.namePlaceholder': 'प्रोजेक्ट का नाम',
+    'proj.sentencePlaceholder': 'एक छोटे वाक्य में प्रोजेक्ट का वर्णन करें…',
     'proj.urgency.normal': 'सामान्य', 'proj.urgency.high': 'उच्च',
     'proj.create': 'बनाएँ', 'proj.cancel': 'रद्द करें', 'proj.descPlaceholder': 'प्रोजेक्ट का विवरण…', 'proj.save': 'सहेजें',
+    'proj.analysing': 'विश्लेषण हो रहा है…', 'proj.enterSentence': 'एक छोटे वाक्य में प्रोजेक्ट का वर्णन करें।',
+    'proj.delete': 'प्रोजेक्ट हटाएँ', 'proj.deleteConfirm': 'क्या आप वाकई “{name}” को हटाना चाहते हैं?',
+    'proj.rename': 'नाम बदलें', 'proj.renamePrompt': 'प्रोजेक्ट का नया नाम:',
     'proj.emails.one': '{n} ईमेल', 'proj.emails.other': '{n} ईमेल', 'proj.enterName': 'कृपया नाम दर्ज करें।',
 
     'rp.select': 'पढ़ने के लिए कोई ईमेल चुनें',
@@ -101,6 +114,12 @@ STRINGS.hi = {
     'set.cloudWorking': 'काम जारी है…', 'set.cloudSynced': 'सिंक हो गया।', 'set.cloudConfirm': 'खाता बन गया। Supabase द्वारा भेजे गए ईमेल से इसकी पुष्टि करें, फिर साइन इन करें।',
     'set.cloudNeedProject': 'पहले प्रोजेक्ट URL और anon कुंजी दर्ज करें।', 'set.cloudNeedCreds': 'अपना ईमेल और पासवर्ड दर्ज करें।',
     'set.cloudNote': 'हर खाता केवल अपना डेटा देखता है (पंक्ति-स्तरीय सुरक्षा)। सिंक होता है: कार्य, स्वाइप, प्रोजेक्ट टैग, प्रोजेक्ट, प्राथमिकताएँ और AI परिणाम। कभी सिंक नहीं होता: मेल पासवर्ड, API कुंजियाँ और ये Supabase सेटिंग।',
+    "set.updates": "अपडेट", "set.updateCurrent": "वर्तमान संस्करण",
+    "set.updateAuto": "अपडेट उपलब्ध होने पर उसे अपने-आप डाउनलोड और इंस्टॉल करके ऐप पुनः आरंभ करें", "set.updateCheck": "अपडेट जाँचें",
+    "set.updateInstall": "अपडेट इंस्टॉल करें", "set.updateSigned": "अपडेट आधिकारिक GitHub Releases चैनल से डाउनलोड होते हैं और इंस्टॉल करने से पहले Courriel की हस्ताक्षर कुंजी से सत्यापित किए जाते हैं।",
+    "set.updateChecking": "अपडेट जाँचे जा रहे हैं…", "set.updateLatest": "Courriel नवीनतम है।",
+    "set.updateAvailable": "संस्करण {version} उपलब्ध है।", "set.updateError": "अपडेट विफल: {err}",
+    "set.updateDownloading": "अपडेट डाउनलोड और इंस्टॉल हो रहा है…", "set.updateRestarting": "अपडेट इंस्टॉल हो गया। Courriel पुनः आरंभ हो रहा है…",
     'theme.midnight': 'मिडनाइट', 'theme.premium': 'प्रीमियम', 'theme.modern': 'मॉडर्न',
     'theme.brutalist': 'ब्रूटलिस्ट', 'theme.aero': 'Frutiger Aero', 'theme.terminal': 'टर्मिनल',
 

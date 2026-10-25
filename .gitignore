@@ -21,3 +21,4 @@ signature.html
 # Local tooling / scratch
 .claude/
 image.png
+__pycache__/

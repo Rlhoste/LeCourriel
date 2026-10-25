@@ -47,6 +47,7 @@ pub fn raw_to_card(raw: crate::models::RawEmail) -> EmailCard {
         reply_to: raw.reply_to,
         bcc: raw.bcc,
         message_id: raw.message_id,
+        references: raw.references,
         date_str,
         date_full,
         date_ts: raw.date.map(|d| d.timestamp()).unwrap_or(0),
@@ -150,6 +151,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
             c.reply_to = raw.reply_to.clone();
             c.bcc = raw.bcc.clone();
             c.message_id = raw.message_id.clone();
+            c.references = raw.references.clone();
             c.date_full = raw.date.map(format_date_full).unwrap_or_default();
             c.date_ts = raw.date.map(|d| d.timestamp()).unwrap_or(0);
             c.date_str = raw.date.map(format_date)
@@ -226,6 +228,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
                 subject: if raw.subject.is_empty() { "(No Subject)".to_string() } else { raw.subject },
                 from_name, from_email,
                 to: raw.to, cc: raw.cc, reply_to: raw.reply_to, bcc: raw.bcc, message_id: raw.message_id,
+                references: raw.references,
                 date_str, date_full,
                 date_ts: raw.date.map(|d| d.timestamp()).unwrap_or(0),
                 summary: classified.summary,
@@ -302,10 +305,13 @@ fn populate(
 ) {
     // Projects the user re-tagged by hand win over the AI's choice.
     let overrides = crate::overrides::Overrides::load();
-    let cards: Vec<EmailCard> = cards.into_iter().map(|mut c| {
+    let mut cards: Vec<EmailCard> = cards.into_iter().map(|mut c| {
         overrides.apply(&mut c);
         c
     }).collect();
+    // Cached messages and newly classified messages are assembled separately.
+    // Always restore chronological order before building inbox-derived lists.
+    cards.sort_by(|a, b| b.date_ts.cmp(&a.date_ts).then_with(|| b.uid.cmp(&a.uid)));
 
     let mut urgent = Vec::new(); let mut high = Vec::new();
     let mut other  = Vec::new(); let mut info_vec = Vec::new();
@@ -456,6 +462,7 @@ pub fn to_dto_vec(cards: &[EmailCard]) -> Vec<EmailCardDto> {
         reply_to:     c.reply_to.clone(),
         bcc:          c.bcc.clone(),
         message_id:   c.message_id.clone(),
+        references:   c.references.clone(),
         date_str:     c.date_str.clone(),
         date_full:    c.date_full.clone(),
         date_ts:      c.date_ts,

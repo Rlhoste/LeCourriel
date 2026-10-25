@@ -1,6 +1,6 @@
 [package]
 name = "courriel"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
 
@@ -28,5 +28,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 html2text = "0.6"
 qrcode = "0.14"
 tauri-plugin-dialog = "2"
+tauri-plugin-updater = "2"
 base64 = "0.22"
 encoding_rs = "0.8"

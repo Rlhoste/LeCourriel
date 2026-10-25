@@ -6,7 +6,7 @@ STRINGS.en = {
     "nav.spam": "Spam",
     'nav.sent': 'Sent', 'nav.drafts': 'Drafts', 'nav.trash': 'Trash',
     'nav.sponsor': '❤ Sponsor',
-    'nav.search': '🔍 Search',
+    'nav.search': '✨ Ask',
     'search.placeholder': 'Search, or ask the AI…', 'search.ask': '✨ Ask AI', 'search.aiTitle': 'Ask the AI (Ctrl+Enter)',
     'search.mode.auto': 'Auto', 'search.mode.find': '🔎 Find', 'search.mode.compose': '✉ Write',
     'search.mode.summarize': '🧾 Summarise', 'search.mode.answer': '❓ Question',
@@ -27,6 +27,7 @@ STRINGS.en = {
     // Overview
     'ov.greeting': 'Good morning.', 'ov.loading': 'Loading…', 'ov.noAccount': 'Welcome! Add your mail account in Settings to get started.',
     'ov.urgent': 'Urgent & High', 'ov.deadlines': 'Deadlines', 'ov.tasks': 'Tasks', 'ov.meetings': 'Meetings',
+    "ov.showOpened": "Show opened", "ov.hideOpened": "Hide opened",
     'ov.inDays': 'in {n}d', 'ov.daysAgo': '{n}d ago', 'ov.couldNotDelete': 'Could not delete: {err}',
 
     // Tasks kanban
@@ -38,11 +39,23 @@ STRINGS.en = {
 
     // Calendar
     'cal.title': 'Calendar', 'cal.more': '+{n} more',
+    'cal.newTask': 'New task', 'cal.taskTitle': 'Task', 'cal.taskPlaceholder': 'What needs to be done?',
+    'cal.date': 'Date', 'cal.project': 'Project', 'cal.noProject': 'No project',
+    'cal.createTask': 'Create task', 'cal.enterTask': 'Please enter a task.',
+    'mail.thread': 'Discussion: {n} emails',
+    'mail.newestFirst': 'Newest ↓', 'mail.oldestFirst': 'Oldest ↑',
+    'mail.sortBy': 'Sort by', 'mail.sort.date': 'Date', 'mail.sort.sender': 'Sender',
+    'mail.sort.subject': 'Subject', 'mail.sort.read': 'Read status', 'mail.sort.priority': 'Priority',
+    'mail.sort.project': 'Project', 'mail.ascending': 'Ascending', 'mail.descending': 'Descending',
 
     // Projects
     'proj.new': '+ New project', 'proj.namePlaceholder': 'Project name',
+    'proj.sentencePlaceholder': 'Describe the project in one short sentence…',
     'proj.urgency.normal': 'Normal', 'proj.urgency.high': 'High',
     'proj.create': 'Create', 'proj.cancel': 'Cancel', 'proj.descPlaceholder': 'Project description…', 'proj.save': 'Save',
+    'proj.analysing': 'Analysing…', 'proj.enterSentence': 'Please describe the project in one short sentence.',
+    'proj.delete': 'Delete project', 'proj.deleteConfirm': 'Are you sure you want to delete “{name}”?',
+    'proj.rename': 'Rename', 'proj.renamePrompt': 'New project name:',
     'proj.emails.one': '1 email', 'proj.emails.other': '{n} emails', 'proj.enterName': 'Please enter a name.',
 
     // Reading pane
@@ -109,6 +122,12 @@ STRINGS.en = {
     'set.cloudWorking': 'Working…', 'set.cloudSynced': 'Synced.', 'set.cloudConfirm': 'Account created. Confirm it from the email Supabase sent you, then sign in.',
     'set.cloudNeedProject': 'Enter the project URL and anon key first.', 'set.cloudNeedCreds': 'Enter your email and password.',
     'set.cloudNote': 'Each account only sees its own data (row-level security). Synced: tasks, swipes, project tags, projects, preferences and AI results. Never synced: mail passwords, API keys and these Supabase settings.',
+    "set.updates": "Updates", "set.updateCurrent": "Current version",
+    "set.updateAuto": "Automatically download, install and restart when an update is available", "set.updateCheck": "Check for updates",
+    "set.updateInstall": "Install update", "set.updateSigned": "Updates are downloaded from the official GitHub Releases channel and verified with Courriel’s signing key before installation.",
+    "set.updateChecking": "Checking for updates…", "set.updateLatest": "Courriel is up to date.",
+    "set.updateAvailable": "Version {version} is available.", "set.updateError": "Update failed: {err}",
+    "set.updateDownloading": "Downloading and installing the update…", "set.updateRestarting": "Update installed. Restarting Courriel…",
     'theme.midnight': 'Midnight', 'theme.premium': 'Premium', 'theme.modern': 'Modern',
     'theme.brutalist': 'Brutalist', 'theme.aero': 'Frutiger Aero', 'theme.terminal': 'Terminal',
 

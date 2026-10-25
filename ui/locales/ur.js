@@ -5,7 +5,7 @@ STRINGS.ur = {
     "nav.spam": "اسپام",
     'nav.sent': 'بھیجی گئی', 'nav.drafts': 'ڈرافٹس', 'nav.trash': 'ردی',
     'nav.sponsor': '❤ تعاون کریں',
-    'nav.search': '🔍 تلاش',
+    'nav.search': '✨ پوچھیں',
     'search.placeholder': 'تلاش کریں، یا اے آئی سے پوچھیں…', 'search.ask': '✨ اے آئی سے پوچھیں', 'search.aiTitle': 'اے آئی سے پوچھیں (Ctrl+Enter)',
     'search.mode.auto': 'خودکار', 'search.mode.find': '🔎 تلاش', 'search.mode.compose': '✉ لکھیں',
     'search.mode.summarize': '🧾 خلاصہ', 'search.mode.answer': '❓ سوال',
@@ -25,6 +25,7 @@ STRINGS.ur = {
 
     'ov.greeting': 'صبح بخیر۔', 'ov.loading': 'لوڈ ہو رہا ہے…', 'ov.noAccount': 'خوش آمدید! شروع کرنے کے لیے ترتیبات میں اپنا میل اکاؤنٹ شامل کریں۔',
     'ov.urgent': 'فوری اور اہم', 'ov.deadlines': 'آخری تاریخیں', 'ov.tasks': 'کام', 'ov.meetings': 'میٹنگز',
+    "ov.showOpened": "پڑھے ہوئے دکھائیں", "ov.hideOpened": "پڑھے ہوئے چھپائیں",
     'ov.inDays': '{n} دن میں', 'ov.daysAgo': '{n} دن پہلے', 'ov.couldNotDelete': 'حذف نہیں ہو سکا: {err}',
 
     'kanban.title': 'کام', 'kanban.todo': 'کرنے والے', 'kanban.inProgress': 'جاری',
@@ -34,10 +35,22 @@ STRINGS.ur = {
     'kanban.aiMoved': 'اے آئی نے خودکار طور پر منتقل کیا', 'kanban.aiDone': 'اے آئی: مکمل', 'kanban.aiObsolete': 'اے آئی: غیر متعلق',
 
     'cal.title': 'کیلنڈر', 'cal.more': '+{n} مزید',
+    'cal.newTask': 'نیا کام', 'cal.taskTitle': 'کام', 'cal.taskPlaceholder': 'کیا کرنا ہے؟',
+    'cal.date': 'تاریخ', 'cal.project': 'پروجیکٹ', 'cal.noProject': 'کوئی پروجیکٹ نہیں',
+    'cal.createTask': 'کام بنائیں', 'cal.enterTask': 'براہ کرم کام درج کریں۔',
+    'mail.thread': 'گفتگو: {n} ای میلز',
+    'mail.newestFirst': 'نئے پہلے ↓', 'mail.oldestFirst': 'پرانے پہلے ↑',
+    'mail.sortBy': 'ترتیب دیں', 'mail.sort.date': 'تاریخ', 'mail.sort.sender': 'بھیجنے والا',
+    'mail.sort.subject': 'موضوع', 'mail.sort.read': 'پڑھنے کی حالت', 'mail.sort.priority': 'ترجیح',
+    'mail.sort.project': 'پروجیکٹ', 'mail.ascending': 'صعودی', 'mail.descending': 'نزولی',
 
     'proj.new': '+ نیا پروجیکٹ', 'proj.namePlaceholder': 'پروجیکٹ کا نام',
+    'proj.sentencePlaceholder': 'ایک مختصر جملے میں پروجیکٹ کی وضاحت کریں…',
     'proj.urgency.normal': 'عام', 'proj.urgency.high': 'زیادہ',
     'proj.create': 'بنائیں', 'proj.cancel': 'منسوخ کریں', 'proj.descPlaceholder': 'پروجیکٹ کی تفصیل…', 'proj.save': 'محفوظ کریں',
+    'proj.analysing': 'تجزیہ ہو رہا ہے…', 'proj.enterSentence': 'ایک مختصر جملے میں پروجیکٹ کی وضاحت کریں۔',
+    'proj.delete': 'پروجیکٹ حذف کریں', 'proj.deleteConfirm': 'کیا آپ واقعی ”{name}“ پروجیکٹ حذف کرنا چاہتے ہیں؟',
+    'proj.rename': 'نام تبدیل کریں', 'proj.renamePrompt': 'پروجیکٹ کا نیا نام:',
     'proj.emails.one': '1 ای میل', 'proj.emails.other': '{n} ای میلز', 'proj.enterName': 'براہ کرم نام درج کریں۔',
 
     'rp.select': 'پڑھنے کے لیے کوئی ای میل منتخب کریں',
@@ -101,6 +114,12 @@ STRINGS.ur = {
     'set.cloudWorking': 'کام جاری ہے…', 'set.cloudSynced': 'سنک ہو گیا۔', 'set.cloudConfirm': 'اکاؤنٹ بن گیا۔ Supabase کی بھیجی گئی ای میل سے اس کی تصدیق کریں، پھر سائن ان کریں۔',
     'set.cloudNeedProject': 'پہلے پروجیکٹ URL اور anon کلید درج کریں۔', 'set.cloudNeedCreds': 'اپنا ای میل اور پاس ورڈ درج کریں۔',
     'set.cloudNote': 'ہر اکاؤنٹ صرف اپنا ڈیٹا دیکھتا ہے (row-level سیکیورٹی)۔ سنک ہونے والی چیزیں: کام، سوائپس، پروجیکٹ ٹیگز، پروجیکٹس، ترجیحات اور اے آئی کے نتائج۔ کبھی سنک نہیں ہوتے: میل پاس ورڈز، API کلیدیں اور یہ Supabase ترتیبات۔',
+    "set.updates": "اپ ڈیٹس", "set.updateCurrent": "موجودہ ورژن",
+    "set.updateAuto": "اپ ڈیٹ دستیاب ہونے پر اسے خودکار طور پر ڈاؤن لوڈ اور انسٹال کر کے ایپ دوبارہ شروع کریں", "set.updateCheck": "اپ ڈیٹس چیک کریں",
+    "set.updateInstall": "اپ ڈیٹ انسٹال کریں", "set.updateSigned": "اپ ڈیٹس آفیشل GitHub Releases چینل سے ڈاؤن لوڈ ہوتی ہیں اور انسٹالیشن سے پہلے Courriel کی دستخطی کلید سے تصدیق کی جاتی ہے۔",
+    "set.updateChecking": "اپ ڈیٹس چیک ہو رہی ہیں…", "set.updateLatest": "Courriel تازہ ترین ہے۔",
+    "set.updateAvailable": "ورژن {version} دستیاب ہے۔", "set.updateError": "اپ ڈیٹ ناکام: {err}",
+    "set.updateDownloading": "اپ ڈیٹ ڈاؤن لوڈ اور انسٹال ہو رہی ہے…", "set.updateRestarting": "اپ ڈیٹ انسٹال ہو گئی۔ Courriel دوبارہ شروع ہو رہا ہے…",
     'theme.midnight': 'آدھی رات', 'theme.premium': 'پریمیم', 'theme.modern': 'جدید',
     'theme.brutalist': 'بروٹلسٹ', 'theme.aero': 'Frutiger Aero', 'theme.terminal': 'ٹرمینل',
 

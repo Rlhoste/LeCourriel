@@ -5,7 +5,7 @@ STRINGS.id = {
     "nav.spam": "Spam",
     'nav.sent': 'Terkirim', 'nav.drafts': 'Draf', 'nav.trash': 'Sampah',
     'nav.sponsor': '❤ Dukung',
-    'nav.search': '🔍 Cari',
+    'nav.search': '✨ Tanya',
     'search.placeholder': 'Cari, atau tanya AI…', 'search.ask': '✨ Tanya AI', 'search.aiTitle': 'Tanya AI (Ctrl+Enter)',
     'search.mode.auto': 'Otomatis', 'search.mode.find': '🔎 Temukan', 'search.mode.compose': '✉ Tulis',
     'search.mode.summarize': '🧾 Ringkas', 'search.mode.answer': '❓ Pertanyaan',
@@ -25,6 +25,7 @@ STRINGS.id = {
 
     'ov.greeting': 'Selamat pagi.', 'ov.loading': 'Memuat…', 'ov.noAccount': 'Selamat datang! Tambahkan akun email Anda di Pengaturan untuk memulai.',
     'ov.urgent': 'Mendesak & Penting', 'ov.deadlines': 'Tenggat', 'ov.tasks': 'Tugas', 'ov.meetings': 'Rapat',
+    "ov.showOpened": "Tampilkan yang dibaca", "ov.hideOpened": "Sembunyikan yang dibaca",
     'ov.inDays': '{n} hari lagi', 'ov.daysAgo': '{n} hari lalu', 'ov.couldNotDelete': 'Tidak dapat menghapus: {err}',
 
     'kanban.title': 'Tugas', 'kanban.todo': 'Akan dikerjakan', 'kanban.inProgress': 'Sedang dikerjakan',
@@ -34,10 +35,22 @@ STRINGS.id = {
     'kanban.aiMoved': 'Dipindahkan otomatis oleh AI', 'kanban.aiDone': 'AI: selesai', 'kanban.aiObsolete': 'AI: usang',
 
     'cal.title': 'Kalender', 'cal.more': '+{n} lainnya',
+    'cal.newTask': 'Tugas baru', 'cal.taskTitle': 'Tugas', 'cal.taskPlaceholder': 'Apa yang perlu dilakukan?',
+    'cal.date': 'Tanggal', 'cal.project': 'Proyek', 'cal.noProject': 'Tanpa proyek',
+    'cal.createTask': 'Buat tugas', 'cal.enterTask': 'Masukkan tugas.',
+    'mail.thread': 'Percakapan: {n} email',
+    'mail.newestFirst': 'Terbaru ↓', 'mail.oldestFirst': 'Terlama ↑',
+    'mail.sortBy': 'Urutkan menurut', 'mail.sort.date': 'Tanggal', 'mail.sort.sender': 'Pengirim',
+    'mail.sort.subject': 'Subjek', 'mail.sort.read': 'Status baca', 'mail.sort.priority': 'Prioritas',
+    'mail.sort.project': 'Proyek', 'mail.ascending': 'Menaik', 'mail.descending': 'Menurun',
 
     'proj.new': '+ Proyek baru', 'proj.namePlaceholder': 'Nama proyek',
+    'proj.sentencePlaceholder': 'Jelaskan proyek dalam satu kalimat singkat…',
     'proj.urgency.normal': 'Normal', 'proj.urgency.high': 'Tinggi',
     'proj.create': 'Buat', 'proj.cancel': 'Batal', 'proj.descPlaceholder': 'Deskripsi proyek…', 'proj.save': 'Simpan',
+    'proj.analysing': 'Menganalisis…', 'proj.enterSentence': 'Jelaskan proyek dalam satu kalimat singkat.',
+    'proj.delete': 'Hapus proyek', 'proj.deleteConfirm': 'Yakin ingin menghapus “{name}”?',
+    'proj.rename': 'Ubah nama', 'proj.renamePrompt': 'Nama proyek baru:',
     'proj.emails.other': '{n} email', 'proj.enterName': 'Masukkan nama.',
 
     'rp.select': 'Pilih email untuk dibaca',
@@ -101,6 +114,12 @@ STRINGS.id = {
     'set.cloudWorking': 'Memproses…', 'set.cloudSynced': 'Tersinkron.', 'set.cloudConfirm': 'Akun dibuat. Konfirmasikan lewat email yang dikirim Supabase, lalu masuk.',
     'set.cloudNeedProject': 'Masukkan URL proyek dan kunci anon terlebih dahulu.', 'set.cloudNeedCreds': 'Masukkan email dan kata sandi Anda.',
     'set.cloudNote': 'Setiap akun hanya melihat datanya sendiri (keamanan tingkat baris). Disinkronkan: tugas, geseran, tag proyek, proyek, preferensi, dan hasil AI. Tidak pernah disinkronkan: kata sandi email, kunci API, dan pengaturan Supabase ini.',
+    "set.updates": "Pembaruan", "set.updateCurrent": "Versi saat ini",
+    "set.updateAuto": "Unduh, instal, dan mulai ulang secara otomatis saat pembaruan tersedia", "set.updateCheck": "Periksa pembaruan",
+    "set.updateInstall": "Instal pembaruan", "set.updateSigned": "Pembaruan diunduh dari kanal GitHub Releases resmi dan diverifikasi dengan kunci penandatanganan Courriel sebelum dipasang.",
+    "set.updateChecking": "Memeriksa pembaruan…", "set.updateLatest": "Courriel sudah versi terbaru.",
+    "set.updateAvailable": "Versi {version} tersedia.", "set.updateError": "Pembaruan gagal: {err}",
+    "set.updateDownloading": "Mengunduh dan memasang pembaruan…", "set.updateRestarting": "Pembaruan terpasang. Memulai ulang Courriel…",
     'theme.midnight': 'Tengah Malam', 'theme.premium': 'Premium', 'theme.modern': 'Modern',
     'theme.brutalist': 'Brutalis', 'theme.aero': 'Frutiger Aero', 'theme.terminal': 'Terminal',
 

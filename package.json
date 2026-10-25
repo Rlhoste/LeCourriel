@@ -1,0 +1,10 @@
+{
+  "name": "le-courriel-tests",
+  "private": true,
+  "scripts": {
+    "test": "npm run test:ui && npm run test:locales",
+    "test:ui": "node --test ui/tests/*.test.js",
+    "test:locales": "node ui/locales/check.js && node ui/locales/test-format.js",
+    "check:js": "node --check ui/app-core.js && node --check ui/app.js"
+  }
+}

@@ -36,8 +36,8 @@
 
     <div class="nav-spacer"></div>
 
-    <button class="nav-btn sponsor-btn" id="btn-sponsor" title="github.com/sponsors/Rlhoste" data-i18n="nav.sponsor">❤ Sponsor</button>
-    <button class="nav-btn" id="btn-search" title="Ctrl+K" data-i18n="nav.search">🔍 Search</button>
+    <button class="nav-btn sponsor-btn" id="btn-sponsor" title="ko-fi.com/rlhoste" data-i18n="nav.sponsor">❤ Sponsor</button>
+    <button class="nav-btn" id="btn-search" title="Ctrl+K" data-i18n="nav.search">✨ Ask</button>
     <button class="nav-btn" id="btn-report-bug" data-i18n="nav.reportBug">🐞 Report a bug</button>
     <button class="nav-btn" id="btn-refresh" data-i18n="nav.refresh">↻ Refresh</button>
     <button class="nav-btn" id="btn-settings" data-i18n="nav.settings">⚙ Settings</button>
@@ -62,7 +62,10 @@
       <div id="ov-grid">
         <!-- Urgent + High -->
         <div class="ov-box" id="ov-urgent-box">
-          <div class="ov-box-title" data-i18n="ov.urgent">Urgent &amp; High</div>
+          <div class="ov-box-title ov-box-title-tools">
+            <span data-i18n="ov.urgent">Urgent &amp; High</span>
+            <button id="ov-toggle-opened" class="ov-filter-btn" type="button" aria-pressed="false" data-i18n="ov.showOpened">Show opened</button>
+          </div>
           <div class="ov-box-body" id="ov-urgent-list"></div>
         </div>
         <!-- Deadlines -->
@@ -141,11 +144,7 @@
         <div id="projects-sidebar">
           <button id="projects-new" data-i18n="proj.new">+ New project</button>
           <div id="projects-new-form" class="hidden">
-            <input type="text" id="projects-new-name" placeholder="Project name" data-i18n-placeholder="proj.namePlaceholder" />
-            <select id="projects-new-urgency">
-              <option value="normal" data-i18n="proj.urgency.normal">Normal</option>
-              <option value="high" data-i18n="proj.urgency.high">High</option>
-            </select>
+            <input type="text" id="projects-new-sentence" maxlength="500" placeholder="Describe the project in one short sentence…" data-i18n-placeholder="proj.sentencePlaceholder" />
             <div id="projects-new-error"></div>
             <div class="projects-new-actions">
               <button id="projects-new-create" data-i18n="proj.create">Create</button>
@@ -156,8 +155,24 @@
         </div>
         <div id="projects-detail" class="hidden">
           <div id="projects-detail-header">
-            <div id="projects-detail-name"></div>
-            <div id="projects-detail-urgency"></div>
+            <div class="projects-detail-title-wrap">
+              <div id="projects-title-display">
+                <div id="projects-detail-name"></div>
+                <div id="projects-detail-urgency"></div>
+              </div>
+              <div id="projects-rename-form" class="hidden">
+                <input type="text" id="projects-rename-input" maxlength="500" />
+                <div id="projects-rename-error"></div>
+                <div class="projects-rename-actions">
+                  <button id="projects-rename-save" data-i18n="proj.save">Save</button>
+                  <button id="projects-rename-cancel" data-i18n="proj.cancel">Cancel</button>
+                </div>
+              </div>
+            </div>
+            <div class="projects-detail-actions">
+              <button id="projects-rename" data-i18n="proj.rename">Rename</button>
+              <button id="projects-delete" title="Delete project" aria-label="Delete project" data-i18n-title="proj.delete">×</button>
+            </div>
           </div>
           <textarea id="projects-desc" placeholder="Project description…" data-i18n-placeholder="proj.descPlaceholder"></textarea>
           <button id="projects-save-desc" data-i18n="proj.save">Save</button>
@@ -171,6 +186,27 @@
     </section>
 
   </main>
+</div>
+
+<!-- ── Calendar task dialog ──────────────────────────────────────────────── -->
+<div id="calendar-task-overlay" class="overlay hidden">
+  <div class="dialog calendar-task-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-task-heading">
+    <div class="dialog-header">
+      <span id="calendar-task-heading" data-i18n="cal.newTask">New task</span>
+      <button id="calendar-task-close" class="close-btn" title="Close" data-i18n-title="cmp.close">×</button>
+    </div>
+    <label for="calendar-task-title" data-i18n="cal.taskTitle">Task</label>
+    <input type="text" id="calendar-task-title" maxlength="500" placeholder="What needs to be done?" data-i18n-placeholder="cal.taskPlaceholder" />
+    <label for="calendar-task-date" data-i18n="cal.date">Date</label>
+    <input type="date" id="calendar-task-date" />
+    <label for="calendar-task-project" data-i18n="cal.project">Project</label>
+    <select id="calendar-task-project"></select>
+    <div id="calendar-task-error" class="calendar-task-error"></div>
+    <div class="dialog-actions">
+      <button id="calendar-task-cancel" class="secondary-btn" data-i18n="proj.cancel">Cancel</button>
+      <button id="calendar-task-create" class="primary-btn" data-i18n="cal.createTask">Create task</button>
+    </div>
+  </div>
 </div>
 
 <!-- ── Compose Dialog ──────────────────────────────────────────────────────── -->
@@ -356,6 +392,7 @@
       <button class="tab" data-tab="accounts" data-i18n="set.accounts">Accounts</button>
       <button class="tab" data-tab="ai" data-i18n="set.ai">AI</button>
       <button class="tab" data-tab="cloud" data-i18n="set.cloud">Cloud</button>
+      <button class="tab" data-tab="updates" data-i18n="set.updates">Updates</button>
     </div>
 
     <!-- General -->
@@ -440,6 +477,28 @@
       <p class="settings-note" data-i18n="set.cloudNote">Each account only sees its own data (row-level security). Synced: tasks, swipes, project tags, projects, preferences and AI results. Never synced: mail passwords, API keys and these Supabase settings.</p>
     </div>
 
+    <!-- Updates -->
+    <div class="tab-content" id="tab-updates">
+      <div class="update-card">
+        <div class="update-version-row">
+          <span data-i18n="set.updateCurrent">Current version</span>
+          <strong id="s-update-current">—</strong>
+        </div>
+        <label class="checkbox-label update-auto-label">
+          <input type="checkbox" id="s-update-auto" />
+          <span data-i18n="set.updateAuto">Automatically download, install and restart when an update is available</span>
+        </label>
+        <div class="db-test-row">
+          <button id="s-update-check" class="secondary-btn" data-i18n="set.updateCheck">Check for updates</button>
+          <button id="s-update-install" class="primary-btn hidden" data-i18n="set.updateInstall">Install update</button>
+        </div>
+        <div id="s-update-status" class="db-status"></div>
+        <div id="s-update-progress" class="update-progress hidden"><div></div></div>
+        <div id="s-update-notes" class="update-notes hidden"></div>
+      </div>
+      <p class="settings-note" data-i18n="set.updateSigned">Updates are downloaded from the official GitHub Releases channel and verified with Courriel’s signing key before installation.</p>
+    </div>
+
     <div class="dialog-actions">
       <button id="settings-save" class="primary-btn" data-i18n="set.save">Save</button>
     </div>
@@ -451,7 +510,14 @@
   <div class="email-list-col">
     <div class="list-header">
       <span class="list-title"></span>
-      <span class="list-count"></span>
+      <div class="list-tools">
+        <span class="list-count"></span>
+        <div class="list-sort-wrap">
+          <button class="list-sort-button"><span class="list-sort-label" data-i18n="mail.sortBy">Sort by</span>: <span class="list-sort-current"></span> ▾</button>
+          <div class="list-sort-menu hidden"></div>
+        </div>
+        <button class="list-sort-direction"></button>
+      </div>
     </div>
     <div class="email-list"></div>
   </div>
@@ -482,6 +548,7 @@
 <script src="locales/id.js"></script>
 <script src="locales/de.js"></script>
 <script src="locales/ja.js"></script>
+<script src="app-core.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

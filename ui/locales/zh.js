@@ -5,7 +5,7 @@ STRINGS.zh = {
     "nav.spam": "垃圾邮件",
     'nav.sent': '已发送', 'nav.drafts': '草稿', 'nav.trash': '已删除',
     'nav.sponsor': '❤ 赞助',
-    'nav.search': '🔍 搜索',
+    'nav.search': '✨ 提问',
     'search.placeholder': '搜索，或询问 AI…', 'search.ask': '✨ 询问 AI', 'search.aiTitle': '询问 AI（Ctrl+Enter）',
     'search.mode.auto': '自动', 'search.mode.find': '🔎 查找', 'search.mode.compose': '✉ 撰写',
     'search.mode.summarize': '🧾 总结', 'search.mode.answer': '❓ 提问',
@@ -25,6 +25,7 @@ STRINGS.zh = {
 
     'ov.greeting': '早上好。', 'ov.loading': '正在加载…', 'ov.noAccount': '欢迎！请在“设置”中添加邮箱帐户以开始使用。',
     'ov.urgent': '紧急和重要', 'ov.deadlines': '截止日期', 'ov.tasks': '任务', 'ov.meetings': '会议',
+    "ov.showOpened": "显示已读", "ov.hideOpened": "隐藏已读",
     'ov.inDays': '{n} 天后', 'ov.daysAgo': '{n} 天前', 'ov.couldNotDelete': '无法删除：{err}',
 
     'kanban.title': '任务', 'kanban.todo': '待办', 'kanban.inProgress': '进行中',
@@ -34,10 +35,22 @@ STRINGS.zh = {
     'kanban.aiMoved': '由 AI 自动移动', 'kanban.aiDone': 'AI：已完成', 'kanban.aiObsolete': 'AI：已过时',
 
     'cal.title': '日历', 'cal.more': '还有 {n} 项',
+    'cal.newTask': '新建任务', 'cal.taskTitle': '任务', 'cal.taskPlaceholder': '需要完成什么？',
+    'cal.date': '日期', 'cal.project': '项目', 'cal.noProject': '无项目',
+    'cal.createTask': '创建任务', 'cal.enterTask': '请输入任务。',
+    'mail.thread': '对话：{n} 封邮件',
+    'mail.newestFirst': '最新 ↓', 'mail.oldestFirst': '最早 ↑',
+    'mail.sortBy': '排序方式', 'mail.sort.date': '日期', 'mail.sort.sender': '发件人',
+    'mail.sort.subject': '主题', 'mail.sort.read': '阅读状态', 'mail.sort.priority': '优先级',
+    'mail.sort.project': '项目', 'mail.ascending': '升序', 'mail.descending': '降序',
 
     'proj.new': '+ 新建项目', 'proj.namePlaceholder': '项目名称',
+    'proj.sentencePlaceholder': '用一句简短的话描述项目…',
     'proj.urgency.normal': '普通', 'proj.urgency.high': '高',
     'proj.create': '创建', 'proj.cancel': '取消', 'proj.descPlaceholder': '项目描述…', 'proj.save': '保存',
+    'proj.analysing': '正在分析…', 'proj.enterSentence': '请用一句简短的话描述项目。',
+    'proj.delete': '删除项目', 'proj.deleteConfirm': '确定要删除项目“{name}”吗？',
+    'proj.rename': '重命名', 'proj.renamePrompt': '新的项目名称：',
     'proj.emails.other': '{n} 封邮件', 'proj.enterName': '请输入名称。',
 
     'rp.select': '选择要阅读的邮件',
@@ -101,6 +114,12 @@ STRINGS.zh = {
     'set.cloudWorking': '处理中…', 'set.cloudSynced': '已同步。', 'set.cloudConfirm': '帐户已创建。请通过 Supabase 发送给您的邮件进行确认，然后登录。',
     'set.cloudNeedProject': '请先输入项目 URL 和匿名密钥。', 'set.cloudNeedCreds': '请输入您的邮箱和密码。',
     'set.cloudNote': '每个帐户只能看到自己的数据（行级安全）。会同步：任务、滑动操作、项目标签、项目、偏好设置和 AI 结果。不会同步：邮箱密码、API 密钥以及这些 Supabase 设置。',
+    "set.updates": "更新", "set.updateCurrent": "当前版本",
+    "set.updateAuto": "有可用更新时自动下载、安装并重启", "set.updateCheck": "检查更新",
+    "set.updateInstall": "安装更新", "set.updateSigned": "更新从官方 GitHub Releases 渠道下载，并在安装前使用 Courriel 的签名密钥进行验证。",
+    "set.updateChecking": "正在检查更新…", "set.updateLatest": "Courriel 已是最新版本。",
+    "set.updateAvailable": "版本 {version} 可用。", "set.updateError": "更新失败：{err}",
+    "set.updateDownloading": "正在下载并安装更新…", "set.updateRestarting": "更新已安装。正在重启 Courriel…",
     'theme.midnight': '午夜', 'theme.premium': '尊享', 'theme.modern': '现代',
     'theme.brutalist': '粗野主义', 'theme.aero': 'Frutiger Aero', 'theme.terminal': '终端',
 

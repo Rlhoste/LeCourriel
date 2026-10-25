@@ -5,7 +5,7 @@ STRINGS.fr = {
     "nav.spam": "Spam",
     'nav.sent': 'Envoyés', 'nav.drafts': 'Brouillons', 'nav.trash': 'Corbeille',
     'nav.sponsor': '❤ Soutenir',
-    'nav.search': '🔍 Rechercher',
+    'nav.search': '✨ Demander',
     'search.placeholder': "Rechercher, ou demander à l'IA…", 'search.ask': "✨ Demander à l'IA", 'search.aiTitle': "Demander à l'IA (Ctrl+Entrée)",
     'search.mode.auto': 'Auto', 'search.mode.find': '🔎 Rechercher', 'search.mode.compose': '✉ Rédiger',
     'search.mode.summarize': '🧾 Synthétiser', 'search.mode.answer': '❓ Question',
@@ -25,6 +25,7 @@ STRINGS.fr = {
 
     'ov.greeting': 'Bonjour.', 'ov.loading': 'Chargement…', 'ov.noAccount': 'Bienvenue ! Ajoutez votre compte mail dans les Paramètres pour commencer.',
     'ov.urgent': 'Urgent et important', 'ov.deadlines': 'Échéances', 'ov.tasks': 'Tâches', 'ov.meetings': 'Réunions',
+    "ov.showOpened": "Afficher les lus", "ov.hideOpened": "Masquer les lus",
     'ov.inDays': 'dans {n} j', 'ov.daysAgo': 'il y a {n} j', 'ov.couldNotDelete': 'Suppression impossible : {err}',
 
     'kanban.title': 'Tâches', 'kanban.todo': 'À faire', 'kanban.inProgress': 'En cours',
@@ -34,10 +35,22 @@ STRINGS.fr = {
     'kanban.aiMoved': "Déplacée automatiquement par l'IA", 'kanban.aiDone': 'IA : terminée', 'kanban.aiObsolete': 'IA : obsolète',
 
     'cal.title': 'Calendrier', 'cal.more': '+{n} autres',
+    'cal.newTask': 'Nouvelle tâche', 'cal.taskTitle': 'Tâche', 'cal.taskPlaceholder': 'Que faut-il faire ?',
+    'cal.date': 'Date', 'cal.project': 'Projet', 'cal.noProject': 'Aucun projet',
+    'cal.createTask': 'Créer la tâche', 'cal.enterTask': 'Veuillez saisir une tâche.',
+    'mail.thread': 'Discussion : {n} e-mails',
+    'mail.newestFirst': 'Plus récents ↓', 'mail.oldestFirst': 'Plus anciens ↑',
+    'mail.sortBy': 'Trier par', 'mail.sort.date': 'Date', 'mail.sort.sender': 'Expéditeur',
+    'mail.sort.subject': 'Objet', 'mail.sort.read': 'État de lecture', 'mail.sort.priority': 'Priorité',
+    'mail.sort.project': 'Projet', 'mail.ascending': 'Croissant', 'mail.descending': 'Décroissant',
 
     'proj.new': '+ Nouveau projet', 'proj.namePlaceholder': 'Nom du projet',
+    'proj.sentencePlaceholder': 'Décrivez le projet en une courte phrase…',
     'proj.urgency.normal': 'Normale', 'proj.urgency.high': 'Haute',
     'proj.create': 'Créer', 'proj.cancel': 'Annuler', 'proj.descPlaceholder': 'Description du projet…', 'proj.save': 'Enregistrer',
+    'proj.analysing': 'Analyse…', 'proj.enterSentence': 'Décrivez le projet en une courte phrase.',
+    'proj.delete': 'Supprimer le projet', 'proj.deleteConfirm': 'Voulez-vous vraiment supprimer le projet « {name} » ?',
+    'proj.rename': 'Renommer', 'proj.renamePrompt': 'Nouveau nom du projet :',
     'proj.emails.one': '1 e-mail', 'proj.emails.other': '{n} e-mails', 'proj.enterName': 'Veuillez saisir un nom.',
 
     'rp.select': 'Sélectionnez un e-mail à lire',
@@ -101,6 +114,12 @@ STRINGS.fr = {
     'set.cloudWorking': 'En cours…', 'set.cloudSynced': 'Synchronisé.', 'set.cloudConfirm': "Compte créé. Confirmez-le depuis l'e-mail envoyé par Supabase, puis connectez-vous.",
     'set.cloudNeedProject': "Saisissez d'abord l'URL du projet et la clé anon.", 'set.cloudNeedCreds': 'Saisissez votre e-mail et votre mot de passe.',
     'set.cloudNote': "Chaque compte ne voit que ses propres données (sécurité au niveau des lignes). Synchronisé : tâches, balayages, projets attribués, projets, préférences et résultats de l'IA. Jamais synchronisé : mots de passe mail, clés API et ces réglages Supabase.",
+    "set.updates": "Mises à jour", "set.updateCurrent": "Version actuelle",
+    "set.updateAuto": "Télécharger, installer et redémarrer automatiquement lorsqu’une mise à jour est disponible", "set.updateCheck": "Rechercher des mises à jour",
+    "set.updateInstall": "Installer la mise à jour", "set.updateSigned": "Les mises à jour sont téléchargées depuis le canal GitHub Releases officiel et vérifiées avec la clé de signature de Courriel avant l’installation.",
+    "set.updateChecking": "Recherche de mises à jour…", "set.updateLatest": "Courriel est à jour.",
+    "set.updateAvailable": "La version {version} est disponible.", "set.updateError": "Échec de la mise à jour : {err}",
+    "set.updateDownloading": "Téléchargement et installation de la mise à jour…", "set.updateRestarting": "Mise à jour installée. Redémarrage de Courriel…",
     'theme.midnight': 'Minuit', 'theme.premium': 'Premium', 'theme.modern': 'Moderne',
     'theme.brutalist': 'Brutaliste', 'theme.aero': 'Frutiger Aero', 'theme.terminal': 'Terminal',
 

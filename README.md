@@ -1,6 +1,6 @@
 <p align="center"><img src="assets/logo-ceres.png" alt="Le courriel logo" width="160"></p>
 
-<p align="center"><a href="https://github.com/sponsors/Rlhoste"><img alt="Sponsor on GitHub" src="https://img.shields.io/badge/Sponsor-%E2%9D%A4-db61a2?logo=githubsponsors&amp;logoColor=white"></a></p>
+<p align="center"><a href="https://github.com/sponsors/Rlhoste"><img alt="Sponsor on GitHub" src="https://img.shields.io/badge/Sponsor-%E2%9D%A4-db61a2?logo=githubsponsors&amp;logoColor=white"></a> <a href="https://ko-fi.com/rlhoste"><img alt="Support on Ko-fi" src="https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=kofi&amp;logoColor=white"></a></p>
 
 # Le courriel
 
@@ -206,9 +206,17 @@ Run this from the repository root too.
 
 ### Tests
 
+Run the complete deterministic suite (Rust backend, frontend behavior and contracts,
+all locales, and updater manifest generation):
+
 ```sh
-cargo test --manifest-path src-tauri/Cargo.toml
+./scripts/test-all.sh
 ```
+
+The same suites run automatically on every push and pull request. Tests use isolated
+temporary data and local mock servers; they do not read your mailbox credentials or
+modify your Courriel data. The three tests that require real external services remain
+ignored by default and can be run explicitly with `cargo test -- --ignored`.
 
 ### Packages
 
@@ -326,8 +334,9 @@ src/, ui/*.slint, Cargo.toml (root)   Earlier Slint prototype, not used by the T
 ## Support the project
 
 Le courriel is free and open source. If it saves you time, you can support its development on
-**[GitHub Sponsors](https://github.com/sponsors/Rlhoste)**, monthly or one-time. You can also
-use **❤ Sponsor** in the app's sidebar. Thank you!
+**[GitHub Sponsors](https://github.com/sponsors/Rlhoste)**, monthly or one-time, or on
+**[Ko-fi](https://ko-fi.com/rlhoste)**. The **❤ Sponsor** button in the app's sidebar opens
+the Ko-fi page. Thank you!
 
 ## License
 

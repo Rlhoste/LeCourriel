@@ -49,7 +49,24 @@ pub fn save_config(
     theme: Option<&str>,
     language: Option<&str>,
 ) -> Result<()> {
-    let mut cfg = Config::load()?;
+    let cfg = apply_to_config(
+        Config::load()?, display_name, accounts, ai, giphy_key, font_scale, theme, language,
+    );
+    crate::config::save_config(&cfg)
+}
+
+/// Apply Settings values to an existing configuration without reading or writing disk.
+/// This is the complete first-run → configured-app transition used by `save_config`.
+pub fn apply_to_config(
+    mut cfg: Config,
+    display_name: Option<&str>,
+    accounts: &[AccountDto],
+    ai: &AiSettingsDto,
+    giphy_key: &str,
+    font_scale: f32,
+    theme: Option<&str>,
+    language: Option<&str>,
+) -> Config {
 
     cfg.user = UserConfig {
         // Not in Settings any more: keep the stored name (it may come from config.toml or the cloud).
@@ -75,7 +92,7 @@ pub fn save_config(
         .collect();
     cfg.gifs.giphy_api_key = giphy_key.trim().to_string();
 
-    crate::config::save_config(&cfg)
+    cfg
 }
 
 /// An account as typed in Settings. Blank ports and advanced options mean the defaults.

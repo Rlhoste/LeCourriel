@@ -46,6 +46,9 @@ pub struct Task {
     /// Project name, or None for tasks outside any project.
     #[serde(default)]
     pub project: Option<String>,
+    /// Optional calendar date (YYYY-MM-DD) chosen by the user.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub due_date: Option<String>,
     /// Inbox UID of the email this task was extracted from.
     #[serde(default)]
     pub source_uid: Option<u32>,
@@ -103,6 +106,10 @@ impl Board {
     }
 
     pub fn add(&mut self, title: String, project: Option<String>) -> u64 {
+        self.add_dated(title, project, None)
+    }
+
+    pub fn add_dated(&mut self, title: String, project: Option<String>, due_date: Option<String>) -> u64 {
         self.next_id += 1;
         let id = self.next_id;
         self.tasks.push(Task {
@@ -110,6 +117,7 @@ impl Board {
             title,
             status: Status::Todo,
             project,
+            due_date,
             source_uid: None,
             source_from: String::new(),
             source_subject: String::new(),
@@ -160,6 +168,7 @@ impl Board {
                 title: c.task.clone().unwrap_or_else(|| c.subject.clone()),
                 status,
                 project: c.project.clone(),
+                due_date: None,
                 source_uid: Some(c.uid),
                 source_from: c.from_name.clone(),
                 source_subject: c.subject.clone(),
