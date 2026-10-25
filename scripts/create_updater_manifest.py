@@ -41,7 +41,9 @@ def create_manifest(root: Path, tag: str, repository: str) -> dict:
         value = signature.read_text(encoding="utf-8").strip()
         if not value:
             raise ValueError(f"empty signature: {signature}")
-        return {"url": base + quote(artifact.name), "signature": value}
+        # GitHub stores release assets with spaces turned into dots ("Le courriel_…" is
+        # served as "Le.courriel_…"), so link to that name.
+        return {"url": base + quote(artifact.name.replace(" ", ".")), "signature": value}
 
     return {
         "version": version,

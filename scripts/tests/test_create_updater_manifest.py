@@ -29,11 +29,11 @@ class UpdaterManifestTests(unittest.TestCase):
         self.assertEqual(manifest["version"], "1.2.3")
         self.assertEqual(set(manifest["platforms"]), {"linux-x86_64", "windows-x86_64"})
 
-    def test_urls_encode_spaces_and_point_to_the_tag(self):
+    def test_urls_use_github_asset_names_and_point_to_the_tag(self):
         manifest = create_manifest(self.root, "v1.2.3", "Rlhoste/LeCourriel")
         linux_url = manifest["platforms"]["linux-x86_64"]["url"]
         self.assertIn("/releases/download/v1.2.3/", linux_url)
-        self.assertTrue(linux_url.endswith("Le%20courriel_1.2.3_amd64.AppImage"))
+        self.assertTrue(linux_url.endswith("Le.courriel_1.2.3_amd64.AppImage"))
 
     def test_signature_contents_are_embedded_verbatim_without_whitespace(self):
         Path(str(self.linux) + ".sig").write_text("  signed-value\n")
