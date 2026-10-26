@@ -126,7 +126,7 @@ STRINGS.pt = {
 
     'greet.morning': 'Bom dia, {name}.', 'greet.afternoon': 'Boa tarde, {name}.', 'greet.evening': 'Boa noite, {name}.',
     'greet.morning.noname': 'Bom dia.', 'greet.afternoon.noname': 'Boa tarde.', 'greet.evening.noname': 'Boa noite.',
-    'brief.live': 'Resumo às {time} · {attention}', 'brief.cached': 'Em cache · {attention}', 'brief.upToDate': 'Tudo em dia.',
+    'brief.live': 'Resumo às {time} · {attention}', 'brief.cached': 'Em cache · {attention}', 'brief.upToDate': 'Tudo em dia.', 'brief.aiMissing': 'Os seus e-mails ainda não estão organizados: configure a IA em Definições → IA.', 'brief.aiError': 'A IA não conseguiu organizar {n} e-mails: {err}', 'ov.setupAi': 'Configurar a IA',
     'brief.attention.zero': 'nada precisa da sua atenção', 'brief.attention.one': '{n} e-mail precisa da sua atenção',
     'brief.attention.other': '{n} e-mails precisam da sua atenção',
     'brief.classifying.one': 'Classificando 1 novo e-mail com IA…', 'brief.classifying.other': 'Classificando {n} novos e-mails com IA…',

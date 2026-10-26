@@ -777,6 +777,51 @@ max_tokens = 10
         assert!(!is_real_result(&failed));
     }
 
+    #[test]
+    fn test_unsorted_emails_are_sorted_again() {
+        use crate::app_state::is_sorted;
+        assert!(is_sorted(&make_test_card(1, Priority::Urgent)));
+        // Never sorted (no AI yet), or a failure placeholder left by older versions.
+        for summary in ["", "  ", "Could not classify email.", "Unable to summarize email."] {
+            let card = EmailCard { summary: summary.into(), ..make_test_card(2, Priority::Information) };
+            assert!(!is_sorted(&card), "{:?} should be sorted again", summary);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_classify_reports_ai_failures() {
+        // A failed AI call is an error, not an "information" email with a placeholder summary.
+        let email = RawEmail {
+            uid: 1, subject: "Server down".into(), from: "a@b.c".into(), to: String::new(), cc: String::new(),
+            reply_to: String::new(), bcc: String::new(), message_id: String::new(), references: String::new(),
+            seen: false, deleted: false, date: None, body_text: "Help".into(), body_html: None,
+        };
+        let err = crate::ai_classifier::classify(&AiConfig::default(), &email, &[]).await.unwrap_err();
+        assert!(format!("{:#}", err).contains("Choose an AI model"), "{:#}", err);
+        let (base, _server) = fake_ai_server(401, r#"{"error":{"message":"Incorrect API key provided"}}"#).await;
+        let ai = ai_cfg("custom", "m", "bad", &base);
+        let err = crate::ai_classifier::classify(&ai, &email, &[]).await.unwrap_err();
+        assert_eq!(format!("{:#}", err), "Incorrect API key provided (401)");
+    }
+
+    #[test]
+    fn test_refresh_briefing_tells_about_the_ai() {
+        use crate::app_state::refresh_briefing;
+        let missing = crate::ai::readiness(&AiConfig::default());
+        assert!(missing.is_err());
+        let b = refresh_briefing(&missing, 0, None, 6, 0, 9, 30);
+        assert_eq!((b.kind, b.count), ("ai_missing", 6));
+        assert!(b.detail.contains("Settings → AI"), "{}", b.detail);
+
+        let ready = crate::ai::readiness(&ai_cfg("custom", "m", "k", "http://127.0.0.1:1/v1"));
+        assert!(ready.is_ok());
+        let b = refresh_briefing(&ready, 4, Some("Incorrect API key provided (401)".into()), 4, 0, 9, 30);
+        assert_eq!((b.kind, b.count, b.detail.as_str()), ("ai_error", 4, "Incorrect API key provided (401)"));
+
+        let b = refresh_briefing(&ready, 0, None, 0, 2, 9, 30);
+        assert_eq!((b.kind, b.count, b.hour, b.minute), ("live", 2, 9, 30));
+    }
+
     #[tokio::test]
     async fn test_cloud_off_without_supabase() {
         crate::cloud::configure(&make_test_config());

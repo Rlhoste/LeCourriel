@@ -126,7 +126,7 @@ STRINGS.zh = {
 
     'greet.morning': '早上好，{name}。', 'greet.afternoon': '下午好，{name}。', 'greet.evening': '晚上好，{name}。',
     'greet.morning.noname': '早上好。', 'greet.afternoon.noname': '下午好。', 'greet.evening.noname': '晚上好。',
-    'brief.live': '{time} 简报 · {attention}', 'brief.cached': '已缓存 · {attention}', 'brief.upToDate': '已是最新。',
+    'brief.live': '{time} 简报 · {attention}', 'brief.cached': '已缓存 · {attention}', 'brief.upToDate': '已是最新。', 'brief.aiMissing': '您的邮件尚未分类：请在 设置 → AI 中设置 AI。', 'brief.aiError': 'AI 无法对 {n} 封邮件分类：{err}', 'ov.setupAi': '设置 AI',
     'brief.attention.zero': '没有需要您处理的事项',
     'brief.attention.other': '{n} 封邮件需要您处理',
     'brief.classifying.other': '正在用 AI 分类 {n} 封新邮件…',

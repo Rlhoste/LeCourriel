@@ -137,6 +137,12 @@ fn check_ready(ai: &AiConfig) -> Result<String> {
     Ok(base)
 }
 
+/// Ok when the AI settings are complete enough to send a request (no network involved);
+/// otherwise what to fill in.
+pub fn readiness(ai: &AiConfig) -> Result<()> {
+    check_ready(ai).map(|_| ())
+}
+
 pub fn provider_label(provider: &str) -> &'static str {
     match provider {
         "openai" => "OpenAI",

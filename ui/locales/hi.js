@@ -126,7 +126,7 @@ STRINGS.hi = {
 
     'greet.morning': 'सुप्रभात, {name}।', 'greet.afternoon': 'नमस्ते, {name}।', 'greet.evening': 'शुभ संध्या, {name}।',
     'greet.morning.noname': 'सुप्रभात।', 'greet.afternoon.noname': 'नमस्ते।', 'greet.evening.noname': 'शुभ संध्या।',
-    'brief.live': '{time} पर ब्रीफ़िंग · {attention}', 'brief.cached': 'कैश से · {attention}', 'brief.upToDate': 'सब अद्यतित है।',
+    'brief.live': '{time} पर ब्रीफ़िंग · {attention}', 'brief.cached': 'कैश से · {attention}', 'brief.upToDate': 'सब अद्यतित है।', 'brief.aiMissing': 'आपके ईमेल अभी छांटे नहीं गए हैं: सेटिंग्स → AI में AI सेट करें।', 'brief.aiError': 'AI {n} ईमेल नहीं छांट सका: {err}', 'ov.setupAi': 'AI सेट करें',
     'brief.attention.zero': 'किसी चीज़ पर आपके ध्यान की ज़रूरत नहीं', 'brief.attention.one': '{n} ईमेल पर आपका ध्यान चाहिए',
     'brief.attention.other': '{n} ईमेल पर आपका ध्यान चाहिए',
     'brief.classifying.one': 'AI से {n} नए ईमेल का वर्गीकरण हो रहा है…', 'brief.classifying.other': 'AI से {n} नए ईमेल का वर्गीकरण हो रहा है…',

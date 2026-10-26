@@ -20,24 +20,33 @@ use crate::state::AppState;
 const CACHE_PATH: &str = "cache-v2.json";
 
 pub async fn refresh(cfg: Arc<Config>, app: AppHandle, state: Arc<Mutex<AppState>>) {
-    // One refresh at a time: the 2-minute check is skipped while another one runs.
+    // One refresh at a time. A request made meanwhile (new settings saved, the refresh
+    // button) is not dropped: one more refresh runs right after, with the settings of then.
     use std::sync::atomic::{AtomicBool, Ordering};
     static REFRESHING: AtomicBool = AtomicBool::new(false);
+    static AGAIN: AtomicBool = AtomicBool::new(false);
     if REFRESHING.swap(true, Ordering::SeqCst) {
+        AGAIN.store(true, Ordering::SeqCst);
         return;
     }
-    app.emit("loading", true).ok();
-
-    match do_refresh(&cfg, &app, &state).await {
-        Ok(_) => info!("Refresh complete"),
-        Err(e) => {
-            error!("Refresh failed: {:#}", e);
-            app.emit("error", format!("Refresh failed: {}", e)).ok();
+    let mut cfg = cfg;
+    loop {
+        app.emit("loading", true).ok();
+        match do_refresh(&cfg, &app, &state).await {
+            Ok(_) => info!("Refresh complete"),
+            Err(e) => {
+                error!("Refresh failed: {:#}", e);
+                app.emit("error", format!("Refresh failed: {}", e)).ok();
+            }
         }
+        // Hide the loading bar whether the refresh succeeded or failed.
+        app.emit("loading", false).ok();
+        REFRESHING.store(false, Ordering::SeqCst);
+        if !AGAIN.swap(false, Ordering::SeqCst) || REFRESHING.swap(true, Ordering::SeqCst) {
+            break;
+        }
+        cfg = state.lock().unwrap().cfg.clone();
     }
-    // Hide the loading bar whether the refresh succeeded or failed.
-    app.emit("loading", false).ok();
-    REFRESHING.store(false, Ordering::SeqCst);
 }
 
 /// Notifications for newly arrived emails as (title, body): one per email (sender, subject)
@@ -170,8 +179,12 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
         .filter_map(|r| r.date.map(|d| (d, to_recent_mail("sent", r)))).collect();
 
     // Load previously classified emails from cache — reuse results for known UIDs.
+    // Emails the AI has not sorted yet (it was not set up, or it failed) are sorted again.
     let mut cached_cards = load_cache();
+    let seen_uids: std::collections::HashSet<u32> = cached_cards.iter().map(|c| c.uid).collect();
+    cached_cards.retain(is_sorted);
     let cached_uids: std::collections::HashSet<u32> = cached_cards.iter().map(|c| c.uid).collect();
+    let ai_ready = crate::ai::readiness(&cfg.ai);
 
     // Split inbox into already-known (reuse cache) and new (need AI).
     let (known_raw, new_raw): (Vec<_>, Vec<_>) = raw_emails.into_iter()
@@ -206,13 +219,15 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     pre_cards.extend(new_raw_cards);
     let new_count = new_raw.len();
     let briefing_pre = if new_count > 0 {
-        Briefing { kind: "classifying", hour: 0, minute: 0, count: new_count }
+        Briefing { kind: "classifying", count: new_count, ..Default::default() }
     } else {
-        Briefing { kind: "up_to_date", hour: 0, minute: 0, count: 0 }
+        Briefing { kind: "up_to_date", ..Default::default() }
     };
     populate(cfg, app, state, pre_cards, sent_cards_pre.clone(), drafts_cards_pre.clone(), trash_cards_pre.clone(), spam_cards_pre.clone(), Some(briefing_pre));
 
     // Classify only new emails.
+    let mut ai_failures = 0usize;
+    let mut first_ai_error: Option<String> = None;
     let new_cards: Vec<EmailCard> = if new_raw.is_empty() {
         vec![]
     } else {
@@ -249,11 +264,16 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
                     }
                     c
                 }
-                _ => crate::ai_classifier::ClassifiedEmail {
-                    priority: Priority::Information,
-                    summary: String::new(),
-                    project: None, deadline: None, task: None, meeting_link: None,
-                },
+                // Left unsorted (empty summary): tried again at the next refresh.
+                Err(e) => {
+                    ai_failures += 1;
+                    first_ai_error.get_or_insert_with(|| format!("{:#}", e));
+                    crate::ai_classifier::ClassifiedEmail {
+                        priority: Priority::Information,
+                        summary: String::new(),
+                        project: None, deadline: None, task: None, meeting_link: None,
+                    }
+                }
             };
             let (from_name, from_email) = parse_from(&raw.from);
             let date_str = raw.date.map(format_date).unwrap_or_else(|| i18n::unknown_date(i18n::lang()).to_string());
@@ -283,8 +303,10 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     };
 
     // No notification on the very first fill (empty cache): every email would look new.
-    if cfg.user.notify_new_mail && !cached_uids.is_empty() {
-        notify_new_mail(app, &new_cards);
+    // Emails sorted again after an AI failure are not new either.
+    if cfg.user.notify_new_mail && !seen_uids.is_empty() {
+        let arrived: Vec<EmailCard> = new_cards.iter().filter(|c| !seen_uids.contains(&c.uid)).cloned().collect();
+        notify_new_mail(app, &arrived);
     }
 
     // Merge: cached + newly classified. Remove UIDs no longer in inbox.
@@ -305,19 +327,50 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
 
     save_cache(&cards);
 
-    if let Err(e) = check_open_tasks(cfg, &cards, &inbox_dates, recent_inbox, recent_sent).await {
-        warn!("Task check failed: {:#}", e);
+    if ai_ready.is_ok() {
+        if let Err(e) = check_open_tasks(cfg, &cards, &inbox_dates, recent_inbox, recent_sent).await {
+            warn!("Task check failed: {:#}", e);
+        }
     }
 
     let urgent_count = cards.iter().filter(|c| c.priority == Priority::Urgent).count();
     let high_count   = cards.iter().filter(|c| c.priority == Priority::HighPriority).count();
     let attention = urgent_count + high_count;
+    let unsorted = cards.iter().filter(|c| !is_sorted(c)).count();
     use chrono::Timelike;
     let now = Local::now();
-    let live_briefing = Briefing { kind: "live", hour: now.hour(), minute: now.minute(), count: attention };
+    let live_briefing = refresh_briefing(&ai_ready, ai_failures, first_ai_error, unsorted, attention, now.hour(), now.minute());
 
     populate(cfg, app, state, cards, sent_cards, drafts_cards, trash_cards, spam_cards, Some(live_briefing));
     Ok(())
+}
+
+/// Whether the AI has sorted this email (see `ai_classifier::is_real_summary`).
+pub fn is_sorted(card: &EmailCard) -> bool {
+    crate::ai_classifier::is_real_summary(&card.summary)
+}
+
+/// The briefing at the end of a refresh. The AI's state comes first: if it is not set up
+/// or it failed, the user must know, otherwise nothing ever shows as important.
+pub fn refresh_briefing(
+    ai_ready: &Result<()>,
+    ai_failures: usize,
+    first_ai_error: Option<String>,
+    unsorted: usize,
+    attention: usize,
+    hour: u32,
+    minute: u32,
+) -> Briefing {
+    match ai_ready {
+        Err(e) => Briefing { kind: "ai_missing", count: unsorted, detail: format!("{:#}", e), ..Default::default() },
+        Ok(()) if ai_failures > 0 => Briefing {
+            kind: "ai_error",
+            count: ai_failures,
+            detail: first_ai_error.unwrap_or_default(),
+            ..Default::default()
+        },
+        Ok(()) => Briefing { kind: "live", hour, minute, count: attention, detail: String::new() },
+    }
 }
 
 pub fn load_and_display_cache(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>) {
@@ -416,13 +469,14 @@ fn populate(
     }).collect();
 
     let attention = urgent.len() + high.len();
-    let briefing = briefing_override.unwrap_or(Briefing { kind: "cached", hour: 0, minute: 0, count: attention });
+    let briefing = briefing_override.unwrap_or(Briefing { kind: "cached", count: attention, ..Default::default() });
     // English/French text kept as a fallback for older front ends.
     let l = i18n::lang();
     let briefing_text = match briefing.kind {
         "live" => i18n::briefing_live(briefing.hour, briefing.minute, briefing.count, l),
         "classifying" => i18n::classifying(briefing.count, l),
         "up_to_date" => i18n::up_to_date(l).to_string(),
+        "ai_missing" | "ai_error" => briefing.detail.clone(),
         _ => i18n::briefing_cached(briefing.count, l),
     };
 

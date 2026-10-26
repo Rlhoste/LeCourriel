@@ -126,7 +126,7 @@ STRINGS.ja = {
 
     'greet.morning': 'おはようございます、{name} さん。', 'greet.afternoon': 'こんにちは、{name} さん。', 'greet.evening': 'こんばんは、{name} さん。',
     'greet.morning.noname': 'おはようございます。', 'greet.afternoon.noname': 'こんにちは。', 'greet.evening.noname': 'こんばんは。',
-    'brief.live': '{time} に要約 · {attention}', 'brief.cached': 'キャッシュ · {attention}', 'brief.upToDate': '最新の状態です。',
+    'brief.live': '{time} に要約 · {attention}', 'brief.cached': 'キャッシュ · {attention}', 'brief.upToDate': '最新の状態です。', 'brief.aiMissing': 'メールはまだ仕分けされていません：設定 → AI で AI を設定してください。', 'brief.aiError': 'AI が {n} 件のメールを仕分けできませんでした：{err}', 'ov.setupAi': 'AI を設定',
     'brief.attention.zero': '対応が必要なものはありません',
     'brief.attention.other': '{n} 件の対応が必要です',
     'brief.classifying.other': '新着メール {n} 件を AI で分類中…',

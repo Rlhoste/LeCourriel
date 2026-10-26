@@ -126,7 +126,7 @@ STRINGS.ur = {
 
     'greet.morning': 'صبح بخیر، {name}۔', 'greet.afternoon': 'سہ پہر بخیر، {name}۔', 'greet.evening': 'شام بخیر، {name}۔',
     'greet.morning.noname': 'صبح بخیر۔', 'greet.afternoon.noname': 'سہ پہر بخیر۔', 'greet.evening.noname': 'شام بخیر۔',
-    'brief.live': '{time} کا خلاصہ · {attention}', 'brief.cached': 'کیش شدہ · {attention}', 'brief.upToDate': 'سب تازہ ہے۔',
+    'brief.live': '{time} کا خلاصہ · {attention}', 'brief.cached': 'کیش شدہ · {attention}', 'brief.upToDate': 'سب تازہ ہے۔', 'brief.aiMissing': 'آپ کی ای میلز ابھی ترتیب نہیں دی گئیں: ترتیبات ← AI میں AI سیٹ کریں۔', 'brief.aiError': 'AI {n} ای میلز ترتیب نہیں دے سکا: {err}', 'ov.setupAi': 'AI سیٹ کریں',
     'brief.attention.zero': 'کسی چیز پر آپ کی توجہ درکار نہیں',
     'brief.attention.one': '1 ای میل کو آپ کی توجہ درکار ہے',
     'brief.attention.other': '{n} ای میلز کو آپ کی توجہ درکار ہے',

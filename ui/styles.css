@@ -156,6 +156,8 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 
 .greeting  { font-size: 1.25rem; font-weight: 700; }
 .briefing  { font-size: 0.82rem; color: var(--text-dim); margin-top: 2px; }
+#ov-setup-ai { margin-top: 8px; }
+#ov-setup-ai.hidden { display: none; }
 
 /* ── Overview Grid ─────────────────────────────────────────────────────────── */
 #ov-grid {

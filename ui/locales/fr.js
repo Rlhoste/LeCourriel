@@ -126,7 +126,7 @@ STRINGS.fr = {
 
     'greet.morning': 'Bonjour, {name}.', 'greet.afternoon': 'Bonjour, {name}.', 'greet.evening': 'Bonsoir, {name}.',
     'greet.morning.noname': 'Bonjour.', 'greet.afternoon.noname': 'Bonjour.', 'greet.evening.noname': 'Bonsoir.',
-    'brief.live': 'Résumé à {time} · {attention}', 'brief.cached': 'En cache · {attention}', 'brief.upToDate': 'À jour.',
+    'brief.live': 'Résumé à {time} · {attention}', 'brief.cached': 'En cache · {attention}', 'brief.upToDate': 'À jour.', 'brief.aiMissing': 'Vos e-mails ne sont pas encore triés : configurez l’IA dans Paramètres → IA.', 'brief.aiError': 'L’IA n’a pas pu trier {n} e-mails : {err}', 'ov.setupAi': 'Configurer l’IA',
     'brief.attention.zero': 'rien ne demande votre attention', 'brief.attention.one': '{n} e-mail demande votre attention',
     'brief.attention.other': '{n} e-mails demandent votre attention',
     'brief.classifying.one': "Classement d'un nouvel e-mail par l'IA…", 'brief.classifying.other': "Classement de {n} nouveaux e-mails par l'IA…",

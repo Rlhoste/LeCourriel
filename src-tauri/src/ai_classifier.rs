@@ -40,7 +40,14 @@ const PARSE_FAILED: &str = "Unable to summarize email.";
 /// False for the placeholder results returned when the API call or parsing failed;
 /// those must not be stored and reused on other computers.
 pub fn is_real_result(c: &ClassifiedEmail) -> bool {
-    c.summary != CLASSIFY_FAILED && c.summary != PARSE_FAILED
+    is_real_summary(&c.summary)
+}
+
+/// Whether an email's summary comes from the AI. Empty (never sorted, e.g. the AI was not
+/// set up yet) and the failure placeholders (also found in caches of older versions) mean
+/// the email still has to be sorted.
+pub fn is_real_summary(summary: &str) -> bool {
+    !summary.trim().is_empty() && summary != CLASSIFY_FAILED && summary != PARSE_FAILED
 }
 
 fn build_system_prompt(projects: &[ProjectConfig]) -> String {
@@ -117,8 +124,9 @@ pub async fn classify(
     {
         Ok(t) => t,
         Err(e) => {
+            // Not a placeholder: the email stays unsorted and is tried again at the next refresh.
             warn!("AI classification failed: {:#}", e);
-            return Ok(placeholder(CLASSIFY_FAILED));
+            return Err(e);
         }
     };
     debug!("AI raw response: {}", text);

@@ -126,7 +126,7 @@ STRINGS.es = {
 
     'greet.morning': 'Buenos días, {name}.', 'greet.afternoon': 'Buenas tardes, {name}.', 'greet.evening': 'Buenas noches, {name}.',
     'greet.morning.noname': 'Buenos días.', 'greet.afternoon.noname': 'Buenas tardes.', 'greet.evening.noname': 'Buenas noches.',
-    'brief.live': 'Resumen a las {time} · {attention}', 'brief.cached': 'En caché · {attention}', 'brief.upToDate': 'Todo al día.',
+    'brief.live': 'Resumen a las {time} · {attention}', 'brief.cached': 'En caché · {attention}', 'brief.upToDate': 'Todo al día.', 'brief.aiMissing': 'Tus correos aún no están ordenados: configura la IA en Ajustes → IA.', 'brief.aiError': 'La IA no pudo ordenar {n} correos: {err}', 'ov.setupAi': 'Configurar la IA',
     'brief.attention.zero': 'nada requiere tu atención', 'brief.attention.one': '{n} correo requiere tu atención',
     'brief.attention.other': '{n} correos requieren tu atención',
     'brief.classifying.one': 'Clasificando 1 correo nuevo con IA…', 'brief.classifying.other': 'Clasificando {n} correos nuevos con IA…',

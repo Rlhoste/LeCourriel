@@ -126,7 +126,7 @@ STRINGS.id = {
 
     'greet.morning': 'Selamat pagi, {name}.', 'greet.afternoon': 'Selamat siang, {name}.', 'greet.evening': 'Selamat malam, {name}.',
     'greet.morning.noname': 'Selamat pagi.', 'greet.afternoon.noname': 'Selamat siang.', 'greet.evening.noname': 'Selamat malam.',
-    'brief.live': 'Ringkasan pukul {time} · {attention}', 'brief.cached': 'Tersimpan · {attention}', 'brief.upToDate': 'Sudah terbaru.',
+    'brief.live': 'Ringkasan pukul {time} · {attention}', 'brief.cached': 'Tersimpan · {attention}', 'brief.upToDate': 'Sudah terbaru.', 'brief.aiMissing': 'Email Anda belum diurutkan: atur AI di Pengaturan → AI.', 'brief.aiError': 'AI tidak dapat mengurutkan {n} email: {err}', 'ov.setupAi': 'Atur AI',
     'brief.attention.zero': 'tidak ada yang perlu perhatian Anda',
     'brief.attention.other': '{n} email perlu perhatian Anda',
     'brief.classifying.other': 'Mengklasifikasikan {n} email baru dengan AI…',

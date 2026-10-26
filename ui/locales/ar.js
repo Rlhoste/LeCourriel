@@ -133,7 +133,7 @@ STRINGS.ar = {
 
     'greet.morning': 'صباح الخير يا {name}.', 'greet.afternoon': 'مساء الخير يا {name}.', 'greet.evening': 'مساء الخير يا {name}.',
     'greet.morning.noname': 'صباح الخير.', 'greet.afternoon.noname': 'مساء الخير.', 'greet.evening.noname': 'مساء الخير.',
-    'brief.live': 'ملخص الساعة {time} · {attention}', 'brief.cached': 'من الذاكرة المؤقتة · {attention}', 'brief.upToDate': 'كل شيء محدَّث.',
+    'brief.live': 'ملخص الساعة {time} · {attention}', 'brief.cached': 'من الذاكرة المؤقتة · {attention}', 'brief.upToDate': 'كل شيء محدَّث.', 'brief.aiMissing': 'لم يتم فرز رسائلك بعد: اضبط الذكاء الاصطناعي في الإعدادات ← الذكاء الاصطناعي.', 'brief.aiError': 'تعذّر على الذكاء الاصطناعي فرز {n} رسالة: {err}', 'ov.setupAi': 'إعداد الذكاء الاصطناعي',
     'brief.attention.zero': 'لا شيء يتطلب انتباهك',
     'brief.attention.one': 'رسالة واحدة تتطلب انتباهك',
     'brief.attention.two': 'رسالتان تتطلبان انتباهك',

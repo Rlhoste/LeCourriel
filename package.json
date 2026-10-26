@@ -5,6 +5,10 @@
     "test": "npm run test:ui && npm run test:locales",
     "test:ui": "node --test ui/tests/*.test.js",
     "test:locales": "node ui/locales/check.js && node ui/locales/test-format.js",
-    "check:js": "node --check ui/app-core.js && node --check ui/app.js"
+    "check:js": "node --check ui/app-core.js && node --check ui/app.js",
+    "test:e2e": "node --test --test-concurrency=1 e2e/*.e2e.js"
+  },
+  "devDependencies": {
+    "webdriverio": "^9.32.0"
   }
 }

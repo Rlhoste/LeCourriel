@@ -135,7 +135,7 @@ STRINGS.en = {
     // Greeting and briefing (built from raw values sent by the backend)
     'greet.morning': 'Good morning, {name}.', 'greet.afternoon': 'Good afternoon, {name}.', 'greet.evening': 'Good evening, {name}.',
     'greet.morning.noname': 'Good morning.', 'greet.afternoon.noname': 'Good afternoon.', 'greet.evening.noname': 'Good evening.',
-    'brief.live': 'Briefed at {time} · {attention}', 'brief.cached': 'Cached · {attention}', 'brief.upToDate': 'Up to date.',
+    'brief.live': 'Briefed at {time} · {attention}', 'brief.cached': 'Cached · {attention}', 'brief.upToDate': 'Up to date.', 'brief.aiMissing': 'Your emails are not sorted yet: set up the AI in Settings → AI.', 'brief.aiError': 'The AI could not sort {n} emails: {err}', 'ov.setupAi': 'Set up the AI',
     'brief.attention.zero': 'nothing needs your attention', 'brief.attention.one': '1 requires you',
     'brief.attention.other': '{n} require your attention',
     'brief.classifying.one': 'Classifying 1 new email with AI…', 'brief.classifying.other': 'Classifying {n} new emails with AI…',

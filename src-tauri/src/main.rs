@@ -337,6 +337,7 @@ fn save_settings(
     theme: Option<String>,
     language: Option<String>,
     notify_new_mail: Option<bool>,
+    app: AppHandle,
     shared: State<'_, SharedState>,
 ) -> Result<(), String> {
     let giphy_key = giphy_key.unwrap_or_default();
@@ -348,8 +349,17 @@ fn save_settings(
             signature::remove_unused(&signature::data_dir(), &new_cfg);
             i18n::set_lang(&new_cfg.user.language);
             cloud::configure(&new_cfg);
-            let mut s = shared.lock().unwrap();
-            s.cfg = Arc::new(new_cfg);
+            let new_cfg = Arc::new(new_cfg);
+            shared.lock().unwrap().cfg = new_cfg.clone();
+            // Apply the new settings straight away: the first account on a new computer
+            // fetches its mail, a newly set up AI sorts the emails waiting for it.
+            if !new_cfg.accounts.is_empty() {
+                let shared = shared.inner().clone();
+                tauri::async_runtime::spawn(async move {
+                    app_state::refresh(new_cfg, app.clone(), shared.clone()).await;
+                    start_auto_refresh(app, shared);
+                });
+            }
         }
         Err(e) => return Err(e.to_string()),
     }

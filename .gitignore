@@ -22,3 +22,6 @@ signature.html
 .claude/
 image.png
 __pycache__/
+
+# End-to-end test dependencies
+node_modules/

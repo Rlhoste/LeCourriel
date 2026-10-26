@@ -126,7 +126,7 @@ STRINGS.de = {
 
     'greet.morning': 'Guten Morgen, {name}.', 'greet.afternoon': 'Guten Tag, {name}.', 'greet.evening': 'Guten Abend, {name}.',
     'greet.morning.noname': 'Guten Morgen.', 'greet.afternoon.noname': 'Guten Tag.', 'greet.evening.noname': 'Guten Abend.',
-    'brief.live': 'Briefing um {time} · {attention}', 'brief.cached': 'Zwischengespeichert · {attention}', 'brief.upToDate': 'Alles aktuell.',
+    'brief.live': 'Briefing um {time} · {attention}', 'brief.cached': 'Zwischengespeichert · {attention}', 'brief.upToDate': 'Alles aktuell.', 'brief.aiMissing': 'Ihre E-Mails sind noch nicht sortiert: Richten Sie die KI unter Einstellungen → KI ein.', 'brief.aiError': 'Die KI konnte {n} E-Mails nicht sortieren: {err}', 'ov.setupAi': 'KI einrichten',
     'brief.attention.zero': 'nichts erfordert deine Aufmerksamkeit', 'brief.attention.one': '{n} E-Mail erfordert deine Aufmerksamkeit',
     'brief.attention.other': '{n} E-Mails erfordern deine Aufmerksamkeit',
     'brief.classifying.one': '1 neue E-Mail wird mit KI eingeordnet…', 'brief.classifying.other': '{n} neue E-Mails werden mit KI eingeordnet…',

@@ -43,3 +43,25 @@ jobs:
       - name: Rust tests
         working-directory: src-tauri
         run: cargo test --locked
+
+  e2e:
+    # The real app window from a fresh install, against local fake IMAP and AI servers.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Linux test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev webkit2gtk-driver xvfb
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: tauri-driver
+        run: cargo install tauri-driver --locked
+      - run: npm ci
+      - name: End-to-end tests
+        run: scripts/e2e.sh

@@ -126,7 +126,7 @@ STRINGS.bn = {
 
     'greet.morning': 'সুপ্রভাত, {name}।', 'greet.afternoon': 'শুভ অপরাহ্ন, {name}।', 'greet.evening': 'শুভ সন্ধ্যা, {name}।',
     'greet.morning.noname': 'সুপ্রভাত।', 'greet.afternoon.noname': 'শুভ অপরাহ্ন।', 'greet.evening.noname': 'শুভ সন্ধ্যা।',
-    'brief.live': '{time}-এ ব্রিফিং · {attention}', 'brief.cached': 'ক্যাশ থেকে · {attention}', 'brief.upToDate': 'সব হালনাগাদ।',
+    'brief.live': '{time}-এ ব্রিফিং · {attention}', 'brief.cached': 'ক্যাশ থেকে · {attention}', 'brief.upToDate': 'সব হালনাগাদ।', 'brief.aiMissing': 'আপনার ইমেল এখনও সাজানো হয়নি: সেটিংস → AI-তে AI সেট করুন।', 'brief.aiError': 'AI {n}টি ইমেল সাজাতে পারেনি: {err}', 'ov.setupAi': 'AI সেট করুন',
     'brief.attention.zero': 'কোনো কিছুতে আপনার মনোযোগ প্রয়োজন নেই', 'brief.attention.one': '{n}টি ইমেলে আপনার মনোযোগ প্রয়োজন',
     'brief.attention.other': '{n}টি ইমেলে আপনার মনোযোগ প্রয়োজন',
     'brief.classifying.one': 'AI দিয়ে {n}টি নতুন ইমেল শ্রেণিবদ্ধ করা হচ্ছে…', 'brief.classifying.other': 'AI দিয়ে {n}টি নতুন ইমেল শ্রেণিবদ্ধ করা হচ্ছে…',

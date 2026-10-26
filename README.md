@@ -213,6 +213,14 @@ all locales, and updater manifest generation):
 ./scripts/test-all.sh
 ```
 
+It ends with the end-to-end tests (`scripts/e2e.sh`): they start the real app window as on
+a computer where it was just installed, fill in Settings like a user, and check what the
+Overview, Inbox and Tasks show, against local fake IMAP and AI servers. They need
+`sudo apt install webkit2gtk-driver xvfb` and `cargo install tauri-driver --locked`
+(Linux only); `SKIP_E2E=1 ./scripts/test-all.sh` skips them. With `E2E_LIVE=1` and a real
+mailbox and AI in environment variables (see `e2e/fresh-install.e2e.js`), they also run
+against real servers.
+
 The same suites run automatically on every push and pull request. Tests use isolated
 temporary data and local mock servers; they do not read your mailbox credentials or
 modify your Courriel data. The three tests that require real external services remain

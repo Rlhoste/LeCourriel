@@ -95,13 +95,16 @@ pub struct WeekDayDto {
 }
 
 /// What the briefing line says, as data: "live" (refreshed at hour:minute, `count` need
-/// attention), "cached", "classifying" (`count` new emails), or "up_to_date".
-#[derive(Serialize, Clone, Debug, PartialEq)]
+/// attention), "cached", "classifying" (`count` new emails), "up_to_date",
+/// "ai_missing" (the AI is not set up: `count` emails wait to be sorted) or
+/// "ai_error" (the AI failed on `count` emails; `detail` says why).
+#[derive(Serialize, Clone, Debug, PartialEq, Default)]
 pub struct Briefing {
     pub kind: &'static str,
     pub hour: u32,
     pub minute: u32,
     pub count: usize,
+    pub detail: String,
 }
 
 #[derive(Serialize, Clone)]

@@ -113,6 +113,10 @@ function switchPanel(panel) {
 }
 
 function setupOverview() {
+  document.getElementById('ov-setup-ai').addEventListener('click', async () => {
+    await openSettings();
+    switchSettingsTab('ai');
+  });
   document.getElementById('ov-toggle-opened').addEventListener('click', () => {
     showOpenedAttention = !showOpenedAttention;
     if (appState) renderOverview();
@@ -202,6 +206,9 @@ function renderOverview() {
   renderOverviewOpenedToggle();
   document.getElementById('ov-greeting').textContent = appState.user_name !== undefined ? greetingText(appState) : appState.greeting;
   document.getElementById('ov-briefing').textContent = appState.briefing ? briefingText(appState.briefing) : appState.briefing_time;
+  // Nothing gets sorted without the AI: offer to set it up (also when it fails, e.g. a wrong key).
+  const aiKind = appState.briefing?.kind;
+  document.getElementById('ov-setup-ai').classList.toggle('hidden', aiKind !== 'ai_missing' && aiKind !== 'ai_error');
 
   // Urgent + High
   const urgent = CourrielCore.attentionEmails(appState, showOpenedAttention);

@@ -130,7 +130,7 @@ STRINGS.ru = {
 
     'greet.morning': 'Доброе утро, {name}.', 'greet.afternoon': 'Добрый день, {name}.', 'greet.evening': 'Добрый вечер, {name}.',
     'greet.morning.noname': 'Доброе утро.', 'greet.afternoon.noname': 'Добрый день.', 'greet.evening.noname': 'Добрый вечер.',
-    'brief.live': 'Сводка на {time} · {attention}', 'brief.cached': 'Из кэша · {attention}', 'brief.upToDate': 'Всё актуально.',
+    'brief.live': 'Сводка на {time} · {attention}', 'brief.cached': 'Из кэша · {attention}', 'brief.upToDate': 'Всё актуально.', 'brief.aiMissing': 'Ваши письма ещё не разобраны: настройте ИИ в Настройки → ИИ.', 'brief.aiError': 'ИИ не смог разобрать писем: {n}. {err}', 'ov.setupAi': 'Настроить ИИ',
     'brief.attention.zero': 'ничто не требует вашего внимания',
     'brief.attention.one': '{n} письмо требует вашего внимания',
     'brief.attention.few': '{n} письма требуют вашего внимания',
