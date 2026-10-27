@@ -117,6 +117,16 @@ pub fn extract_json(text: &str) -> &str {
     }
 }
 
+/// How many requests to send at once: a local model answers one at a time, cloud APIs
+/// take several in parallel, Claude Code starts a process per request.
+pub fn parallel_requests(ai: &AiConfig) -> usize {
+    match ai.provider() {
+        "ollama" => 1,
+        crate::claude_code::PROVIDER => 3,
+        _ => 6,
+    }
+}
+
 fn client(ai: &AiConfig) -> Result<reqwest::Client> {
     // Local models are much slower than cloud APIs.
     let secs = if ai.provider() == "ollama" { 180 } else { 90 };
@@ -143,7 +153,7 @@ pub fn provider_label(provider: &str) -> &'static str {
         "mistral" => "Mistral",
         "ollama" => "Ollama",
         "custom" => "AI",
-        "claude_code" => "Claude (subscription)",
+        crate::claude_code::PROVIDER => "Claude (subscription)",
         _ => "Claude (Anthropic)",
     }
 }
@@ -160,7 +170,7 @@ fn connect_error(ai: &AiConfig, e: reqwest::Error) -> anyhow::Error {
 
 /// Send one request to the configured provider and return the answer text.
 pub async fn complete(ai: &AiConfig, req: Request<'_>) -> Result<String> {
-    if ai.provider() == "claude_code" {
+    if ai.uses_claude_code() {
         return crate::claude_code::complete(&ai.model, &req).await;
     }
     let base = check_ready(ai)?;
@@ -181,7 +191,7 @@ pub async fn complete(ai: &AiConfig, req: Request<'_>) -> Result<String> {
 
 /// Model ids offered by the provider (GET {base}/models), sorted.
 pub async fn list_models(ai: &AiConfig) -> Result<Vec<String>> {
-    if ai.provider() == "claude_code" {
+    if ai.uses_claude_code() {
         return Ok(crate::claude_code::MODELS.iter().map(|m| m.to_string()).collect());
     }
     let base = ai.base_url();

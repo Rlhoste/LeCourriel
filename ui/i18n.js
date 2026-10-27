@@ -107,6 +107,8 @@ function briefingText(b) {
     case 'live': return t('brief.live', { time: fmtTime(b.hour, b.minute), attention });
     case 'classifying': return tn('brief.classifying', b.count);
     case 'up_to_date': return t('brief.upToDate');
+    case 'ai_not_paid': return t('brief.aiNotPaid');
+    case 'ai_stopped': return t('brief.aiStopped', { reason: b.detail });
     default: return t('brief.cached', { attention });
   }
 }

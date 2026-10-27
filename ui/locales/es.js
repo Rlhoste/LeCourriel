@@ -131,6 +131,9 @@ STRINGS.es = {
     "set.aiSignedIn": "✓ Sesión iniciada como {email}",
     "set.aiNeedsPlan": "Requiere un plan de pago de Claude (Pro, Max, Team o Enterprise)",
     "set.aiGetKey": "Obtener una clave",
+    "set.aiSignOut": "Cerrar sesión",
+    "brief.aiNotPaid": "Claude (suscripción): inicia sesión con un plan de pago de Claude en Ajustes. Los correos nuevos se ordenarán en la próxima actualización.",
+    "brief.aiStopped": "Claude dejó de ordenar ({reason}). Los correos restantes se ordenarán en la próxima actualización.",
     "set.aiNoteLocal": "Todo se queda en tu ordenador: tus correos nunca se envían a una IA en la nube. Primero instala un modelo, p. ej. «ollama pull qwen2.5». Los modelos locales pequeños clasifican peor que los grandes modelos en la nube.",
     "set.aiNoteCloud": "Se envían fragmentos de tus correos a {provider} para clasificarlos y resumirlos.",
 };

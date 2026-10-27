@@ -111,8 +111,9 @@ you like.
 Switch in **Settings → General** with a live preview, adjust the text size, and pick one of
 13 languages, including right-to-left Arabic and Urdu.
 
-**Your AI, your choice.** Use Claude, OpenAI or Mistral. Or run a model on your own computer with
-Ollama, so your emails never leave it. See [Choose your AI](#choose-your-ai).
+**Your AI, your choice.** Use Claude (with an API key, or with your Claude subscription through
+Claude Code), OpenAI or Mistral. Or run a model on your own computer with Ollama, so your emails
+never leave it. See [Choose your AI](#choose-your-ai).
 
 ## Features
 
@@ -225,7 +226,8 @@ cargo tauri build --bundles nsis       # on Windows → target/release/bundle/ns
 
 | Provider | What you need | Where your emails go |
 |---|---|---|
-| **Claude** (Anthropic) | API key from <https://console.anthropic.com/> | Anthropic |
+| **Claude** (Anthropic) | API key from <https://console.anthropic.com/> (**Get a key** opens the page) | Anthropic |
+| **Claude** (subscription) | [Claude Code](https://claude.com/claude-code) installed, then **Sign in with Claude** with a paid plan (Pro, Max, Team or Enterprise) | Anthropic |
 | **OpenAI** | API key from <https://platform.openai.com/> | OpenAI |
 | **Mistral** | API key from <https://console.mistral.ai/> | Mistral (EU) |
 | **Ollama** (local, free) | [Ollama](https://ollama.com) installed, then e.g. `ollama pull qwen2.5` | **Nowhere: everything stays on your computer** |
@@ -234,6 +236,12 @@ cargo tauri build --bundles nsis       # on Windows → target/release/bundle/ns
 Small local models are slower and classify less reliably than large cloud models; a 7–8B text
 model (`qwen2.5`, `llama3.1`) is a good start. Keys are stored per provider in `config.toml`,
 so you can switch back and forth.
+
+With **Claude (subscription)**, emails are sorted by your own Claude Code (`claude -p`, with no
+tools and none of your Claude Code settings); the app stores no token. The choice is greyed out
+when Claude Code isn't installed. If the plan's usage limit is reached, sorting stops and the
+remaining emails are sorted at the next refresh. See
+[ADR 0001](docs/adr/0001-claude-subscription-via-claude-code.md).
 
 ## Cloud sync with Supabase (optional)
 

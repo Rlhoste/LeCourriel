@@ -2404,7 +2404,8 @@ const AI_DEFAULT_URL = {
   anthropic: 'https://api.anthropic.com/v1', openai: 'https://api.openai.com/v1',
   mistral: 'https://api.mistral.ai/v1', ollama: 'http://localhost:11434/v1', custom: '',
 };
-const AI_DEFAULT_MODEL = { anthropic: 'claude-opus-4-6', claude_code: 'sonnet', mistral: 'mistral-small-latest' };
+const CLAUDE_CODE = 'claude_code';   // "Claude (subscription)", through the user's Claude Code
+const AI_DEFAULT_MODEL = { anthropic: 'claude-opus-4-6', [CLAUDE_CODE]: 'sonnet', mistral: 'mistral-small-latest' };
 const ANTHROPIC_KEYS_URL = 'https://console.anthropic.com/settings/keys';
 const ai = { provider: 'anthropic', keys: {}, models: {}, urls: {} };
 const $ai = id => document.getElementById(id);
@@ -2426,15 +2427,28 @@ let ccPoll = null;
 async function refreshClaudeCode() {
   let s;
   try { s = await cmd('claude_code_status'); } catch { s = { installed: false }; }
-  $ai('s-ai-provider').querySelector('option[value="claude_code"]').disabled = !s.installed;
+  $ai('s-ai-provider').querySelector(`option[value="${CLAUDE_CODE}"]`).disabled = !s.installed;
   const el = $ai('s-ai-cc-status');
   el.textContent = s.paid ? t('set.aiSignedIn', { email: s.email })
     : ccPoll ? t('set.aiSigningIn')
-    : s.logged_in ? t('set.aiNeedsPlan') : '';
+    : s.signed_in ? t('set.aiNeedsPlan') : '';
   el.classList.toggle('ok', !!s.paid);
-  el.classList.toggle('error', !!s.logged_in && !s.paid);
-  $ai('s-ai-cc-login').classList.toggle('hidden', !!s.paid);
+  el.classList.toggle('error', !!s.signed_in && !s.paid);
+  $ai('s-ai-cc-sign-in').classList.toggle('hidden', !!s.paid);
+  // Signed in with the wrong account (free plan, API key): sign out, then sign in again.
+  $ai('s-ai-cc-sign-out').classList.toggle('hidden', !s.signed_in);
   return s;
+}
+
+async function signOutOfClaude() {
+  stopClaudeCodePoll();
+  try {
+    await cmd('claude_code_sign_out');
+  } catch (e) {
+    $ai('s-ai-cc-status').textContent = String(e);
+    return;
+  }
+  refreshClaudeCode();
 }
 
 function stopClaudeCodePoll() {
@@ -2446,7 +2460,7 @@ function stopClaudeCodePoll() {
 async function signInWithClaude() {
   if (ccPoll) return;   // a sign-in is already under way
   try {
-    await cmd('claude_code_login');
+    await cmd('claude_code_sign_in');
   } catch (e) {
     $ai('s-ai-cc-status').textContent = String(e);
     return;
@@ -2456,7 +2470,7 @@ async function signInWithClaude() {
   const check = async () => {
     const s = await refreshClaudeCode();
     if (!ccPoll) return;
-    if (s.paid || Date.now() > until || ai.provider !== 'claude_code') {
+    if (s.paid || Date.now() > until || ai.provider !== CLAUDE_CODE) {
       stopClaudeCodePoll();
       refreshClaudeCode();
     } else {
@@ -2479,9 +2493,9 @@ function showAiProvider() {
   $ai('s-ai-model').value = ai.models[p] ?? AI_DEFAULT_MODEL[p] ?? '';
   $ai('s-ai-url').value = ai.urls[p] || '';
   $ai('s-ai-url').placeholder = AI_DEFAULT_URL[p] || 'https://api.example.com/v1';
-  $ai('s-ai-key-row').classList.toggle('hidden', ['ollama', 'claude_code'].includes(p));
+  $ai('s-ai-key-row').classList.toggle('hidden', ['ollama', CLAUDE_CODE].includes(p));
   $ai('s-ai-get-key').classList.toggle('hidden', p !== 'anthropic');
-  $ai('s-ai-cc-row').classList.toggle('hidden', p !== 'claude_code');
+  $ai('s-ai-cc-row').classList.toggle('hidden', p !== CLAUDE_CODE);
   $ai('s-ai-url-row').classList.toggle('hidden', !['ollama', 'custom'].includes(p));
   $ai('s-ai-models').innerHTML = '';
   setAiStatus('');
@@ -2526,16 +2540,23 @@ function setupAiSettings() {
     showAiProvider();
     // Ollama needs no key: list the installed models straight away.
     if (ai.provider === 'ollama') loadAiModels(true);
-    if (ai.provider === 'claude_code') { loadAiModels(true); refreshClaudeCode(); }
+    if (ai.provider === CLAUDE_CODE) { loadAiModels(true); refreshClaudeCode(); }
   });
   $ai('s-ai-load').addEventListener('click', () => loadAiModels());
-  $ai('s-ai-cc-login').addEventListener('click', signInWithClaude);
+  $ai('s-ai-cc-sign-in').addEventListener('click', signInWithClaude);
+  $ai('s-ai-cc-sign-out').addEventListener('click', signOutOfClaude);
   $ai('s-ai-get-key').addEventListener('click', () =>
     window.__TAURI__.shell.open(ANTHROPIC_KEYS_URL).catch(e => console.error('open keys page', e)));
-  // Check a pasted key straight away: listing the models needs a valid key.
-  $ai('s-ai-key').addEventListener('change', () => {
-    if (ai.provider === 'anthropic' && $ai('s-ai-key').value.trim()) loadAiModels();
-  });
+  // Check a pasted or typed key straight away: listing the models needs a valid key.
+  let checkedKey = '';
+  const checkKey = () => {
+    const key = $ai('s-ai-key').value.trim();
+    if (ai.provider !== 'anthropic' || !key || key === checkedKey) return;
+    checkedKey = key;
+    loadAiModels();
+  };
+  $ai('s-ai-key').addEventListener('paste', () => setTimeout(checkKey));   // the value lands after the event
+  $ai('s-ai-key').addEventListener('change', checkKey);
   $ai('s-ai-test').addEventListener('click', async () => {
     const f = aiFields();
     setAiStatus(t('set.aiTesting'));

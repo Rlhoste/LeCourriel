@@ -140,6 +140,9 @@ STRINGS.en = {
     "set.aiSignedIn": "✓ Signed in as {email}",
     "set.aiNeedsPlan": "Needs a paid Claude plan (Pro, Max, Team or Enterprise)",
     "set.aiGetKey": "Get a key",
+    "set.aiSignOut": "Sign out",
+    "brief.aiNotPaid": "Claude (subscription): sign in with a paid Claude plan in Settings. New emails will be sorted at the next refresh.",
+    "brief.aiStopped": "Claude stopped sorting ({reason}). The remaining emails will be sorted at the next refresh.",
     "set.aiNoteLocal": "Everything stays on your computer: your emails are never sent to a cloud AI. Install a model first, e.g. “ollama pull qwen2.5”. Small local models classify less reliably than large cloud ones.",
     "set.aiNoteCloud": "Email excerpts are sent to {provider} to be classified and summarised.",
 };

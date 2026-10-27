@@ -131,6 +131,9 @@ STRINGS.id = {
     "set.aiSignedIn": "✓ Masuk sebagai {email}",
     "set.aiNeedsPlan": "Memerlukan paket Claude berbayar (Pro, Max, Team, atau Enterprise)",
     "set.aiGetKey": "Dapatkan kunci",
+    "set.aiSignOut": "Keluar",
+    "brief.aiNotPaid": "Claude (langganan): masuk dengan paket Claude berbayar di Pengaturan. Email baru akan diurutkan pada penyegaran berikutnya.",
+    "brief.aiStopped": "Claude berhenti mengurutkan ({reason}). Email sisanya akan diurutkan pada penyegaran berikutnya.",
     "set.aiNoteLocal": "Semuanya tetap di komputer Anda: email Anda tidak pernah dikirim ke AI cloud. Pasang model terlebih dahulu, mis. “ollama pull qwen2.5”. Model lokal yang kecil kurang andal dalam mengklasifikasi dibanding model cloud yang besar.",
     "set.aiNoteCloud": "Cuplikan email Anda dikirim ke {provider} untuk diklasifikasikan dan diringkas.",
 };

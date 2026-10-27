@@ -135,7 +135,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     // Load previously classified emails from cache — reuse results for known UIDs.
     // With a Claude subscription, emails left unsorted last time (usage limit) count as new,
     // so they are tried again.
-    let retry_unsorted = cfg.ai.provider() == "claude_code";
+    let retry_unsorted = cfg.ai.uses_claude_code();
     let mut cached_cards = load_cache();
     if retry_unsorted {
         cached_cards.retain(|c| !crate::ai_classifier::not_classified(&c.summary));
@@ -174,13 +174,15 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     pre_cards.extend(new_raw_cards);
     let new_count = new_raw.len();
     let briefing_pre = if new_count > 0 {
-        Briefing { kind: "classifying", hour: 0, minute: 0, count: new_count }
+        Briefing { kind: "classifying", count: new_count, ..Default::default() }
     } else {
-        Briefing { kind: "up_to_date", hour: 0, minute: 0, count: 0 }
+        Briefing { kind: "up_to_date", ..Default::default() }
     };
     populate(cfg, app, state, pre_cards, sent_cards_pre.clone(), drafts_cards_pre.clone(), trash_cards_pre.clone(), spam_cards_pre.clone(), Some(briefing_pre));
 
     // Classify only new emails.
+    // Why a Claude subscription sorted nothing, or stopped early (shown in the briefing line).
+    let mut ai_notice: Option<Briefing> = None;
     let new_cards: Vec<EmailCard> = if new_raw.is_empty() {
         vec![]
     } else {
@@ -189,64 +191,55 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
         let ids: Vec<String> = new_raw.iter()
             .map(|r| r.message_id.clone()).filter(|id| !id.is_empty()).collect();
         let stored = crate::cloud::lookup_ai(&ids).await;
-        // A local model answers one request at a time; cloud APIs take several in parallel;
-        // Claude Code starts a process per request.
-        let concurrency = match cfg.ai.provider() { "ollama" => 1, "claude_code" => 3, _ => 6 };
+        let concurrency = crate::ai::parallel_requests(&cfg.ai);
         use futures::StreamExt;
         // Owned jobs first: the stream must not borrow from this function across awaits.
         let jobs: Vec<_> = new_raw.iter()
             .map(|email| (stored.get(&email.message_id).cloned(), cfg.ai.clone(), email.clone(), projects.clone()))
             .collect();
-        // With a Claude subscription, after one email fails (e.g. the usage limit is reached)
+        // With a Claude subscription, only a paid plan is used (a free plan or an API-key
+        // login would bill the API), and after one email fails (e.g. the usage limit is reached)
         // the rest stay unsorted until the next refresh instead of each failing in turn.
-        // Only a paid plan is used, never a free plan or an API-key login (which bills the API).
         let not_paid = retry_unsorted && !crate::claude_code::status().await.paid;
-        if not_paid {
-            app.emit("error", "Claude (subscription): sign in with a paid Claude plan in Settings. \
-                The new emails will be sorted at the next refresh.").ok();
-        }
-        let stopped = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(not_paid));
-        let results: Vec<anyhow::Result<(bool, crate::ai_classifier::ClassifiedEmail)>> =
+        let stop_reason: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+        let results: Vec<(bool, crate::ai_classifier::ClassifiedEmail)> =
             futures::stream::iter(jobs)
                 .map(|(reused, ai_cfg, email, projects)| {
-                    let stopped = stopped.clone();
+                    let stop_reason = stop_reason.clone();
                     async move {
-                        use std::sync::atomic::Ordering;
                         if let Some(c) = reused {
-                            return anyhow::Ok((false, c));
+                            return (false, c);
                         }
-                        if stopped.load(Ordering::Relaxed) {
-                            return anyhow::Ok((false, crate::ai_classifier::unclassified()));
+                        if not_paid || stop_reason.lock().unwrap_or_else(|e| e.into_inner()).is_some() {
+                            return (false, crate::ai_classifier::unclassified());
                         }
-                        let c = crate::ai_classifier::classify(&ai_cfg, &email, &projects).await?;
-                        if retry_unsorted && crate::ai_classifier::not_classified(&c.summary) {
-                            stopped.store(true, Ordering::Relaxed);
+                        match crate::ai_classifier::classify(&ai_cfg, &email, &projects).await {
+                            Ok(c) => (true, c),
+                            Err(e) => {
+                                warn!("AI classification failed: {:#}", e);
+                                if retry_unsorted {
+                                    stop_reason.lock().unwrap_or_else(|e| e.into_inner())
+                                        .get_or_insert_with(|| e.to_string());
+                                }
+                                (true, crate::ai_classifier::unclassified())
+                            }
                         }
-                        anyhow::Ok((true, c))
                     }
                 })
                 .buffered(concurrency)
                 .collect()
                 .await;
-        if !not_paid && stopped.load(std::sync::atomic::Ordering::Relaxed) {
-            app.emit("error", "Claude (subscription) stopped sorting: usage limit reached or \
-                Claude Code failed (details in the log). The remaining emails will be sorted at the next refresh.").ok();
-        }
+        let stop_reason = stop_reason.lock().unwrap_or_else(|e| e.into_inner()).take();
+        ai_notice = if not_paid {
+            Some(Briefing { kind: "ai_not_paid", ..Default::default() })
+        } else {
+            stop_reason.map(|detail| Briefing { kind: "ai_stopped", detail, ..Default::default() })
+        };
         let mut to_store: Vec<(String, crate::ai_classifier::ClassifiedEmail)> = Vec::new();
-        let cards: Vec<EmailCard> = new_raw.into_iter().zip(results).map(|(raw, result)| {
-            let classified = match result {
-                Ok((fresh, c)) => {
-                    if fresh && !raw.message_id.is_empty() && crate::ai_classifier::is_real_result(&c) {
-                        to_store.push((raw.message_id.clone(), c.clone()));
-                    }
-                    c
-                }
-                _ => crate::ai_classifier::ClassifiedEmail {
-                    priority: Priority::Information,
-                    summary: String::new(),
-                    project: None, deadline: None, task: None, meeting_link: None,
-                },
-            };
+        let cards: Vec<EmailCard> = new_raw.into_iter().zip(results).map(|(raw, (fresh, classified))| {
+            if fresh && !raw.message_id.is_empty() && crate::ai_classifier::is_real_result(&classified) {
+                to_store.push((raw.message_id.clone(), classified.clone()));
+            }
             let (from_name, from_email) = parse_from(&raw.from);
             let date_str = raw.date.map(format_date).unwrap_or_else(|| i18n::unknown_date(i18n::lang()).to_string());
             let date_full = raw.date.map(format_date_full).unwrap_or_default();
@@ -300,7 +293,8 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     let attention = urgent_count + high_count;
     use chrono::Timelike;
     let now = Local::now();
-    let live_briefing = Briefing { kind: "live", hour: now.hour(), minute: now.minute(), count: attention };
+    let live_briefing = ai_notice.unwrap_or(
+        Briefing { kind: "live", hour: now.hour(), minute: now.minute(), count: attention, detail: String::new() });
 
     populate(cfg, app, state, cards, sent_cards, drafts_cards, trash_cards, spam_cards, Some(live_briefing));
     Ok(())
@@ -399,7 +393,7 @@ fn populate(
     }).collect();
 
     let attention = urgent.len() + high.len();
-    let briefing = briefing_override.unwrap_or(Briefing { kind: "cached", hour: 0, minute: 0, count: attention });
+    let briefing = briefing_override.unwrap_or(Briefing { kind: "cached", count: attention, ..Default::default() });
     // English/French text kept as a fallback for older front ends.
     let l = i18n::lang();
     let briefing_text = match briefing.kind {

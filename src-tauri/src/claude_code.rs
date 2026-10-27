@@ -10,6 +10,9 @@ use tokio::io::AsyncWriteExt;
 
 use crate::ai::Request;
 
+/// The AI provider name saved in the config for this route.
+pub const PROVIDER: &str = "claude_code";
+
 /// Model aliases Claude Code understands; each points at the latest model of that tier.
 pub const MODELS: [&str; 3] = ["haiku", "sonnet", "opus"];
 
@@ -48,7 +51,7 @@ pub fn answer(stdout: &str) -> Result<String> {
 pub struct Status {
     /// The `claude` command was found.
     pub installed: bool,
-    pub logged_in: bool,
+    pub signed_in: bool,
     pub email: String,
     /// Signed in with a paid Claude plan (Pro, Max, Team or Enterprise).
     pub paid: bool,
@@ -58,11 +61,11 @@ pub struct Status {
 pub fn parse_status(json: &str) -> Status {
     let v: Value = serde_json::from_str(json).unwrap_or(Value::Null);
     let str_of = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or("").to_string();
-    let logged_in = v.get("loggedIn").and_then(Value::as_bool).unwrap_or(false);
-    let paid = logged_in
+    let signed_in = v.get("loggedIn").and_then(Value::as_bool).unwrap_or(false);
+    let paid = signed_in
         && str_of("authMethod") == "claude.ai"
         && matches!(str_of("subscriptionType").as_str(), "pro" | "max" | "team" | "enterprise");
-    Status { installed: true, logged_in, email: str_of("email"), paid }
+    Status { installed: true, signed_in, email: str_of("email"), paid }
 }
 
 /// `claude`, or on Windows the `claude.cmd` script an npm install creates.
@@ -77,7 +80,7 @@ const PROGRAMS: &[&str] = if cfg!(windows) { &["claude", "claude.cmd"] } else { 
 
 /// Spawn `claude` with these arguments, trying each program name until one exists.
 /// `wait`: we read its output (all pipes, killed if dropped); otherwise it runs on its own.
-fn spawn(args: &[String], wait: bool) -> std::io::Result<tokio::process::Child> {
+fn spawn<S: AsRef<std::ffi::OsStr>>(args: &[S], wait: bool) -> Result<tokio::process::Child> {
     let mut last = std::io::Error::from(std::io::ErrorKind::NotFound);
     for p in PROGRAMS {
         let mut c = command(p);
@@ -88,10 +91,10 @@ fn spawn(args: &[String], wait: bool) -> std::io::Result<tokio::process::Child> 
         match c.spawn() {
             Ok(child) => return Ok(child),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => last = e,
-            Err(e) => return Err(e),
+            Err(e) => return Err(e.into()),
         }
     }
-    Err(last)
+    Err(anyhow!(last).context("Claude Code is not installed on this computer"))
 }
 
 /// On Windows an npm install runs through claude.cmd, and killing it would leave the
@@ -104,10 +107,6 @@ fn kill_tree(pid: Option<u32>) {
     }
     #[cfg(not(windows))]
     let _ = pid;   // kill_on_drop is enough: there is no wrapper script
-}
-
-fn not_installed() -> anyhow::Error {
-    anyhow!("Claude Code is not installed on this computer")
 }
 
 /// Send one question through Claude Code and return the answer text.
@@ -124,8 +123,7 @@ pub async fn complete(model: &str, req: &Request<'_>) -> Result<String> {
 }
 
 async fn run(model: &str, system_file: &std::path::Path, user: &str) -> Result<String> {
-    let mut child = spawn(&args(model, &system_file.to_string_lossy()), true)
-        .map_err(|e| if e.kind() == std::io::ErrorKind::NotFound { not_installed() } else { anyhow!(e) })?;
+    let mut child = spawn(&args(model, &system_file.to_string_lossy()), true)?;
     let mut stdin = child.stdin.take().context("No stdin")?;
     let pid = child.id();
     let talk = async {
@@ -154,8 +152,7 @@ async fn run(model: &str, system_file: &std::path::Path, user: &str) -> Result<S
 
 /// Is Claude Code installed, and signed in with a paid plan?
 pub async fn status() -> Status {
-    let args = ["auth".to_string(), "status".to_string(), "--json".to_string()];
-    let child = match spawn(&args, true) {
+    let child = match spawn(&["auth", "status", "--json"], true) {
         Ok(c) => c,
         Err(_) => return Status::default(),
     };
@@ -167,9 +164,17 @@ pub async fn status() -> Status {
 
 /// Start `claude auth login --claudeai`: it opens the browser and finishes on its own.
 /// Settings polls `status()` to see when it is done.
-pub fn login() -> Result<()> {
-    let args = ["auth".to_string(), "login".to_string(), "--claudeai".to_string()];
-    spawn(&args, false)
-        .map(drop)
-        .map_err(|e| if e.kind() == std::io::ErrorKind::NotFound { not_installed() } else { anyhow!(e) })
+pub fn sign_in() -> Result<()> {
+    spawn(&["auth", "login", "--claudeai"], false).map(drop)
+}
+
+/// `claude auth logout`: signs Claude Code out on this computer.
+pub async fn sign_out() -> Result<()> {
+    let child = spawn(&["auth", "logout"], true)?;
+    let out = tokio::time::timeout(std::time::Duration::from_secs(20), child.wait_with_output()).await
+        .map_err(|_| anyhow!("Claude Code took too long to sign out"))??;
+    if !out.status.success() {
+        bail!("Claude Code: {}", String::from_utf8_lossy(&out.stderr).trim());
+    }
+    Ok(())
 }

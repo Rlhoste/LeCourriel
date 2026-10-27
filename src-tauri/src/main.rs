@@ -275,8 +275,14 @@ async fn claude_code_status() -> claude_code::Status {
 
 /// Settings → AI → "Sign in with Claude": starts Claude Code's browser sign-in.
 #[tauri::command]
-fn claude_code_login() -> Result<(), String> {
-    claude_code::login().map_err(|e| format!("{:#}", e))
+fn claude_code_sign_in() -> Result<(), String> {
+    claude_code::sign_in().map_err(|e| format!("{}", e))
+}
+
+/// Settings → AI → "Sign out": signs Claude Code out on this computer.
+#[tauri::command]
+async fn claude_code_sign_out() -> Result<(), String> {
+    claude_code::sign_out().await.map_err(|e| format!("{}", e))
 }
 
 /// Settings → Accounts → Test: log in to the incoming server and open the folder.
@@ -795,7 +801,8 @@ fn main() {
             compose_accounts,
             ai_list_models,
             claude_code_status,
-            claude_code_login,
+            claude_code_sign_in,
+            claude_code_sign_out,
             ai_test,
             account_test_imap,
             account_test_smtp,

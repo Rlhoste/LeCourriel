@@ -1203,7 +1203,7 @@ max_tokens = 10
     fn test_claude_code_status() {
         use crate::claude_code::parse_status;
         let s = parse_status(r#"{"loggedIn":true,"authMethod":"claude.ai","email":"a@b.com","subscriptionType":"team"}"#);
-        assert!(s.installed && s.logged_in && s.paid);
+        assert!(s.installed && s.signed_in && s.paid);
         assert_eq!(s.email, "a@b.com");
         for plan in ["pro", "max", "enterprise"] {
             assert!(parse_status(&format!(r#"{{"loggedIn":true,"authMethod":"claude.ai","subscriptionType":"{}"}}"#, plan)).paid);
@@ -1212,8 +1212,8 @@ max_tokens = 10
         assert!(!parse_status(r#"{"loggedIn":true,"authMethod":"claude.ai","subscriptionType":"free"}"#).paid);
         assert!(!parse_status(r#"{"loggedIn":true,"authMethod":"api_key"}"#).paid);
         let s = parse_status(r#"{"loggedIn":false}"#);
-        assert!(s.installed && !s.logged_in && !s.paid);
-        assert!(!parse_status("garbage").logged_in);
+        assert!(s.installed && !s.signed_in && !s.paid);
+        assert!(!parse_status("garbage").signed_in);
         // It is an AI provider like the others.
         assert!(AI_PROVIDERS.contains(&"claude_code"));
         assert_eq!(crate::ai::provider_label("claude_code"), "Claude (subscription)");

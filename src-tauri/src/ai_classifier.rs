@@ -44,12 +44,12 @@ pub fn is_real_result(c: &ClassifiedEmail) -> bool {
 }
 
 /// True when the AI couldn't be reached for this email (error, usage limit, or sorting
-/// stopped early): it stays unsorted and is tried again at the next refresh.
+/// skipped or stopped early): it stays unsorted and is tried again at the next refresh.
 pub fn not_classified(summary: &str) -> bool {
     summary == CLASSIFY_FAILED
 }
 
-/// The result for an email that wasn't sent to the AI.
+/// The result for an email the AI couldn't sort, or that wasn't sent to it.
 pub fn unclassified() -> ClassifiedEmail {
     ClassifiedEmail {
         priority: Priority::Information,
@@ -105,6 +105,8 @@ For the meeting_link field: if the email body contains a video meeting URL (Zoom
     prompt
 }
 
+/// Fails only when the AI can't be reached (the error says why); an answer that can't be
+/// read gives a placeholder result.
 pub async fn classify(
     ai: &AiConfig,
     email: &RawEmail,
@@ -125,20 +127,13 @@ pub async fn classify(
         meeting_link: None,
     };
 
-    let text = match crate::ai::complete(ai, crate::ai::Request {
+    let text = crate::ai::complete(ai, crate::ai::Request {
         system: &system_prompt,
         user: &user_content,
         max_tokens: ai.max_tokens,
         json: true,
     })
-    .await
-    {
-        Ok(t) => t,
-        Err(e) => {
-            warn!("AI classification failed: {:#}", e);
-            return Ok(placeholder(CLASSIFY_FAILED));
-        }
-    };
+    .await?;
     debug!("AI raw response: {}", text);
 
     match serde_json::from_str::<ClassificationResult>(crate::ai::extract_json(&text)) {

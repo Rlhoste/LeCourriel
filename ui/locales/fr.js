@@ -131,6 +131,9 @@ STRINGS.fr = {
     "set.aiSignedIn": "✓ Connecté en tant que {email}",
     "set.aiNeedsPlan": "Nécessite un abonnement Claude payant (Pro, Max, Team ou Enterprise)",
     "set.aiGetKey": "Obtenir une clé",
+    "set.aiSignOut": "Se déconnecter",
+    "brief.aiNotPaid": "Claude (abonnement) : connectez-vous avec un forfait Claude payant dans les Paramètres. Les nouveaux e-mails seront classés à la prochaine actualisation.",
+    "brief.aiStopped": "Claude a arrêté le classement ({reason}). Les e-mails restants seront classés à la prochaine actualisation.",
     "set.aiNoteLocal": "Tout reste sur votre ordinateur : vos e-mails ne sont jamais envoyés à une IA dans le cloud. Installez d'abord un modèle, par ex. « ollama pull qwen2.5 ». Les petits modèles locaux classent moins bien que les grands modèles en ligne.",
     "set.aiNoteCloud": "Des extraits de vos e-mails sont envoyés à {provider} pour être classés et résumés.",
 };

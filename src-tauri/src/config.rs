@@ -232,6 +232,11 @@ impl AiConfig {
         if self.provider.is_empty() { "anthropic" } else { &self.provider }
     }
 
+    /// "Claude (subscription)": requests go through the user's Claude Code, not an API.
+    pub fn uses_claude_code(&self) -> bool {
+        self.provider() == crate::claude_code::PROVIDER
+    }
+
     pub fn key(&self) -> &str {
         self.keys.get(self.provider()).map(|k| k.trim()).unwrap_or("")
     }

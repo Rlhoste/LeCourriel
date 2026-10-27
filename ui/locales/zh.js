@@ -131,6 +131,9 @@ STRINGS.zh = {
     "set.aiSignedIn": "✓ 已登录：{email}",
     "set.aiNeedsPlan": "需要付费的 Claude 套餐（Pro、Max、Team 或 Enterprise）",
     "set.aiGetKey": "获取密钥",
+    "set.aiSignOut": "退出登录",
+    "brief.aiNotPaid": "Claude（订阅）：请在设置中使用付费 Claude 套餐登录。新邮件将在下次刷新时分类。",
+    "brief.aiStopped": "Claude 已停止分类（{reason}）。其余邮件将在下次刷新时分类。",
     "set.aiNoteLocal": "所有数据都保留在您的电脑上：邮件绝不会发送到云端 AI。请先安装一个模型，例如“ollama pull qwen2.5”。小型本地模型的分类效果不如大型云端模型。",
     "set.aiNoteCloud": "邮件片段会发送给 {provider} 进行分类和摘要。",
 };
