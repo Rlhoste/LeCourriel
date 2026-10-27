@@ -568,6 +568,17 @@
   </div>
 </div>
 
+<!-- ── Yes/no question (askInApp): above every other window ───────────────── -->
+<div id="confirm-overlay" class="overlay confirm-overlay hidden">
+  <div class="dialog" role="alertdialog" aria-modal="true">
+    <p id="confirm-text" dir="auto"></p>
+    <div class="dialog-actions">
+      <button id="confirm-cancel" class="secondary-btn"></button>
+      <button id="confirm-ok" class="primary-btn"></button>
+    </div>
+  </div>
+</div>
+
 <!-- Reading pane (shared for email panels) -->
 <template id="tpl-split-panel">
   <div class="email-list-col">

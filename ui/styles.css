@@ -906,6 +906,7 @@ button.row-mark:hover::before { transform: scale(1.2); }
 /* Stacked over Settings (100); the toast (200) stays above it. */
 .setup-overlay { z-index: 150; }
 .unsaved-list { margin: 4px 0 4px 20px; font-size: 0.9rem; }
+.confirm-overlay { z-index: 160; }
 .setup-result { display: flex; flex-direction: column; gap: 4px; border-top: var(--border-w) solid var(--border); padding-top: 10px; }
 .setup-line { font-size: 0.9rem; }
 .setup-issues { color: var(--urgent); font-size: 0.8rem; }

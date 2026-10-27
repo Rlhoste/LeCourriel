@@ -13,7 +13,6 @@
     "updater:default",
     "shell:allow-open",
     "dialog:allow-save",
-    "dialog:allow-open",
-    "dialog:allow-ask"
+    "dialog:allow-open"
   ]
 }

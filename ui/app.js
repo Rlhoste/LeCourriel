@@ -1499,8 +1499,7 @@ function showProject(p) {
     if (e.key === 'Escape') closeRename();
   };
   deleteBtn.onclick = async () => {
-    // The webview's confirm() is not shown in the app window: a system dialog asks instead.
-    if (!(await window.__TAURI__.dialog.ask(t('proj.deleteConfirm', { name: p.name }), { kind: 'warning' }))) return;
+    if (!(await askInApp(t('proj.deleteConfirm', { name: p.name }), t('proj.delete')))) return;
     deleteBtn.disabled = true;
     try {
       await cmd('delete_project', { name: p.name });
@@ -2496,10 +2495,9 @@ function renderAccountBlocks(accounts) {
     block.querySelector('.collapse-account-btn').addEventListener('click', toggle);
     block.querySelector('.account-title').addEventListener('click', toggle);
     block.querySelector('.remove-account-btn').addEventListener('click', async () => {
-      // A block with nothing in it goes without asking; one that names an account asks first,
-      // in a system dialog (the webview's confirm() is not shown in the app window).
+      // A block with nothing in it goes without asking; one that names an account asks first.
       const name = block.querySelector('.a-sender-email').value.trim() || loginEmail(block);
-      if (name && !(await window.__TAURI__.dialog.ask(t('set.removeAccountConfirm', { name }), { kind: 'warning' }))) return;
+      if (name && !(await askInApp(t('set.removeAccountConfirm', { name }), t('set.removeAccount')))) return;
       settingsData.accounts = collectAccounts();   // keep what was typed in the other blocks
       settingsData.accounts.splice(idx, 1);
       renderAccountBlocks(settingsData.accounts);
@@ -3306,6 +3304,23 @@ function setupCloudSettings() {
     renderCloudStatus(await cmd('cloud_sign_out'));
     setCloudStatus('');
   }));
+}
+
+// Yes/no question in the app's own look (the webview's confirm() is not shown in the
+// app window, and a system dialog does not follow the theme). Resolves true on `okLabel`.
+function askInApp(message, okLabel) {
+  const overlay = document.getElementById('confirm-overlay');
+  document.getElementById('confirm-text').textContent = message;
+  const ok = document.getElementById('confirm-ok'), cancel = document.getElementById('confirm-cancel');
+  ok.textContent = okLabel;
+  cancel.textContent = t('proj.cancel');
+  overlay.classList.remove('hidden');
+  cancel.focus();
+  return new Promise(resolve => {
+    const done = answer => { overlay.classList.add('hidden'); resolve(answer); };
+    ok.onclick = () => done(true);
+    cancel.onclick = () => done(false);
+  });
 }
 
 // What Settings holds, in the shape the unsaved-changes recap compares.
