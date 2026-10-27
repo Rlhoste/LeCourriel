@@ -62,12 +62,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     applyTheme(s.theme);
     if (s.language && s.language !== LANG) applyLanguage(s.language);
     await loadComposeAccounts();
-    // First start (or no account yet): open Settings on Accounts, with an empty account to fill in.
+    // First start (or no account yet): open Settings on Accounts, with the setup dialog on top.
     if (CourrielCore.needsAccountSetup(s)) {
       document.getElementById('ov-briefing').textContent = t('ov.noAccount');
       await openSettings();
       switchSettingsTab('accounts');
-      if (!settingsData.accounts.length) document.getElementById('s-add-account').click();
+      if (!settingsData.accounts.length) openSetupDialog();
     }
   } catch (_) {}
 
@@ -1499,7 +1499,7 @@ function showProject(p) {
     if (e.key === 'Escape') closeRename();
   };
   deleteBtn.onclick = async () => {
-    if (!confirm(t('proj.deleteConfirm', { name: p.name }))) return;
+    if (!(await askInApp(t('proj.deleteConfirm', { name: p.name }), t('proj.delete')))) return;
     deleteBtn.disabled = true;
     try {
       await cmd('delete_project', { name: p.name });
@@ -2334,6 +2334,13 @@ function applyLanguage(code) {
     settingsData.accounts = collectAccounts();   // keep unsaved edits while re-rendering labels
     renderAccountBlocks(settingsData.accounts);
   }
+  if (!document.getElementById('setup-overlay').classList.contains('hidden')) {
+    renderSetupHint(document.getElementById('setup-email').value);
+    if (!document.getElementById('setup-scan').classList.contains('hidden')) renderScanRows();
+    if (!document.getElementById('setup-result').classList.contains('hidden')) {
+      renderSetupArea(document.getElementById('setup-email').value);
+    }
+  }
 }
 
 let savedLang = 'en';   // last saved; restored if Settings closes without saving
@@ -2366,6 +2373,7 @@ async function openSettings() {
   document.getElementById('s-update-current').textContent = await cmd('app_version');
 
   renderAccountBlocks(settingsData.accounts);
+  settingsBaseline = settingsSnapshot();
   document.getElementById('settings-overlay').classList.remove('hidden');
   // Default to general tab
   switchSettingsTab('general');
@@ -2486,7 +2494,12 @@ function renderAccountBlocks(accounts) {
     };
     block.querySelector('.collapse-account-btn').addEventListener('click', toggle);
     block.querySelector('.account-title').addEventListener('click', toggle);
-    block.querySelector('.remove-account-btn').addEventListener('click', () => {
+    block.querySelector('.remove-account-btn').addEventListener('click', async () => {
+      // A block with nothing typed in it goes without asking; any other asks first.
+      const filled = [...block.querySelectorAll('input:not([type=checkbox])')].some(i => i.value.trim());
+      const name = block.querySelector('.account-title').textContent.trim();
+      if (filled && !(await askInApp(t('set.removeAccountConfirm', { name }), t('set.removeAccount')))) return;
+      settingsData.accounts = collectAccounts();   // keep what was typed in the other blocks
       settingsData.accounts.splice(idx, 1);
       renderAccountBlocks(settingsData.accounts);
     });
@@ -2565,7 +2578,13 @@ function addPasswordToggles(root) {
 function setupSettings() {
   addPasswordToggles(document.getElementById('settings-overlay'));
   // Only the × closes Settings: a click beside the window must not lose what was typed.
-  document.getElementById('settings-close').addEventListener('click', closeSettings);
+  // With unsaved changes it asks first, listing them.
+  document.getElementById('settings-close').addEventListener('click', askCloseSettings);
+  document.getElementById('unsaved-save').addEventListener('click', () => { hideUnsaved(); saveSettings(); });
+  document.getElementById('unsaved-discard').addEventListener('click', () => { hideUnsaved(); closeSettings(); });
+  document.getElementById('unsaved-back').addEventListener('click', hideUnsaved);
+  keepFocusIn(document.getElementById('unsaved-overlay'), hideUnsaved);
+  keepFocusIn(document.getElementById('confirm-overlay'), () => document.getElementById('confirm-cancel').click());
 
   document.querySelectorAll('.tab').forEach(t => {
     t.addEventListener('click', () => switchSettingsTab(t.dataset.tab));
@@ -2577,15 +2596,26 @@ function setupSettings() {
     document.documentElement.style.fontSize = `${fontScale * 14}px`;
   });
 
-  document.getElementById('s-add-account').addEventListener('click', () => {
-    settingsData.accounts.push({
-      // All blank: the placeholders show the defaults used for blank fields.
-      label: '', imap_host: '', imap_port: '', imap_user: '', imap_pass: '',
-      imap_mailbox: '', imap_fetch: '',
-      smtp_host: '', smtp_port: '', smtp_user: '', smtp_pass: '', smtp_from: '',
-      signature_file: '', signature_on_new: true, signature_on_reply: true,
-    });
-    renderAccountBlocks(settingsData.accounts);
+  document.getElementById('s-add-account').addEventListener('click', openSetupDialog);
+
+  // The setup dialog: name, email and password, then Auto-setup looks for the servers.
+  addPasswordToggles(document.getElementById('setup-overlay'));
+  document.getElementById('setup-close').addEventListener('click', closeSetupDialog);
+  document.getElementById('setup-next').addEventListener('click', setupNext);
+  document.getElementById('setup-email').addEventListener('input', e => {
+    renderSetupHint(e.target.value);
+    document.getElementById('setup-result').classList.add('hidden');   // the result was for the old address
+  });
+  document.getElementById('setup-use').addEventListener('click', () => setupAddAccount(true));
+  document.getElementById('setup-manual').addEventListener('click', () => setupAddAccount(false));
+  // Step 1: the accounts Auto-scan found in another mail app.
+  document.getElementById('setup-scan-add').addEventListener('click', setupScanAdd);
+  document.getElementById('setup-scan-skip').addEventListener('click', setupScanSkip);
+  // Enter goes on with what was typed: it adds the ticked accounts on step 1.
+  document.getElementById('setup-overlay').addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || e.target.tagName === 'A') return;
+    if (!document.getElementById('setup-scan').classList.contains('hidden')) { setupScanAdd(); return; }
+    if (document.getElementById('setup-result').classList.contains('hidden')) setupNext();
   });
 
   document.getElementById('settings-save').addEventListener('click', saveSettings);
@@ -2687,6 +2717,297 @@ function switchSettingsTab(tab) {
   document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === `tab-${tab}`));
 }
 
+// ── Account setup dialog (Auto-setup) ───────────────────────────────────────
+const GMAIL_APP_PASSWORDS_URL = 'https://myaccount.google.com/apppasswords';
+// Google only offers app passwords once 2-Step Verification is on; before that its page
+// says "the setting you are looking for is not available for your account".
+const GMAIL_2SV_URL = 'https://myaccount.google.com/signinoptions/twosv';
+
+let setupFound;   // what Auto-setup returned: undefined = not asked yet, null = nothing found
+let setupNote;    // { key, vars }: one quiet line shown instead of a result
+
+// What a provider needs beyond a password, in one place (Auto-scan reuses this):
+// 'gmail' → an app password, 'ms' → no password any more, so not supported yet.
+// The key is an email address or an incoming server's host; null = nothing special.
+function providerHint(key) {
+  const s = (key || '').toLowerCase().trim();
+  const labels = (s.includes('@') ? s.slice(s.lastIndexOf('@') + 1) : s).split('.');
+  const listed = list => labels.some(l => list.some(d => l === d || l.startsWith(`${d}-`)));
+  if (listed(['gmail', 'googlemail', 'google'])) return 'gmail';
+  if (listed(['outlook', 'hotmail', 'live', 'msn', 'office365', 'microsoftonline'])) return 'ms';
+  return null;
+}
+
+// The note a provider needs beyond a password, written into the element it is given:
+// Auto-setup's password field and every Auto-scan row have one of their own.
+function fillHint(el, key) {
+  const kind = providerHint(key);
+  el.innerHTML = '';
+  el.classList.toggle('hidden', !kind);
+  if (!kind) return;
+  el.textContent = t(kind === 'gmail' ? 'setup.hint.gmail' : 'setup.hint.ms');
+  if (kind !== 'gmail') return;
+  // The two steps, in order, each one a link to its Google page.
+  [['setup.hint.gmail2sv', GMAIL_2SV_URL], ['setup.hint.gmailLink', GMAIL_APP_PASSWORDS_URL]].forEach(([k, url]) => {
+    const link = document.createElement('a');
+    link.className = 'setup-link';
+    link.href = url;
+    link.textContent = t(k);
+    // Opens in the system browser (Tauri shell plugin), not inside the app window.
+    link.addEventListener('click', e => {
+      e.preventDefault();
+      window.__TAURI__.shell.open(url).catch(err => console.error('open Google page', err));
+    });
+    const step = document.createElement('span');
+    step.className = 'setup-step';
+    step.append(link);
+    el.append(step);
+  });
+}
+
+// What the hint is about: a custom domain hosted by Google or Microsoft only shows who it
+// is through its incoming server.
+function hintKey(email, host) {
+  return providerHint(email) ? email : (host || '');
+}
+
+// The note under the password field.
+function renderSetupHint(key) {
+  fillHint(document.getElementById('setup-hint'), key);
+}
+
+// Step 1 (Auto-scan) when another mail app holds an account this one does not have yet,
+// step 2 (Auto-setup) otherwise.
+async function openSetupDialog() {
+  setupFound = undefined;
+  setupNote = null;
+  document.getElementById('setup-name').value = '';
+  document.getElementById('setup-email').value = '';
+  const pass = document.getElementById('setup-pass');
+  pass.value = '';
+  pass.type = 'password';   // the eye button keeps its place
+  document.getElementById('setup-next').disabled = false;
+  document.getElementById('setup-result').classList.add('hidden');
+  renderSetupHint('');
+  scanFound = await scanMailClients();
+  scanBoxes = [];
+  renderScanStep();
+  document.getElementById('setup-overlay').classList.remove('hidden');
+  document.getElementById(scanFound.length ? 'setup-scan-add' : 'setup-email').focus();
+}
+
+function closeSetupDialog() {
+  document.getElementById('setup-overlay').classList.add('hidden');
+}
+
+// ── Auto-scan ─────────────────────────────────────────────────────────────────
+
+let scanFound = [];   // the accounts the other mail apps hold, none of them in this app
+let scanBoxes = [];   // their checkboxes, in the same order
+
+// The accounts Auto-scan found, less the ones already set up here. A mail app that is not
+// installed gives nothing, so the dialog opens on Auto-setup as if none was found.
+async function scanMailClients() {
+  let found;
+  try {
+    found = await cmd('scan_mail_clients', {});
+  } catch (e) {
+    console.error('scan mail clients', e);
+    return [];
+  }
+  const known = new Set(collectAccounts()
+    .flatMap(a => [splitSender(a.smtp_from).email, a.imap_user])
+    .map(s => (s || '').trim().toLowerCase())
+    .filter(Boolean));
+  return (found || []).filter(a => !known.has((a.email || '').toLowerCase()));
+}
+
+// Which step to show: the list only when it has something to show.
+function renderScanStep() {
+  const found = !!scanFound.length;
+  document.getElementById('setup-scan').classList.toggle('hidden', !found);
+  document.getElementById('setup-form').classList.toggle('hidden', found);
+  if (found) renderScanRows();
+}
+
+// One row per account: its name and address, the app it was found in, what it needs and
+// what it cannot do. Ticking is kept when the labels are redrawn in another language.
+function renderScanRows() {
+  const was = scanBoxes.map(b => b.checked);
+  const list = document.getElementById('setup-scan-list');
+  list.innerHTML = '';
+  scanBoxes = [];
+  scanFound.forEach((a, i) => {
+    const key = hintKey(a.email, a.imap ? a.imap.host : '');
+    const row = document.createElement('label');
+    row.className = 'setup-scan-row';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    // Everything usable starts ticked, except what no longer accepts a password.
+    box.checked = was[i] === undefined ? (!a.pop3 && !!a.imap && providerHint(key) !== 'ms') : was[i];
+    // POP3, or an incoming server this app cannot reach: nothing a block could use.
+    if (a.pop3 || !a.imap) {
+      box.checked = false;
+      box.disabled = true;
+      row.classList.add('disabled');
+    }
+    const main = document.createElement('span');
+    main.className = 'setup-scan-main';
+    const name = document.createElement('span');
+    name.className = 'setup-scan-name';
+    name.textContent = `${a.label} \u2014 ${a.email}`;
+    const client = document.createElement('span');
+    client.className = 'setup-scan-client';
+    client.textContent = a.client;
+    main.append(name, client);
+    const problems = (a.pop3 ? t('setup.scan.pop3') + ' ' : '') + issueLines(a);
+    if (problems.trim()) {
+      const issue = document.createElement('p');
+      issue.className = 'setup-scan-issue';
+      issue.textContent = problems.trim();
+      main.append(issue);
+    }
+    const hint = document.createElement('p');
+    hint.className = 'settings-note setup-hint';
+    fillHint(hint, key);
+    main.append(hint);
+    row.append(box, main);
+    list.append(row);
+    scanBoxes.push(box);
+  });
+}
+
+// Add selected: one filled block each, without any password. Nothing is saved: the user
+// still presses Save. Nothing ticked goes on to Auto-setup, like Skip.
+function setupScanAdd() {
+  const picked = scanFound.filter((a, i) => scanBoxes[i] && scanBoxes[i].checked);
+  if (!picked.length) { setupScanSkip(); return; }
+  settingsData.accounts = collectAccounts();   // keep what was typed in the other blocks
+  const first = settingsData.accounts.length;
+  picked.forEach(a => settingsData.accounts.push(accountFromServers({
+    label: a.label,
+    name: (a.name || '').replace(/["<>]/g, ''),
+    email: a.email,
+    imap: a.imap,
+    smtp: a.smtp,
+    pass: '',   // a password never comes from the other app
+  })));
+  closeSetupDialog();
+  renderAccountBlocks(settingsData.accounts);
+  const block = document.querySelectorAll('.account-block')[first];
+  if (block) block.querySelector('.a-imap-pass').focus();   // the one thing still missing
+}
+
+// Skip: on to Auto-setup.
+function setupScanSkip() {
+  document.getElementById('setup-scan').classList.add('hidden');
+  document.getElementById('setup-form').classList.remove('hidden');
+  document.getElementById('setup-email').focus();
+}
+
+// Next: only the domain of the address goes to the backend, which tries its sources
+// one after the other.
+async function setupNext() {
+  const email = document.getElementById('setup-email').value.trim();
+  const next = document.getElementById('setup-next');
+  renderSetupHint(email);
+  setupFound = undefined;
+  // A domain without a dot ("o2game" instead of "o2game.com") cannot be looked up.
+  if (!isEmail(email) || !email.split('@').pop().includes('.')) { setupNote = { key: 'setup.badEmail' }; renderSetupArea(email); return; }
+  setupNote = { key: 'setup.looking' };
+  renderSetupArea(email);
+  next.disabled = true;
+  try {
+    setupFound = await cmd('lookup_mail_settings', { email });   // null: nobody knows that domain
+    setupNote = null;
+  } catch (e) {
+    setupNote = { key: 'setup.failed', vars: { err: e } };
+  }
+  next.disabled = false;
+  renderSetupArea(email);
+}
+
+// The result area: what was found, why one side is missing, where the settings came
+// from, then Use these / Enter manually.
+function renderSetupArea(email) {
+  const domain = (email.split('@').pop() || '').toLowerCase();
+  const line = document.getElementById('setup-line');
+  const issues = document.getElementById('setup-issues');
+  const source = document.getElementById('setup-source');
+  const use = document.getElementById('setup-use');
+  const manual = document.getElementById('setup-manual');
+  document.getElementById('setup-result').classList.remove('hidden');
+  issues.textContent = '';
+  source.textContent = '';
+  use.classList.add('hidden');
+  manual.classList.add('hidden');
+  line.textContent = setupNote ? t(setupNote.key, setupNote.vars || {}) : '';
+  if (setupFound === undefined) {
+    // A failed lookup still leaves a way forward.
+    if (setupNote && setupNote.key === 'setup.failed') manual.classList.remove('hidden');
+    return;
+  }
+  if (setupFound === null) {
+    line.textContent = t('setup.notFound', { domain });
+    manual.classList.remove('hidden');
+    return;
+  }
+  const s = setupFound;
+  const servers = [s.imap, s.smtp].filter(Boolean).map(v => `${v.host}:${v.port}`).join(' · ');
+  line.textContent = servers ? t('setup.found', { provider: s.provider || domain, servers }) : '';
+  source.textContent = t('setup.source', { host: s.source });
+  issues.textContent = issueLines(s);
+  manual.classList.remove('hidden');
+  // A custom domain hosted by Google or Microsoft only shows who it is through its servers.
+  const key = hintKey(email, s.imap ? s.imap.host : '');
+  renderSetupHint(key);
+  if ((s.imap || s.smtp) && providerHint(key) !== 'ms') use.classList.remove('hidden');
+}
+
+// Why one side of what was found is missing: the same sentences for Auto-setup and
+// Auto-scan.
+function issueLines(a) {
+  const problems = [];
+  if (!a.imap && a.imap_issue) problems.push(t(`setup.imapIssue.${a.imap_issue}`));
+  if (!a.smtp && a.smtp_issue) problems.push(t(`setup.smtpIssue.${a.smtp_issue}`));
+  return problems.join(' ');
+}
+
+// The AccountDto of a block whose servers are known already: what Auto-setup looked up and
+// what Auto-scan read from a profile are the same three values. No block is ever filled
+// with a password it did not get from the user.
+function accountFromServers({ label, name, email, imap, smtp, pass }) {
+  const field = (side, f) => (side ? side[f] : '');
+  return {
+    label: label || email,
+    imap_host: field(imap, 'host'), imap_port: field(imap, 'port'),
+    imap_user: imap ? imap.user : email, imap_pass: pass,
+    imap_mailbox: '', imap_fetch: '',
+    smtp_host: field(smtp, 'host'), smtp_port: field(smtp, 'port'),
+    smtp_user: smtp ? smtp.user : email, smtp_pass: pass,
+    smtp_from: name ? `"${name}" <${email}>` : email,
+    signature_file: '', signature_on_new: true, signature_on_reply: true,
+  };
+}
+
+// The usual account block, filled with what is known, then the usual Test. Nothing is
+// saved: the user still presses Save.
+function setupAddAccount(withSettings) {
+  const name = document.getElementById('setup-name').value.trim().replace(/["<>]/g, '');
+  const email = document.getElementById('setup-email').value.trim();
+  const pass = document.getElementById('setup-pass').value;
+  const s = withSettings ? setupFound : null;
+  settingsData.accounts = collectAccounts();   // keep what was typed in the other blocks
+  settingsData.accounts.push(accountFromServers({
+    label: email, name, email,
+    imap: s ? s.imap : null, smtp: s ? s.smtp : null, pass,
+  }));
+  closeSetupDialog();
+  renderAccountBlocks(settingsData.accounts);
+  const blocks = document.querySelectorAll('.account-block');
+  if (s && (s.imap || s.smtp)) testAccount(blocks[blocks.length - 1]);
+}
+
 function collectAccounts() {
   return Array.from(document.querySelectorAll('.account-block')).map(collectAccount);
 }
@@ -2734,7 +3055,7 @@ async function saveSettings() {
     await loadComposeAccounts();   // senders and signatures may have changed
     closeSettings();
   } catch (e) {
-    alert(t('set.saveFailed', { err: e }));
+    showToast(t('set.saveFailed', { err: e }));   // alert() is not shown in the app window
   }
 }
 
@@ -2948,6 +3269,7 @@ async function saveCloudProject() {
   renderCloudStatus(await cmd('set_cloud', { url, anonKey }));
   settingsData.supabase_url = url;
   settingsData.supabase_anon_key = anonKey;
+  if (settingsBaseline) settingsBaseline.cloud = cloudProjectFields();   // saved now: no longer unsaved
 }
 
 function setupCloudSettings() {
@@ -2986,6 +3308,89 @@ function setupCloudSettings() {
     renderCloudStatus(await cmd('cloud_sign_out'));
     setCloudStatus('');
   }));
+}
+
+// Yes/no question in the app's own look (the webview's confirm() is not shown in the
+// app window, and a system dialog does not follow the theme). Resolves true on `okLabel`.
+function askInApp(message, okLabel) {
+  const overlay = document.getElementById('confirm-overlay');
+  document.getElementById('confirm-text').textContent = message;
+  const ok = document.getElementById('confirm-ok'), cancel = document.getElementById('confirm-cancel');
+  ok.textContent = okLabel;
+  cancel.textContent = t('proj.cancel');
+  overlay.classList.remove('hidden');
+  cancel.focus();
+  return new Promise(resolve => {
+    const done = answer => { overlay.classList.add('hidden'); resolve(answer); };
+    ok.onclick = () => done(true);
+    cancel.onclick = () => done(false);
+  });
+}
+
+// What Settings holds, in the shape the unsaved-changes recap compares.
+let settingsBaseline = null;   // taken when Settings opens
+
+function settingsSnapshot() {
+  return {
+    theme: document.documentElement.dataset.theme, fontScale, language: LANG,
+    notify: document.getElementById('s-notify').checked,
+    accounts: collectAccounts(),
+    // A provider only looked at leaves an empty key behind: not a change.
+    ai: JSON.stringify(collectAiSettings(), (k, v) => v === '' ? undefined : v),
+    giphy: document.getElementById('s-giphy-key').value,
+    cloud: cloudProjectFields(),
+  };
+}
+
+function cloudProjectFields() {
+  return document.getElementById('s-cloud-url').value.trim() + '\n' + document.getElementById('s-cloud-anon').value.trim();
+}
+
+// One line per change since Settings opened; accounts are matched by their name in the app.
+function unsavedChanges() {
+  const a = settingsBaseline, b = settingsSnapshot(), lines = [];
+  if (b.theme !== a.theme) lines.push(t('set.theme'));
+  if (b.fontScale !== a.fontScale) lines.push(t('set.fontScale'));
+  if (b.language !== a.language) lines.push(t('set.language'));
+  if (b.notify !== a.notify) lines.push(t('set.notify'));
+  const name = (acc, i) => acc.label || t('set.account', { n: i + 1 });
+  const before = new Map(a.accounts.map((acc, i) => [name(acc, i), JSON.stringify(acc)]));
+  const after = new Map(b.accounts.map((acc, i) => [name(acc, i), JSON.stringify(acc)]));
+  for (const [n, json] of after) {
+    if (!before.has(n)) lines.push(t('set.unsavedAdded', { name: n }));
+    else if (before.get(n) !== json) lines.push(t('set.unsavedChanged', { name: n }));
+  }
+  for (const n of before.keys()) if (!after.has(n)) lines.push(t('set.unsavedRemoved', { name: n }));
+  // Two accounts with the same name hide each other above: still say the accounts changed.
+  if (!lines.length && JSON.stringify(a.accounts) !== JSON.stringify(b.accounts)) lines.push(t('set.accounts'));
+  if (b.ai !== a.ai) lines.push(t('set.ai'));
+  if (b.giphy !== a.giphy) lines.push(t('set.giphyKey'));
+  if (b.cloud !== a.cloud) lines.push(t('set.cloud'));
+  return lines;
+}
+
+function askCloseSettings() {
+  const lines = unsavedChanges();
+  if (!lines.length) return closeSettings();
+  document.getElementById('unsaved-list').innerHTML = lines.map(l => `<li dir="auto">${esc(l)}</li>`).join('');
+  document.getElementById('unsaved-overlay').classList.remove('hidden');
+  document.getElementById('unsaved-back').focus();
+}
+
+// While a question is open, Tab stays on its buttons and Escape answers "no".
+function keepFocusIn(overlay, onEscape) {
+  overlay.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onEscape(); }
+    if (e.key !== 'Tab') return;
+    e.preventDefault();
+    const btns = [...overlay.querySelectorAll('button')];
+    const i = btns.indexOf(document.activeElement);
+    btns[(i + (e.shiftKey ? -1 : 1) + btns.length) % btns.length].focus();
+  });
+}
+
+function hideUnsaved() {
+  document.getElementById('unsaved-overlay').classList.add('hidden');
 }
 
 // Closing without saving undoes the live previews (theme, font size).

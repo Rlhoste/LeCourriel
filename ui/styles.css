@@ -902,6 +902,33 @@ button.row-mark:hover::before { transform: scale(1.2); }
 }
 .secondary-btn:hover { background: var(--border); }
 
+/* ── Account Setup Dialog (Auto-setup) ─────────────────────────────────────── */
+/* Stacked over Settings (100); the toast (200) stays above it. */
+.setup-overlay { z-index: 150; }
+.unsaved-list { margin: 4px 0 4px 20px; font-size: 0.9rem; }
+.confirm-overlay { z-index: 160; }
+.setup-result { display: flex; flex-direction: column; gap: 4px; border-top: var(--border-w) solid var(--border); padding-top: 10px; }
+.setup-line { font-size: 0.9rem; }
+.setup-issues { color: var(--urgent); font-size: 0.8rem; }
+.setup-link { color: var(--link); cursor: pointer; text-decoration: underline; }
+.setup-step { display: block; margin-top: 2px; }
+.setup-result.hidden, .setup-hint.hidden, #setup-use.hidden, #setup-manual.hidden { display: none; }
+
+/* ── Account Setup Dialog, step 1 (Auto-scan) ──────────────────────────────── */
+.setup-scan { display: flex; flex-direction: column; gap: 6px; }
+/* Step 2 keeps the spacing the dialog gives its fields, now that they sit in a step. */
+#setup-form { display: flex; flex-direction: column; gap: 10px; }
+.setup-scan.hidden, #setup-form.hidden { display: none; }
+.setup-scan-list { display: flex; flex-direction: column; gap: 4px; max-height: 45vh; overflow-y: auto; }
+.setup-scan-row { display: flex; gap: 8px; align-items: flex-start; border: var(--border-w) solid var(--border); border-radius: var(--radius-sm); padding: 6px 8px; cursor: pointer; }
+.setup-scan-row.disabled { opacity: 0.55; cursor: default; }
+.setup-scan-row input[type="checkbox"] { margin-top: 3px; flex: none; }
+.setup-scan-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.setup-scan-name { overflow-wrap: anywhere; }
+.setup-scan-client { font-size: 0.75rem; color: var(--text-dim); }
+.setup-scan-issue { font-size: 0.8rem; color: var(--urgent); }
+.setup-scan .settings-note { margin-top: 0; }
+
 .calendar-task-dialog { width: 380px; }
 .calendar-task-error { color: var(--danger); font-size: 0.75rem; min-height: 1em; }
 .cal-cell { cursor: pointer; }
@@ -973,6 +1000,8 @@ button.row-mark:hover::before { transform: scale(1.2); }
   padding: 4px 6px; opacity: 0.45;
 }
 .pw-toggle:hover, .pw-toggle.on { opacity: 1; }
+/* Windows' webview adds its own eye while a new password is typed: keep only ours. */
+input::-ms-reveal, input::-ms-clear { display: none; }
 .account-advanced summary { cursor: pointer; font-size: 0.8rem; color: var(--text-dim); padding: 4px 0; }
 .account-title { cursor: pointer; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-actions { display: flex; gap: 6px; flex: none; }

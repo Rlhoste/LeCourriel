@@ -123,6 +123,10 @@ async function type(browser, selector, value) {
 
 /** Fill the account the app shows on first start, as a user would. */
 async function fillAccount(browser, { host, port, user, pass }) {
+  // First start puts the Account Setup Dialog on top; go straight to an empty block, as
+  // "Enter manually" does, without sending the test domain to the autoconfig servers.
+  await waitVisible(browser, '#setup-overlay');
+  await browser.execute(() => setupAddAccount(false));
   await waitVisible(browser, '#settings-overlay .account-block');
   await type(browser, '.account-block .a-sender-email', user);
   await type(browser, '.account-block .a-imap-host', host);

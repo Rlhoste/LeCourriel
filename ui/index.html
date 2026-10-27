@@ -510,6 +510,75 @@
   </div>
 </div>
 
+<!-- ── Account Setup Dialog (Auto-setup) ───────────────────────────────────── -->
+<div id="setup-overlay" class="overlay setup-overlay hidden">
+  <div class="dialog" role="dialog" aria-modal="true">
+    <div class="dialog-header">
+      <span data-i18n="setup.title">Add an account</span>
+      <button class="close-btn" id="setup-close">✕</button>
+    </div>
+    <!-- Step 1 (Auto-scan): only there when another mail app holds accounts. -->
+    <div id="setup-scan" class="setup-scan hidden">
+      <p class="settings-note" data-i18n="setup.scan.note">Accounts found on this computer:</p>
+      <div id="setup-scan-list" class="setup-scan-list"></div>
+      <div class="dialog-actions">
+        <button id="setup-scan-add" class="primary-btn" data-i18n="setup.scan.add">Add selected</button>
+        <button id="setup-scan-skip" class="secondary-btn" data-i18n="setup.scan.skip">Skip</button>
+      </div>
+    </div>
+    <!-- Step 2 (Auto-setup): what to do when nothing was found or the user skipped it. -->
+    <div id="setup-form">
+    <label data-i18n="setup.name">Your name</label>
+    <input type="text" id="setup-name" dir="auto" autocomplete="name"
+           placeholder="First Last" data-i18n-placeholder="set.yourNamePh" />
+    <label data-i18n="setup.email">Email address</label>
+    <input type="text" id="setup-email" dir="auto" autocomplete="email" spellcheck="false"
+           placeholder="you@example.com" data-i18n-placeholder="set.usernamePh" />
+    <label data-i18n="set.password">Password</label>
+    <input type="password" id="setup-pass" autocomplete="new-password" placeholder=" " />
+    <p class="settings-note setup-hint hidden" id="setup-hint"></p>
+    <div class="dialog-actions">
+      <button id="setup-next" class="primary-btn" data-i18n="setup.next">Next</button>
+    </div>
+    <div id="setup-result" class="setup-result hidden">
+      <p class="setup-line" id="setup-line" dir="auto"></p>
+      <p class="setup-line setup-issues" id="setup-issues" dir="auto"></p>
+      <p class="settings-note" id="setup-source" dir="auto"></p>
+      <div class="dialog-actions">
+        <button id="setup-use" class="primary-btn hidden" data-i18n="setup.use">Use these</button>
+        <button id="setup-manual" class="secondary-btn hidden" data-i18n="setup.manual">Enter manually</button>
+      </div>
+    </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Unsaved Settings: asked when Settings is closed with changes ─────────── -->
+<div id="unsaved-overlay" class="overlay setup-overlay hidden">
+  <div class="dialog" role="alertdialog" aria-modal="true">
+    <div class="dialog-header">
+      <span data-i18n="set.unsavedTitle">Save your changes?</span>
+    </div>
+    <ul id="unsaved-list" class="unsaved-list"></ul>
+    <div class="dialog-actions">
+      <button id="unsaved-back" class="secondary-btn" data-i18n="set.unsavedBack">Keep editing</button>
+      <button id="unsaved-discard" class="secondary-btn" data-i18n="set.unsavedDiscard">Don't save</button>
+      <button id="unsaved-save" class="primary-btn" data-i18n="set.save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Yes/no question (askInApp): above every other window ───────────────── -->
+<div id="confirm-overlay" class="overlay confirm-overlay hidden">
+  <div class="dialog" role="alertdialog" aria-modal="true">
+    <p id="confirm-text" dir="auto"></p>
+    <div class="dialog-actions">
+      <button id="confirm-cancel" class="secondary-btn"></button>
+      <button id="confirm-ok" class="primary-btn"></button>
+    </div>
+  </div>
+</div>
+
 <!-- Reading pane (shared for email panels) -->
 <template id="tpl-split-panel">
   <div class="email-list-col">
