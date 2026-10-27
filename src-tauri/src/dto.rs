@@ -11,6 +11,7 @@ pub struct EmailCardDto {
     pub reply_to: String,
     pub bcc: String,
     pub message_id: String,
+    pub references: String,
     pub date_str: String,
     pub date_full: String,
     /// Unix time of the email (0 when unknown); the UI formats it in its language.
@@ -65,6 +66,9 @@ pub struct ProjectDto {
     pub urgency: String,
     pub description: String,
     pub email_count: i32,
+    /// Set when a new project was created but its emails could not be filed (AI error).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -94,9 +98,11 @@ pub struct WeekDayDto {
 }
 
 /// What the briefing line says, as data: "live" (refreshed at hour:minute, `count` need
-/// attention), "cached", "classifying" (`count` new emails), "up_to_date", or, with a
+/// attention), "cached", "classifying" (`count` new emails), "up_to_date",
+/// "ai_missing" (the AI is not set up: `count` emails wait to be sorted),
+/// "ai_error" (the AI failed on `count` emails; `detail` says why), or, with a
 /// Claude subscription, "ai_not_paid" (no paid plan) and "ai_stopped" (`detail` says why).
-#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+#[derive(Serialize, Clone, Debug, PartialEq, Default)]
 pub struct Briefing {
     pub kind: &'static str,
     pub hour: u32,
@@ -153,11 +159,55 @@ pub struct SettingsDto {
     pub font_scale: f32,
     pub theme: String,
     pub language: String,
+    pub notify_new_mail: bool,
     pub ai: AiSettingsDto,
     pub giphy_key: String,
     pub supabase_url: String,
     pub supabase_anon_key: String,
     pub accounts: Vec<AccountDto>,
+}
+
+/// One mail server Auto-setup found for an account.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+pub struct ServerDto {
+    pub host: String,
+    pub port: String,
+    pub user: String,
+}
+
+/// What Auto-setup found for an email address: the provider's own name, the host the
+/// settings were looked up on, and the servers this app can use. `imap_issue` and
+/// `smtp_issue` say why a side is empty ("starttls", "plain", "port").
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+pub struct MailSetupDto {
+    pub provider: String,
+    /// Shown as "Looked up on …" under the result.
+    pub source: String,
+    pub imap: Option<ServerDto>,
+    pub smtp: Option<ServerDto>,
+    pub imap_issue: String,
+    pub smtp_issue: String,
+}
+
+/// One account Auto-scan found in another mail app, with the server settings this app can
+/// use. `imap_issue` and `smtp_issue` say why a side is empty, `pop3` that the account
+/// cannot be added at all, and `oauth` that its login is a token rather than a password.
+/// A password is never part of it.
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+pub struct FoundAccountDto {
+    /// Which app holds it: "Thunderbird", "Betterbird", "Outlook" or "Evolution".
+    pub client: String,
+    /// The name the account has there, or its address.
+    pub label: String,
+    /// The sender's name.
+    pub name: String,
+    pub email: String,
+    pub pop3: bool,
+    pub imap: Option<ServerDto>,
+    pub smtp: Option<ServerDto>,
+    pub imap_issue: String,
+    pub smtp_issue: String,
+    pub oauth: bool,
 }
 
 /// Why a connection test failed: `kind` picks the sentence the UI shows (auth, host,

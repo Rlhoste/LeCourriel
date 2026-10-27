@@ -20,17 +20,62 @@ use crate::state::AppState;
 const CACHE_PATH: &str = "cache-v2.json";
 
 pub async fn refresh(cfg: Arc<Config>, app: AppHandle, state: Arc<Mutex<AppState>>) {
-    app.emit("loading", true).ok();
+    // One refresh at a time. A request made meanwhile (new settings saved, the refresh
+    // button) is not dropped: one more refresh runs right after, with the settings of then.
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static REFRESHING: AtomicBool = AtomicBool::new(false);
+    static AGAIN: AtomicBool = AtomicBool::new(false);
+    if REFRESHING.swap(true, Ordering::SeqCst) {
+        AGAIN.store(true, Ordering::SeqCst);
+        return;
+    }
+    let mut cfg = cfg;
+    loop {
+        app.emit("loading", true).ok();
+        match do_refresh(&cfg, &app, &state).await {
+            Ok(_) => info!("Refresh complete"),
+            Err(e) => {
+                error!("Refresh failed: {:#}", e);
+                app.emit("error", format!("Refresh failed: {}", e)).ok();
+            }
+        }
+        // Hide the loading bar whether the refresh succeeded or failed.
+        app.emit("loading", false).ok();
+        REFRESHING.store(false, Ordering::SeqCst);
+        if !AGAIN.swap(false, Ordering::SeqCst) || REFRESHING.swap(true, Ordering::SeqCst) {
+            break;
+        }
+        cfg = state.lock().unwrap().cfg.clone();
+    }
+}
 
-    match do_refresh(&cfg, &app, &state).await {
-        Ok(_) => info!("Refresh complete"),
-        Err(e) => {
-            error!("Refresh failed: {:#}", e);
-            app.emit("error", format!("Refresh failed: {}", e)).ok();
+/// Notifications for newly arrived emails as (title, body): one per email (sender, subject)
+/// for up to 3, otherwise a single "N new emails" listing the first senders. Read ones are skipped.
+pub fn notification_texts(cards: &[EmailCard], l: i18n::Lang) -> Vec<(String, String)> {
+    let unread: Vec<&EmailCard> = cards.iter().filter(|c| !c.is_read).collect();
+    if unread.len() <= 3 {
+        return unread.iter().map(|c| {
+            let from = if c.from_name.is_empty() { c.from_email.clone() } else { c.from_name.clone() };
+            (from, c.subject.clone())
+        }).collect();
+    }
+    let mut senders: Vec<&str> = Vec::new();
+    for c in &unread {
+        let from = if c.from_name.is_empty() { c.from_email.as_str() } else { c.from_name.as_str() };
+        if !senders.contains(&from) { senders.push(from); }
+    }
+    let mut body = senders.iter().take(3).copied().collect::<Vec<_>>().join(", ");
+    if senders.len() > 3 { body.push_str(", …"); }
+    vec![(i18n::new_emails(unread.len(), l), body)]
+}
+
+fn notify_new_mail(app: &AppHandle, cards: &[EmailCard]) {
+    use tauri_plugin_notification::NotificationExt;
+    for (title, body) in notification_texts(cards, i18n::lang()) {
+        if let Err(e) = app.notification().builder().title(title).body(body).show() {
+            warn!("Notification failed: {}", e);
         }
     }
-    // Hide the loading bar whether the refresh succeeded or failed.
-    app.emit("loading", false).ok();
 }
 
 pub fn raw_to_card(raw: crate::models::RawEmail) -> EmailCard {
@@ -47,6 +92,7 @@ pub fn raw_to_card(raw: crate::models::RawEmail) -> EmailCard {
         reply_to: raw.reply_to,
         bcc: raw.bcc,
         message_id: raw.message_id,
+        references: raw.references,
         date_str,
         date_full,
         date_ts: raw.date.map(|d| d.timestamp()).unwrap_or(0),
@@ -133,14 +179,12 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
         .filter_map(|r| r.date.map(|d| (d, to_recent_mail("sent", r)))).collect();
 
     // Load previously classified emails from cache — reuse results for known UIDs.
-    // With a Claude subscription, emails left unsorted last time (usage limit) count as new,
-    // so they are tried again.
-    let retry_unsorted = cfg.ai.uses_claude_code();
+    // Emails the AI has not sorted yet (it was not set up, or it failed) are sorted again.
     let mut cached_cards = load_cache();
-    if retry_unsorted {
-        cached_cards.retain(|c| !crate::ai_classifier::not_classified(&c.summary));
-    }
+    let seen_uids: std::collections::HashSet<u32> = cached_cards.iter().map(|c| c.uid).collect();
+    cached_cards.retain(is_sorted);
     let cached_uids: std::collections::HashSet<u32> = cached_cards.iter().map(|c| c.uid).collect();
+    let ai_ready = crate::ai::readiness(&cfg.ai);
 
     // Split inbox into already-known (reuse cache) and new (need AI).
     let (known_raw, new_raw): (Vec<_>, Vec<_>) = raw_emails.into_iter()
@@ -156,6 +200,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
             c.reply_to = raw.reply_to.clone();
             c.bcc = raw.bcc.clone();
             c.message_id = raw.message_id.clone();
+            c.references = raw.references.clone();
             c.date_full = raw.date.map(format_date_full).unwrap_or_default();
             c.date_ts = raw.date.map(|d| d.timestamp()).unwrap_or(0);
             c.date_str = raw.date.map(format_date)
@@ -181,6 +226,8 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     populate(cfg, app, state, pre_cards, sent_cards_pre.clone(), drafts_cards_pre.clone(), trash_cards_pre.clone(), spam_cards_pre.clone(), Some(briefing_pre));
 
     // Classify only new emails.
+    let mut ai_failures = 0usize;
+    let mut first_ai_error: Option<String> = None;
     // Why a Claude subscription sorted nothing, or stopped early (shown in the briefing line).
     let mut ai_notice: Option<Briefing> = None;
     let new_cards: Vec<EmailCard> = if new_raw.is_empty() {
@@ -200,30 +247,26 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
         // With a Claude subscription, only a paid plan is used (a free plan or an API-key
         // login would bill the API), and after one email fails (e.g. the usage limit is reached)
         // the rest stay unsorted until the next refresh instead of each failing in turn.
-        let not_paid = retry_unsorted && !crate::claude_code::status().await.paid;
+        let claude_code = cfg.ai.uses_claude_code();
+        let not_paid = claude_code && !crate::claude_code::status().await.paid;
         let stop_reason: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
-        let results: Vec<(bool, crate::ai_classifier::ClassifiedEmail)> =
+        let results: Vec<anyhow::Result<(bool, crate::ai_classifier::ClassifiedEmail)>> =
             futures::stream::iter(jobs)
                 .map(|(reused, ai_cfg, email, projects)| {
                     let stop_reason = stop_reason.clone();
                     async move {
                         if let Some(c) = reused {
-                            return (false, c);
+                            return anyhow::Ok((false, c));
                         }
                         if not_paid || stop_reason.lock().unwrap_or_else(|e| e.into_inner()).is_some() {
-                            return (false, crate::ai_classifier::unclassified());
+                            return anyhow::Ok((false, crate::ai_classifier::unclassified()));
                         }
-                        match crate::ai_classifier::classify(&ai_cfg, &email, &projects).await {
-                            Ok(c) => (true, c),
-                            Err(e) => {
-                                warn!("AI classification failed: {:#}", e);
-                                if retry_unsorted {
-                                    stop_reason.lock().unwrap_or_else(|e| e.into_inner())
-                                        .get_or_insert_with(|| e.to_string());
-                                }
-                                (true, crate::ai_classifier::unclassified())
-                            }
+                        let result = crate::ai_classifier::classify(&ai_cfg, &email, &projects).await;
+                        if let (true, Err(e)) = (claude_code, &result) {
+                            stop_reason.lock().unwrap_or_else(|e| e.into_inner())
+                                .get_or_insert_with(|| e.to_string());
                         }
+                        anyhow::Ok((true, result?))
                     }
                 })
                 .buffered(concurrency)
@@ -236,10 +279,21 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
             stop_reason.map(|detail| Briefing { kind: "ai_stopped", detail, ..Default::default() })
         };
         let mut to_store: Vec<(String, crate::ai_classifier::ClassifiedEmail)> = Vec::new();
-        let cards: Vec<EmailCard> = new_raw.into_iter().zip(results).map(|(raw, (fresh, classified))| {
-            if fresh && !raw.message_id.is_empty() && crate::ai_classifier::is_real_result(&classified) {
-                to_store.push((raw.message_id.clone(), classified.clone()));
-            }
+        let cards: Vec<EmailCard> = new_raw.into_iter().zip(results).map(|(raw, result)| {
+            let classified = match result {
+                Ok((fresh, c)) => {
+                    if fresh && !raw.message_id.is_empty() && crate::ai_classifier::is_real_result(&c) {
+                        to_store.push((raw.message_id.clone(), c.clone()));
+                    }
+                    c
+                }
+                // Left unsorted (empty summary): tried again at the next refresh.
+                Err(e) => {
+                    ai_failures += 1;
+                    first_ai_error.get_or_insert_with(|| format!("{:#}", e));
+                    crate::ai_classifier::unclassified()
+                }
+            };
             let (from_name, from_email) = parse_from(&raw.from);
             let date_str = raw.date.map(format_date).unwrap_or_else(|| i18n::unknown_date(i18n::lang()).to_string());
             let date_full = raw.date.map(format_date_full).unwrap_or_default();
@@ -249,6 +303,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
                 subject: if raw.subject.is_empty() { "(No Subject)".to_string() } else { raw.subject },
                 from_name, from_email,
                 to: raw.to, cc: raw.cc, reply_to: raw.reply_to, bcc: raw.bcc, message_id: raw.message_id,
+                references: raw.references,
                 date_str, date_full,
                 date_ts: raw.date.map(|d| d.timestamp()).unwrap_or(0),
                 summary: classified.summary,
@@ -265,6 +320,13 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
         crate::cloud::store_ai(&to_store).await;
         cards
     };
+
+    // No notification on the very first fill (empty cache): every email would look new.
+    // Emails sorted again after an AI failure are not new either.
+    if cfg.user.notify_new_mail && !seen_uids.is_empty() {
+        let arrived: Vec<EmailCard> = new_cards.iter().filter(|c| !seen_uids.contains(&c.uid)).cloned().collect();
+        notify_new_mail(app, &arrived);
+    }
 
     // Merge: cached + newly classified. Remove UIDs no longer in inbox.
     let all_uids: std::collections::HashSet<u32> = cached_uids.iter()
@@ -284,20 +346,64 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
 
     save_cache(&cards);
 
-    if let Err(e) = check_open_tasks(cfg, &cards, &inbox_dates, recent_inbox, recent_sent).await {
-        warn!("Task check failed: {:#}", e);
+    if ai_ready.is_ok() {
+        if let Err(e) = check_open_tasks(cfg, &cards, &inbox_dates, recent_inbox, recent_sent).await {
+            warn!("Task check failed: {:#}", e);
+        }
     }
 
     let urgent_count = cards.iter().filter(|c| c.priority == Priority::Urgent).count();
     let high_count   = cards.iter().filter(|c| c.priority == Priority::HighPriority).count();
     let attention = urgent_count + high_count;
+    let unsorted = cards.iter().filter(|c| !is_sorted(c)).count();
     use chrono::Timelike;
     let now = Local::now();
-    let live_briefing = ai_notice.unwrap_or(
-        Briefing { kind: "live", hour: now.hour(), minute: now.minute(), count: attention, detail: String::new() });
+    let live_briefing = ai_notice.unwrap_or_else(||
+        refresh_briefing(&ai_ready, ai_failures, first_ai_error, unsorted, attention, now.hour(), now.minute()));
 
     populate(cfg, app, state, cards, sent_cards, drafts_cards, trash_cards, spam_cards, Some(live_briefing));
     Ok(())
+}
+
+/// Whether the AI has sorted this email (see `ai_classifier::is_real_summary`).
+pub fn is_sorted(card: &EmailCard) -> bool {
+    crate::ai_classifier::is_real_summary(&card.summary)
+}
+
+/// The briefing at the end of a refresh. The AI's state comes first: if it is not set up
+/// or it failed, the user must know, otherwise nothing ever shows as important.
+pub fn refresh_briefing(
+    ai_ready: &Result<()>,
+    ai_failures: usize,
+    first_ai_error: Option<String>,
+    unsorted: usize,
+    attention: usize,
+    hour: u32,
+    minute: u32,
+) -> Briefing {
+    match ai_ready {
+        Err(e) => Briefing { kind: "ai_missing", count: unsorted, detail: format!("{:#}", e), ..Default::default() },
+        Ok(()) if ai_failures > 0 => Briefing {
+            kind: "ai_error",
+            count: ai_failures,
+            detail: first_ai_error.unwrap_or_default(),
+            ..Default::default()
+        },
+        Ok(()) => Briefing { kind: "live", hour, minute, count: attention, detail: String::new() },
+    }
+}
+
+/// Redraw every list from the emails in memory, after a change that needs no fetch
+/// (emails filed into a new project…). The briefing line stays as it was.
+pub fn redisplay(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>) {
+    use crate::search::Folder;
+    let (index, briefing) = {
+        let s = state.lock().unwrap();
+        (s.search_index.clone(), s.briefing.clone())
+    };
+    let folder = |f: Folder| index.iter().filter(|(g, _)| *g == f).map(|(_, c)| c.clone()).collect::<Vec<_>>();
+    populate(cfg, app, state, folder(Folder::Inbox), folder(Folder::Sent), folder(Folder::Drafts),
+        folder(Folder::Trash), folder(Folder::Spam), briefing);
 }
 
 pub fn load_and_display_cache(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>) {
@@ -326,10 +432,13 @@ fn populate(
 ) {
     // Projects the user re-tagged by hand win over the AI's choice.
     let overrides = crate::overrides::Overrides::load();
-    let cards: Vec<EmailCard> = cards.into_iter().map(|mut c| {
+    let mut cards: Vec<EmailCard> = cards.into_iter().map(|mut c| {
         overrides.apply(&mut c);
         c
     }).collect();
+    // Cached messages and newly classified messages are assembled separately.
+    // Always restore chronological order before building inbox-derived lists.
+    cards.sort_by(|a, b| b.date_ts.cmp(&a.date_ts).then_with(|| b.uid.cmp(&a.uid)));
 
     let mut urgent = Vec::new(); let mut high = Vec::new();
     let mut other  = Vec::new(); let mut info_vec = Vec::new();
@@ -359,13 +468,9 @@ fn populate(
     all_by_priority.sort_by_key(priority_order);
 
     let dismissed = Dismissals::load();
-    // New email action items land in the Todo column of the task board.
-    let needs_sync = {
-        let board = Board::load();
-        cards.iter().any(|c| (c.task.is_some() || c.priority == Priority::Task)
-            && !board.deleted_sources.contains(&c.uid)
-            && !board.tasks.iter().any(|t| t.source_uid == Some(c.uid)))
-    };
+    // New email action items land in the Todo column of the task board (and email
+    // tasks from before dates were kept get the date of their email).
+    let needs_sync = Board::load().needs_sync(&cards);
     if needs_sync {
         Board::update(|b| b.sync_from_cards(&cards, &dismissed));
     }
@@ -400,6 +505,7 @@ fn populate(
         "live" => i18n::briefing_live(briefing.hour, briefing.minute, briefing.count, l),
         "classifying" => i18n::classifying(briefing.count, l),
         "up_to_date" => i18n::up_to_date(l).to_string(),
+        "ai_missing" | "ai_error" => briefing.detail.clone(),
         _ => i18n::briefing_cached(briefing.count, l),
     };
 
@@ -411,7 +517,7 @@ fn populate(
     let project_dtos: Vec<ProjectDto> = cfg.projects.iter().map(|p| {
         let email_count = all_emails.iter()
             .filter(|c| c.project.as_deref() == Some(&p.name)).count() as i32;
-        ProjectDto { name: p.name.clone(), urgency: p.urgency.clone(), description: p.description.clone(), email_count }
+        ProjectDto { name: p.name.clone(), urgency: p.urgency.clone(), description: p.description.clone(), email_count, warning: None }
     }).collect();
 
     // Store all emails in shared state for command lookups.
@@ -431,6 +537,7 @@ fn populate(
         index.extend(tag(Folder::Trash, &trash));
         index.extend(tag(Folder::Spam, &spam));
         s.search_index = index;
+        s.briefing = Some(briefing.clone());
     }
 
     use chrono::Timelike;
@@ -480,6 +587,7 @@ pub fn to_dto_vec(cards: &[EmailCard]) -> Vec<EmailCardDto> {
         reply_to:     c.reply_to.clone(),
         bcc:          c.bcc.clone(),
         message_id:   c.message_id.clone(),
+        references:   c.references.clone(),
         date_str:     c.date_str.clone(),
         date_full:    c.date_full.clone(),
         date_ts:      c.date_ts,

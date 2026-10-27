@@ -157,6 +157,32 @@ api_key = "k" model = "m" max_tokens = 100
         let _ = (settings_save, Arc::new(())); // suppress unused import warning
     }
 
+    // ── Mail charset decoding ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_mail_body_decodes_french_accents() {
+        let decode = |raw: &[u8]| {
+            let mail = mailparse::parse_mail(raw).unwrap();
+            crate::imap_client::decode_text_body(&mail).unwrap()
+        };
+
+        // Modern mail sometimes omits charset even though its body is UTF-8.
+        assert_eq!(
+            decode(b"Content-Type: text/plain\r\n\r\nR\xc3\xa9sum\xc3\xa9 tr\xc3\xa8s clair"),
+            "Résumé très clair"
+        );
+        // Older Outlook mail commonly contains undeclared Windows-1252 bytes.
+        assert_eq!(
+            decode(b"Content-Type: text/plain\r\nContent-Transfer-Encoding: 8bit\r\n\r\nR\xe9mi \x97 th\xe8se"),
+            "Rémi — thèse"
+        );
+        // Declared legacy charsets and transfer encoding must still be honoured.
+        assert_eq!(
+            decode(b"Content-Type: text/html; charset=iso-8859-1\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n<p>R=E9sum=E9 tr=E8s clair</p>"),
+            "<p>Résumé très clair</p>"
+        );
+    }
+
     // ── EmailCard serialization ───────────────────────────────────────────────
 
     #[test]
@@ -166,7 +192,7 @@ api_key = "k" model = "m" max_tokens = 100
             subject: "Hello".to_string(),
             from_name: "Alice".to_string(),
             from_email: "alice@example.com".to_string(),
-            to: String::new(), cc: String::new(), reply_to: String::new(), bcc: String::new(), message_id: String::new(),
+            to: String::new(), cc: String::new(), reply_to: String::new(), bcc: String::new(), message_id: String::new(), references: String::new(),
             date_str: "10:30".to_string(),
             date_full: String::new(),
             date_ts: 0,
@@ -264,7 +290,7 @@ api_key = "k" model = "m" max_tokens = 100
 
     fn make_test_config() -> Config {
         Config {
-            user: UserConfig { display_name: "Test".to_string(), font_scale: 1.0, theme: "midnight".to_string(), language: "en".to_string() },
+            user: UserConfig { display_name: "Test".to_string(), font_scale: 1.0, theme: "midnight".to_string(), language: "en".to_string(), notify_new_mail: true },
             accounts: vec![AccountConfig {
                 name: "Work".to_string(),
                 imap: ImapConfig {
@@ -299,7 +325,7 @@ api_key = "k" model = "m" max_tokens = 100
             subject: format!("Subject {}", uid),
             from_name: "Sender".to_string(),
             from_email: "sender@example.com".to_string(),
-            to: String::new(), cc: String::new(), reply_to: String::new(), bcc: String::new(), message_id: String::new(),
+            to: String::new(), cc: String::new(), reply_to: String::new(), bcc: String::new(), message_id: String::new(), references: String::new(),
             date_str: "Mon".to_string(),
             date_full: String::new(),
             date_ts: 0,
@@ -399,6 +425,36 @@ api_key = "k" model = "m" max_tokens = 100
     }
 
     #[test]
+    fn test_board_tasks_keep_the_date_they_appeared() {
+        use crate::dismissals::Dismissals;
+        use crate::tasks::Board;
+        let mut card = make_test_card(30, Priority::Task);
+        card.task = Some("Send the figures".into());
+        card.date_ts = 1_790_000_000;
+        let mut b = Board::default();
+        assert!(b.needs_sync(&[card.clone()]));
+        b.sync_from_cards(&[card.clone()], &Dismissals::default());
+        assert_eq!(b.tasks[0].created_ts, 1_790_000_000, "an email task appears with its email");
+        assert!(!b.needs_sync(&[card.clone()]));
+
+        // A board saved before dates were kept: email tasks get their email's date.
+        let mut old: Board = serde_json::from_str(r#"{"next_id":2,"tasks":[
+            {"id":1,"title":"Send the figures","status":"todo","source_uid":30},
+            {"id":2,"title":"By hand","status":"todo"}]}"#).unwrap();
+        assert_eq!(old.tasks[0].created_ts, 0);
+        assert!(old.needs_sync(&[card.clone()]));
+        assert!(!old.sync_from_cards(&[card.clone()], &Dismissals::default()));
+        assert_eq!(old.tasks[0].created_ts, 1_790_000_000);
+        assert_eq!(old.tasks[1].created_ts, 0, "unknown for old hand-made tasks");
+
+        // Added by hand: now.
+        let before = chrono::Utc::now().timestamp();
+        let id = old.add("Call Bob".into(), None);
+        let t = old.tasks.iter().find(|t| t.id == id).unwrap();
+        assert!(t.created_ts >= before);
+    }
+
+    #[test]
     fn test_board_delete_email_task_is_not_resynced() {
         use crate::dismissals::Dismissals;
         use crate::tasks::{Board, Status};
@@ -421,8 +477,10 @@ api_key = "k" model = "m" max_tokens = 100
         let mut b = Board::default();
         let a = b.add("Buy paper".into(), None);
         let c = b.add("Book room".into(), Some("Work".into()));
+        let dated = b.add_dated("Submit report".into(), Some("Work".into()), Some("2026-10-30".into()));
         assert_ne!(a, c);
         assert!(b.tasks.iter().all(|t| t.status == Status::Todo && t.source_uid.is_none()));
+        assert_eq!(b.tasks.iter().find(|t| t.id == dated).unwrap().due_date.as_deref(), Some("2026-10-30"));
         assert_eq!(Status::parse("in_progress"), Some(Status::InProgress));
         assert_eq!(Status::parse("nope"), None);
     }
@@ -747,14 +805,53 @@ max_tokens = 10
         assert!(is_real_result(&c));
         let failed = ClassifiedEmail { summary: "Could not classify email.".into(), ..c };
         assert!(!is_real_result(&failed));
-        // The AI couldn't be reached (e.g. usage limit): try again at the next refresh.
-        use crate::ai_classifier::{not_classified, unclassified};
-        assert!(not_classified(&failed.summary));
-        assert!(not_classified(&unclassified().summary));
-        assert!(!is_real_result(&unclassified()));
-        // An answer that couldn't be parsed is not retried (it would fail the same way).
-        assert!(!not_classified("Unable to summarize email."));
-        assert!(!not_classified("Jury asks for the manuscript"));
+        // The AI couldn't be reached (e.g. usage limit): sorted again at the next refresh.
+        assert!(!is_real_result(&crate::ai_classifier::unclassified()));
+    }
+
+    #[test]
+    fn test_unsorted_emails_are_sorted_again() {
+        use crate::app_state::is_sorted;
+        assert!(is_sorted(&make_test_card(1, Priority::Urgent)));
+        // Never sorted (no AI yet), or a failure placeholder left by older versions.
+        for summary in ["", "  ", "Could not classify email.", "Unable to summarize email."] {
+            let card = EmailCard { summary: summary.into(), ..make_test_card(2, Priority::Information) };
+            assert!(!is_sorted(&card), "{:?} should be sorted again", summary);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_classify_reports_ai_failures() {
+        // A failed AI call is an error, not an "information" email with a placeholder summary.
+        let email = RawEmail {
+            uid: 1, subject: "Server down".into(), from: "a@b.c".into(), to: String::new(), cc: String::new(),
+            reply_to: String::new(), bcc: String::new(), message_id: String::new(), references: String::new(),
+            seen: false, deleted: false, date: None, body_text: "Help".into(), body_html: None,
+        };
+        let err = crate::ai_classifier::classify(&AiConfig::default(), &email, &[]).await.unwrap_err();
+        assert!(format!("{:#}", err).contains("Choose an AI model"), "{:#}", err);
+        let (base, _server) = fake_ai_server(401, r#"{"error":{"message":"Incorrect API key provided"}}"#).await;
+        let ai = ai_cfg("custom", "m", "bad", &base);
+        let err = crate::ai_classifier::classify(&ai, &email, &[]).await.unwrap_err();
+        assert_eq!(format!("{:#}", err), "Incorrect API key provided (401)");
+    }
+
+    #[test]
+    fn test_refresh_briefing_tells_about_the_ai() {
+        use crate::app_state::refresh_briefing;
+        let missing = crate::ai::readiness(&AiConfig::default());
+        assert!(missing.is_err());
+        let b = refresh_briefing(&missing, 0, None, 6, 0, 9, 30);
+        assert_eq!((b.kind, b.count), ("ai_missing", 6));
+        assert!(b.detail.contains("Settings → AI"), "{}", b.detail);
+
+        let ready = crate::ai::readiness(&ai_cfg("custom", "m", "k", "http://127.0.0.1:1/v1"));
+        assert!(ready.is_ok());
+        let b = refresh_briefing(&ready, 4, Some("Incorrect API key provided (401)".into()), 4, 0, 9, 30);
+        assert_eq!((b.kind, b.count, b.detail.as_str()), ("ai_error", 4, "Incorrect API key provided (401)"));
+
+        let b = refresh_briefing(&ready, 0, None, 0, 2, 9, 30);
+        assert_eq!((b.kind, b.count, b.hour, b.minute), ("live", 2, 9, 30));
     }
 
     #[tokio::test]
@@ -942,6 +1039,77 @@ max_tokens = 10
         ]
     }
 
+    // ── New project ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_project_description_format() {
+        use crate::ai_project::format_description;
+        let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            format_description("Emails about my PhD defense", &s(&["Prof Martin (jury)", " ADUM ", "adum"]), &s(&["soutenance", "manuscrit."])),
+            "Emails about my PhD defense. People: Prof Martin (jury), ADUM. Keywords: soutenance, manuscrit."
+        );
+        // No people or keywords: no empty labels.
+        assert_eq!(format_description("Garden works.", &[], &[]), "Garden works.");
+    }
+
+    #[test]
+    fn test_project_parse_answer() {
+        use crate::ai_project::parse;
+        let d = parse(r#"Here: {"name":" PhD  defense ","summary":"Organising the PhD defense with the jury","people":["Prof Martin"],"keywords":["jury","soutenance"],"importance":"HIGH"}"#).unwrap();
+        assert_eq!(d.name, "PhD defense");
+        assert_eq!(d.description, "Organising the PhD defense with the jury. People: Prof Martin. Keywords: jury, soutenance.");
+        assert_eq!(d.urgency, "high");
+        let d = parse(r#"{"name":"Garden","summary":"Garden works","importance":"maybe"}"#).unwrap();
+        assert_eq!((d.description.as_str(), d.urgency.as_str()), ("Garden works.", "normal"));
+        assert!(parse(r#"{"name":"","summary":"x"}"#).is_none());
+        assert!(parse("not json").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_project_draft_reads_the_related_emails() {
+        use crate::ai_project::{draft, related_emails};
+        let index = search_index();
+        let related = related_emails(&index, "my thesis defense with the jury", 12);
+        let uids: Vec<u32> = related.iter().map(|c| c.uid).collect();
+        // The jury email first, the email filed in "Thesis" too; not the newsletter.
+        assert_eq!(uids, vec![1, 3]);
+
+        let (base, server) = fake_ai_server(200, r#"{"choices":[{"message":{"content":"{\"name\":\"Thesis defense\",\"summary\":\"Organising the thesis defense with the jury\",\"people\":[\"Prof Martin (jury)\"],\"keywords\":[\"soutenance\",\"jury\"],\"importance\":\"high\"}"}}]}"#).await;
+        let d = draft(&ai_cfg("custom", "m", "k", &base), "my thesis defense with the jury", "Remi <remi@univ.fr>", &related).await.unwrap();
+        assert_eq!(d.name, "Thesis defense");
+        assert_eq!(d.description, "Organising the thesis defense with the jury. People: Prof Martin (jury). Keywords: soutenance, jury.");
+        let (_, body) = server.await.unwrap();
+        let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let user = body["messages"][1]["content"].as_str().unwrap();
+        assert!(user.starts_with("REQUEST: my thesis defense with the jury"), "{}", user);
+        assert!(user.contains("THE USER (not one of the people): Remi <remi@univ.fr>"), "{}", user);
+        assert!(user.contains("Subject: Defense date") && user.contains("Prof Martin <prof.martin@univ.fr>"), "{}", user);
+
+        // An AI failure is reported, not hidden behind a copy of the request.
+        let err = draft(&AiConfig::default(), "my thesis", "Remi", &[]).await.unwrap_err();
+        assert!(format!("{:#}", err).contains("Choose an AI model"), "{:#}", err);
+    }
+
+    #[test]
+    fn test_project_matching_emails() {
+        use crate::ai_project::{match_content, parse_ids};
+        let mut filed = search_card(1, "Prof Martin", "Defense date", "The jury agreed on the date.", 1_000);
+        filed.project = Some("Thesis".into());
+        filed.summary = "The jury agreed on the defense date.".into();
+        let fresh = search_card(2, "Newsletter", "Weekly digest", "Some news.", 2_000);
+        let text = match_content("Defense", "My PhD defense. People: Prof Martin.", &[filed, fresh]);
+        assert!(text.starts_with("PROJECT: Defense\nDESCRIPTION: My PhD defense. People: Prof Martin.\n"), "{}", text);
+        // Its id, where it is now, and the AI summary (or the start of the body when unsorted).
+        assert!(text.contains("[1] From: Prof Martin <prof.martin@univ.fr> | Subject: Defense date | project now: Thesis | The jury agreed on the defense date."), "{}", text);
+        assert!(text.contains("[2] From: Newsletter <newsletter@univ.fr> | Subject: Weekly digest | project now: none | Some news."), "{}", text);
+
+        // Only offered emails; numbers or strings; duplicates once.
+        assert_eq!(parse_ids(r#"{"ids":[2,"1",2,99]}"#, &[1, 2]), Some(vec![1, 2]));
+        assert_eq!(parse_ids(r#"Sure: {"ids":[]}"#, &[1]), Some(vec![]));
+        assert_eq!(parse_ids("no", &[1]), None);
+    }
+
     #[test]
     fn test_search_parse_query() {
         use crate::search::{parse_query, Folder};
@@ -1012,6 +1180,50 @@ max_tokens = 10
         assert!(c.contains(&"Jury <jury@univ.fr>".to_string()));   // display name preferred
         assert!(c.contains(&r#""Lhoste, Remi" <remi@example.com>"#.to_string()));   // comma inside quotes
         assert_eq!(c.len(), 3);
+    }
+
+    #[test]
+    fn test_new_mail_notification_texts() {
+        use crate::app_state::notification_texts;
+        use crate::i18n::Lang;
+        let card = |uid: u32, from: &str, subject: &str, read: bool| {
+            let mut c = make_test_card(uid, Priority::Information);
+            c.from_name = from.into();
+            c.subject = subject.into();
+            c.is_read = read;
+            c
+        };
+        assert!(notification_texts(&[], Lang::En).is_empty());
+        assert!(notification_texts(&[card(1, "Ana", "Hi", true)], Lang::En).is_empty());
+
+        let few = [card(1, "Ana", "Hi", false), card(2, "Bob", "Report", false), card(3, "Cyd", "Lunch", false)];
+        assert_eq!(notification_texts(&few, Lang::En), vec![
+            ("Ana".to_string(), "Hi".to_string()),
+            ("Bob".to_string(), "Report".to_string()),
+            ("Cyd".to_string(), "Lunch".to_string()),
+        ]);
+
+        let many: Vec<EmailCard> = (1..=10).map(|i| card(i, &format!("P{}", i % 5), "x", false)).collect();
+        assert_eq!(notification_texts(&many, Lang::Fr),
+                   vec![("10 nouveaux e-mails".to_string(), "P1, P2, P3, …".to_string())]);
+    }
+
+    #[test]
+    fn test_inline_signature_image_is_embedded() {
+        let raw = concat!(
+            "Subject: Hi\r\nMIME-Version: 1.0\r\n",
+            "Content-Type: multipart/related; boundary=\"b\"\r\n\r\n",
+            "--b\r\nContent-Type: text/html; charset=utf-8\r\n\r\n",
+            "<p>Hello</p><img src=\"cid:image001.png@01DA\">\r\n",
+            "--b\r\nContent-Type: image/png; name=\"image001.png\"\r\n",
+            "Content-Transfer-Encoding: base64\r\nContent-ID: <image001.png@01DA>\r\n\r\n",
+            "iVBORw0KGgo=\r\n--b--\r\n",
+        );
+        let parsed = mailparse::parse_mail(raw.as_bytes()).unwrap();
+        let (_, html) = crate::imap_client::extract_bodies(&parsed);
+        let html = html.unwrap();
+        assert!(html.contains("src=\"data:image/png;base64,iVBORw0KGgo=\""), "{html}");
+        assert!(!html.contains("cid:"));
     }
 
     #[test]
@@ -1370,7 +1582,7 @@ max_tokens = 10
         let email = crate::models::RawEmail {
             uid: 1, subject: "Defense date confirmation".into(), from: "Prof Martin <martin@univ.fr>".into(),
             to: String::new(), cc: String::new(), reply_to: String::new(), bcc: String::new(),
-            message_id: String::new(), seen: false, deleted: false, date: None,
+            message_id: String::new(), references: String::new(), seen: false, deleted: false, date: None,
             body_text: "Dear Remi, please confirm by Friday 23 October that the PhD defense can take place on 27 October.".into(),
             body_html: None,
         };
@@ -1603,4 +1815,932 @@ max_tokens = 10
         gifs.giphy_api_key = " mine ".into();
         assert_eq!(gifs.key(), "mine");
     }
+
+    // ── Auto-setup ────────────────────────────────────────────────────────────
+
+    // (host, port, user) of a server Auto-setup found, blanks when it found none.
+    fn srv(s: Option<&crate::dto::ServerDto>) -> (&str, &str, &str) {
+        match s {
+            Some(s) => (s.host.as_str(), s.port.as_str(), s.user.as_str()),
+            None => ("", "", ""),
+        }
+    }
+
+    const GMAIL_XML: &str = r#"<clientConfig version="1.1">
+  <emailProvider id="googlemail.com">
+    <domain>gmail.com</domain>
+    <domain>googlemail.com</domain>
+    <displayName>Google Mail</displayName>
+    <displayShortName>GMail</displayShortName>
+    <incomingServer type="imap">
+      <hostname>imap.gmail.com</hostname>
+      <port>993</port>
+      <socketType>SSL</socketType>
+      <username>%EMAILADDRESS%</username>
+      <authentication>OAuth2</authentication>
+      <authentication>password-cleartext</authentication>
+    </incomingServer>
+    <incomingServer type="pop3">
+      <hostname>pop.gmail.com</hostname>
+      <port>995</port>
+      <socketType>SSL</socketType>
+      <username>%EMAILADDRESS%</username>
+      <pop3>
+        <leaveMessagesOnServer>true</leaveMessagesOnServer>
+      </pop3>
+    </incomingServer>
+    <outgoingServer type="smtp">
+      <hostname>smtp.gmail.com</hostname>
+      <port>465</port>
+      <socketType>SSL</socketType>
+      <username>%EMAILADDRESS%</username>
+      <authentication>OAuth2</authentication>
+      <authentication>password-cleartext</authentication>
+    </outgoingServer>
+  </emailProvider>
+  <webMail>
+    <loginPageInfo url="https://accounts.google.com/ServiceLogin?service=mail">
+      <username>%EMAILADDRESS%</username>
+      <usernameField id="Email"/>
+    </loginPageInfo>
+  </webMail>
+</clientConfig>"#;
+
+    #[test]
+    fn test_auto_setup_gmail_xml() {
+        use crate::auto_setup::parse_autoconfig;
+        let s = parse_autoconfig(GMAIL_XML, "john.doe@gmail.com").unwrap();
+        assert_eq!(s.provider, "Google Mail");
+        assert_eq!(srv(s.imap.as_ref()), ("imap.gmail.com", "993", "john.doe@gmail.com"));
+        assert_eq!(srv(s.smtp.as_ref()), ("smtp.gmail.com", "465", "john.doe@gmail.com"));
+        assert_eq!((s.imap_issue.as_str(), s.smtp_issue.as_str()), ("", ""));
+    }
+
+    const OUTLOOK_XML: &str = r#"<clientConfig version="1.1">
+  <emailProvider id="hotmail.com">
+    <domain>outlook.com</domain>
+    <displayName>Outlook.com (Microsoft)</displayName>
+    <incomingServer type="imap">
+      <hostname>outlook.office365.com</hostname>
+      <port>993</port>
+      <socketType>SSL</socketType>
+      <authentication>OAuth2</authentication>
+      <username>%EMAILADDRESS%</username>
+    </incomingServer>
+    <outgoingServer type="smtp">
+      <hostname>smtp-mail.outlook.com</hostname>
+      <port>587</port>
+      <socketType>STARTTLS</socketType>
+      <authentication>OAuth2</authentication>
+      <username>%EMAILADDRESS%</username>
+    </outgoingServer>
+  </emailProvider>
+</clientConfig>"#;
+
+    #[test]
+    fn test_auto_setup_outlook_xml() {
+        use crate::auto_setup::parse_autoconfig;
+        let s = parse_autoconfig(OUTLOOK_XML, "someone@outlook.com").unwrap();
+        assert_eq!(s.provider, "Outlook.com (Microsoft)");
+        assert_eq!(srv(s.imap.as_ref()), ("outlook.office365.com", "993", "someone@outlook.com"));
+        // SMTP 587/STARTTLS is one of the two ports this app can send from.
+        assert_eq!(srv(s.smtp.as_ref()), ("smtp-mail.outlook.com", "587", "someone@outlook.com"));
+        assert_eq!((s.imap_issue.as_str(), s.smtp_issue.as_str()), ("", ""));
+    }
+
+    const ALICE_XML: &str = r#"<clientConfig version="1.1">
+  <emailProvider id="alice.it">
+    <domain>alice.it</domain>
+    <displayName>Alice Italy</displayName>
+    <incomingServer type="imap">
+      <hostname>in.alice.it</hostname>
+      <port>143</port>
+      <socketType>STARTTLS</socketType>
+      <username>%EMAILADDRESS%</username>
+      <authentication>password-cleartext</authentication>
+    </incomingServer>
+    <incomingServer type="pop3">
+      <hostname>in.alice.it</hostname>
+      <port>110</port>
+      <socketType>STARTTLS</socketType>
+      <username>%EMAILADDRESS%</username>
+    </incomingServer>
+    <outgoingServer type="smtp">
+      <hostname>out.alice.it</hostname>
+      <port>587</port>
+      <socketType>STARTTLS</socketType>
+      <username>%EMAILADDRESS%</username>
+    </outgoingServer>
+  </emailProvider>
+</clientConfig>"#;
+
+    #[test]
+    fn test_auto_setup_starttls_only_imap_is_refused() {
+        use crate::auto_setup::parse_autoconfig;
+        let s = parse_autoconfig(ALICE_XML, "john.doe@alice.it").unwrap();
+        // Incoming mail needs implicit TLS: nothing usable here, and the answer says why.
+        assert_eq!(srv(s.imap.as_ref()), ("", "", ""));
+        assert_eq!(s.imap_issue, "starttls");
+        assert_eq!(srv(s.smtp.as_ref()), ("out.alice.it", "587", "john.doe@alice.it"));
+        assert_eq!(s.smtp_issue, "");
+    }
+
+    #[test]
+    fn test_auto_setup_smtp_ssl_only_on_465() {
+        use crate::auto_setup::usable_port;
+        // The sender speaks implicit TLS on 465 only, STARTTLS on any other port.
+        assert_eq!(usable_port("smtp", "SSL", "465"), Ok("465".to_string()));
+        assert_eq!(usable_port("smtp", "SSL", ""), Ok("465".to_string()));
+        assert_eq!(usable_port("smtp", "SSL", "25"), Err("port"));
+    }
+
+    #[test]
+    fn test_auto_setup_placeholders() {
+        use crate::auto_setup::parse_autoconfig;
+        let xml = r#"<clientConfig version="1.1">
+  <emailProvider id="example.com">
+    <domain>example.com</domain>
+    <displayName>Example</displayName>
+    <incomingServer type="imap">
+      <hostname>imap.example.com</hostname>
+      <port>993</port>
+      <socketType>SSL</socketType>
+      <username>%EMAILLOCALPART%@%EMAILDOMAIN%</username>
+    </incomingServer>
+    <outgoingServer type="smtp">
+      <hostname>smtp.example.com</hostname>
+      <port>465</port>
+      <socketType>SSL</socketType>
+      <username>%EMAILLOCALPART%</username>
+    </outgoingServer>
+  </emailProvider>
+</clientConfig>"#;
+        let s = parse_autoconfig(xml, "john.doe@example.com").unwrap();
+        assert_eq!(srv(s.imap.as_ref()), ("imap.example.com", "993", "john.doe@example.com"));
+        assert_eq!(srv(s.smtp.as_ref()), ("smtp.example.com", "465", "john.doe"));
+        // No username at all: the full address is what providers expect.
+        let bare = xml.replace("<username>%EMAILLOCALPART%</username>", "");
+        let s = parse_autoconfig(&bare, "john.doe@example.com").unwrap();
+        assert_eq!(srv(s.smtp.as_ref()), ("smtp.example.com", "465", "john.doe@example.com"));
+    }
+
+    #[test]
+    fn test_auto_setup_refuses_other_answers() {
+        use crate::auto_setup::parse_autoconfig;
+        // An HTML error page, a clientConfig without any server, and broken XML all mean
+        // "this source has nothing": the lookup then tries the next one.
+        assert!(parse_autoconfig("<html><body>Not found</body></html>", "a@example.com").is_err());
+        assert!(parse_autoconfig(r#"<clientConfig version="1.1"><emailProvider id="x"/></clientConfig>"#, "a@example.com").is_err());
+        assert!(parse_autoconfig("<clientConfig version=\"1.1\"><emailProvider", "a@example.com").is_err());
+    }
+
+    #[test]
+    fn test_auto_setup_mx_from_doh_json() {
+        use crate::auto_setup::mx_host;
+        let json = r#"{"Status":0,"Question":[{"name":"gmail.com.","type":15}],
+          "Answer":[{"name":"gmail.com.","type":15,"TTL":1864,"data":"30 alt3.gmail-smtp-in.l.google.com."},
+                    {"name":"gmail.com.","type":15,"TTL":1864,"data":"5 gmail-smtp-in.l.google.com."},
+                    {"name":"gmail.com.","type":15,"TTL":1864,"data":"10 alt1.gmail-smtp-in.l.google.com."}]}"#;
+        // The lowest preference wins, and the trailing dot of the FQDN goes.
+        assert_eq!(mx_host(json).as_deref(), Some("gmail-smtp-in.l.google.com"));
+        // A domain with no MX record (NXDOMAIN) has no Answer.
+        let none = r#"{"Status":3,"Question":[{"name":"projet-o2game.fr.","type":15}],
+          "Authority":[{"name":"fr.","type":6,"TTL":600,"data":"a.nic.fr. dnsmaster.afnic.fr."}]}"#;
+        assert_eq!(mx_host(none), None);
+        assert_eq!(mx_host("not json"), None);
+    }
+
+    #[test]
+    fn test_auto_setup_mx_base_domain() {
+        use crate::auto_setup::base_domain;
+        assert_eq!(base_domain("aspmx.l.google.com."), "google.com");
+        assert_eq!(base_domain("mx1.mailbox.org"), "mailbox.org");
+        assert_eq!(base_domain("smtp."), "smtp");
+        assert_eq!(base_domain(""), "");
+        // shortcut: only the last two labels; a provider on mail.foo.co.uk gives co.uk,
+        // which ISPDB does not list, so that lookup simply finds nothing.
+        assert_eq!(base_domain("mail.foo.co.uk."), "co.uk");
+    }
+
+    /// Auto-setup against the real autoconfig servers and Cloudflare DNS.
+    /// Run with: cargo test test_auto_setup_live -- --ignored --nocapture
+    #[tokio::test]
+    #[ignore]
+    async fn test_auto_setup_live() {
+        use crate::auto_setup::lookup;
+        // A domain with its own autoconfig, ISPDB, a Google Workspace domain found
+        // through its MX, and a domain nobody knows.
+        let mb = lookup("someone@mailbox.org").await.unwrap().expect("mailbox.org publishes its own autoconfig");
+        println!("mailbox.org: {:?} on {}", srv(mb.imap.as_ref()), mb.source);
+        assert_eq!(srv(mb.imap.as_ref()), ("imap.mailbox.org", "993", "someone@mailbox.org"));
+
+        let g = lookup("someone@gmail.com").await.unwrap().expect("gmail.com is in ISPDB");
+        println!("gmail.com: {:?} / {:?} on {}", srv(g.imap.as_ref()), srv(g.smtp.as_ref()), g.source);
+        assert_eq!(srv(g.imap.as_ref()), ("imap.gmail.com", "993", "someone@gmail.com"));
+        assert_eq!(srv(g.smtp.as_ref()), ("smtp.gmail.com", "465", "someone@gmail.com"));
+        assert_eq!(g.source, "autoconfig.thunderbird.net");
+
+        let o = lookup("someone@outlook.com").await.unwrap().expect("outlook.com is in ISPDB");
+        println!("outlook.com: {:?} / {:?} on {}", srv(o.imap.as_ref()), srv(o.smtp.as_ref()), o.source);
+        assert_eq!(srv(o.imap.as_ref()), ("outlook.office365.com", "993", "someone@outlook.com"));
+        assert_eq!(srv(o.smtp.as_ref()), ("smtp-mail.outlook.com", "587", "someone@outlook.com"));
+
+        // signal.org is not in ISPDB: its MX is Google's, so ISPDB answers for google.com.
+        let w = lookup("someone@signal.org").await.unwrap().expect("signal.org forwards to Gmail");
+        println!("signal.org: {:?} on {}", srv(w.imap.as_ref()), w.source);
+        assert_eq!(srv(w.imap.as_ref()), ("imap.gmail.com", "993", "someone@signal.org"));
+
+        assert!(lookup("someone@no-such-domain-9f8a7b.invalid").await.unwrap().is_none());
+        // A blank or broken address sends nothing out.
+        assert!(lookup("").await.unwrap().is_none());
+        assert!(lookup("not-an-address").await.unwrap().is_none());
+    }
+
+    // ── Auto-scan ─────────────────────────────────────────────────────────────
+
+    // A real Thunderbird profile: two IMAP accounts, one POP3 account, Local Folders and
+    // one SMTP server shared by the three of them.
+    const TB_PREFS: &str = r#"user_pref("mail.accountmanager.accounts", "account1,account2,account3");
+user_pref("mail.accountmanager.defaultaccount", "account1");
+user_pref("mail.accountmanager.localfoldersserver", "server4");
+user_pref("mail.account.account1.identities", "id1");
+user_pref("mail.account.account1.server", "server1");
+user_pref("mail.account.account2.identities", "id2");
+user_pref("mail.account.account2.server", "server2");
+user_pref("mail.account.account3.identities", "id3");
+user_pref("mail.account.account3.server", "server3");
+user_pref("mail.identity.id1.fullName", "John Doe");
+user_pref("mail.identity.id1.smtpServer", "smtp1");
+user_pref("mail.identity.id1.useremail", "john.doe@gmail.com");
+user_pref("mail.identity.id1.valid", true);
+user_pref("mail.identity.id2.fullName", "John Doe");
+user_pref("mail.identity.id2.smtpServer", "smtp1");
+user_pref("mail.identity.id2.useremail", "john@example.com");
+user_pref("mail.identity.id2.valid", true);
+user_pref("mail.identity.id3.fullName", "John Doe");
+user_pref("mail.identity.id3.smtpServer", "smtp1");
+user_pref("mail.identity.id3.useremail", "john.doe@alice.it");
+user_pref("mail.identity.id3.valid", true);
+user_pref("mail.root.imap-rel", "[ProfD]ImapMail");
+user_pref("mail.root.pop3-rel", "[ProfD]Mail");
+user_pref("mail.server.server1.authMethod", 10);
+user_pref("mail.server.server1.directory-rel", "[ProfD]ImapMail/imap.gmail.com");
+user_pref("mail.server.server1.hostname", "imap.gmail.com");
+user_pref("mail.server.server1.login_at_startup", true);
+user_pref("mail.server.server1.name", "john.doe@gmail.com");
+user_pref("mail.server.server1.port", 993);
+user_pref("mail.server.server1.socketType", 3);
+user_pref("mail.server.server1.type", "imap");
+user_pref("mail.server.server1.userName", "john.doe@gmail.com");
+user_pref("mail.server.server2.authMethod", 3);
+user_pref("mail.server.server2.hostname", "imap.example.com");
+user_pref("mail.server.server2.name", "john@example.com");
+user_pref("mail.server.server2.port", 993);
+user_pref("mail.server.server2.socketType", 3);
+user_pref("mail.server.server2.type", "imap");
+user_pref("mail.server.server2.userName", "john@example.com");
+user_pref("mail.server.server3.authMethod", 3);
+user_pref("mail.server.server3.hostname", "in.alice.it");
+user_pref("mail.server.server3.name", "john.doe@alice.it");
+user_pref("mail.server.server3.port", 995);
+user_pref("mail.server.server3.socketType", 3);
+user_pref("mail.server.server3.type", "pop3");
+user_pref("mail.server.server3.userName", "john.doe@alice.it");
+user_pref("mail.server.server4.directory-rel", "[ProfD]Mail/Local Folders");
+user_pref("mail.server.server4.hostname", "Local Folders");
+user_pref("mail.server.server4.name", "Local Folders");
+user_pref("mail.server.server4.type", "none");
+user_pref("mail.server.server4.userName", "nobody");
+user_pref("mail.smtp.defaultserver", "smtp1");
+user_pref("mail.smtpserver.smtp1.authMethod", 3);
+user_pref("mail.smtpserver.smtp1.description", "smtp.gmail.com");
+user_pref("mail.smtpserver.smtp1.hostname", "smtp.gmail.com");
+user_pref("mail.smtpserver.smtp1.port", 465);
+user_pref("mail.smtpserver.smtp1.try_ssl", 3);
+user_pref("mail.smtpserver.smtp1.username", "john.doe@gmail.com");
+user_pref("mail.smtpservers", "smtp1");"#;
+
+    #[test]
+    fn test_auto_scan_prefs_two_imap_and_one_pop3() {
+        use crate::auto_scan::parse_prefs;
+        let found = parse_prefs(TB_PREFS, "Thunderbird");
+        let emails: Vec<&str> = found.iter().map(|a| a.email.as_str()).collect();
+        // Local Folders (type "none") is not an account, the three others are.
+        assert_eq!(emails, vec!["john.doe@gmail.com", "john@example.com", "john.doe@alice.it"]);
+
+        let a = &found[0];
+        assert_eq!((a.client.as_str(), a.label.as_str(), a.name.as_str()), ("Thunderbird", "john.doe@gmail.com", "John Doe"));
+        assert!(!a.pop3);
+        assert!(a.oauth, "authMethod 10 is OAuth2");
+        assert_eq!(srv(a.imap.as_ref()), ("imap.gmail.com", "993", "john.doe@gmail.com"));
+        assert_eq!(srv(a.smtp.as_ref()), ("smtp.gmail.com", "465", "john.doe@gmail.com"));
+        assert_eq!((a.imap_issue.as_str(), a.smtp_issue.as_str()), ("", ""));
+
+        let b = &found[1];
+        assert!(!b.oauth, "authMethod 3 is an ordinary password");
+        assert_eq!(srv(b.imap.as_ref()), ("imap.example.com", "993", "john@example.com"));
+        // The profile's one shared SMTP server goes to both IMAP accounts.
+        assert_eq!(srv(b.smtp.as_ref()), ("smtp.gmail.com", "465", "john.doe@gmail.com"));
+
+        let c = &found[2];
+        assert!(c.pop3, "POP3 is shown, but cannot be added");
+        assert!(c.imap.is_none(), "a POP3 server brings no incoming settings");
+        assert_eq!(c.imap_issue, "", "the reason is that it is POP3, not its security");
+    }
+
+    #[test]
+    fn test_auto_scan_server_with_a_security_this_app_cannot_use() {
+        use crate::auto_scan::parse_prefs;
+        let found = |prefs: String| {
+            parse_prefs(&prefs, "Betterbird").into_iter().find(|a| a.email == "john@example.com").unwrap()
+        };
+        let imap_socket = r#"user_pref("mail.server.server2.socketType", 3);"#;
+
+        // Incoming mail only speaks implicit TLS: STARTTLS on 143 has nothing to offer.
+        let b = found(TB_PREFS.replace(imap_socket, r#"user_pref("mail.server.server2.socketType", 2);"#));
+        assert!(b.imap.is_none());
+        assert_eq!(b.imap_issue, "starttls");
+        assert_eq!(b.client, "Betterbird");
+        assert_eq!(srv(b.smtp.as_ref()), ("smtp.gmail.com", "465", "john.doe@gmail.com"), "the other side is untouched");
+        assert_eq!(found(TB_PREFS.replace(imap_socket, r#"user_pref("mail.server.server2.socketType", 0);"#)).imap_issue, "plain");
+        // An IMAP server with no port written is the usual one.
+        let b = found(TB_PREFS.replace("user_pref(\"mail.server.server2.port\", 993);\n", ""));
+        assert_eq!(srv(b.imap.as_ref()), ("imap.example.com", "993", "john@example.com"));
+
+        // Outgoing: STARTTLS on a port other than 587, no encryption, and the old value 1.
+        let out = |socket: &str, port: &str| found(TB_PREFS
+            .replace(r#"user_pref("mail.smtpserver.smtp1.try_ssl", 3);"#, &format!("user_pref(\"mail.smtpserver.smtp1.try_ssl\", {socket});"))
+            .replace(r#"user_pref("mail.smtpserver.smtp1.port", 465);"#, &format!("user_pref(\"mail.smtpserver.smtp1.port\", {port});")));
+        let refused = out("2", "25");
+        assert!(refused.smtp.is_none());
+        assert_eq!(refused.smtp_issue, "port");
+        assert_eq!(out("0", "25").smtp_issue, "plain");
+        assert_eq!(srv(out("1", "587").smtp.as_ref()), ("smtp.gmail.com", "587", "john.doe@gmail.com"), "1 = try STARTTLS");
+    }
+
+    #[test]
+    fn test_auto_scan_oauth() {
+        use crate::auto_scan::parse_prefs;
+        // The profile's outgoing server logs in with a token: a password will not send
+        // anything, so the account is offered with the provider's hint instead.
+        let found = parse_prefs(&TB_PREFS.replace(
+            r#"user_pref("mail.smtpserver.smtp1.authMethod", 3);"#,
+            r#"user_pref("mail.smtpserver.smtp1.authMethod", 10);"#), "Thunderbird");
+        assert!(found.iter().all(|a| a.oauth));
+        assert!(!parse_prefs(TB_PREFS, "Thunderbird")[1].oauth);
+    }
+
+    #[test]
+    fn test_auto_scan_accounts_without_an_address_or_a_useful_server() {
+        use crate::auto_scan::parse_prefs;
+        // An account whose identity has no address, and one whose server is a news group.
+        let prefs = TB_PREFS
+            .replace(r#"user_pref("mail.identity.id2.useremail", "john@example.com");"#, "")
+            .replace(r#"user_pref("mail.server.server1.type", "imap");"#, r#"user_pref("mail.server.server1.type", "nntp");"#);
+        let found = parse_prefs(&prefs, "Thunderbird");
+        let emails: Vec<&str> = found.iter().map(|a| a.email.as_str()).collect();
+        assert_eq!(emails, vec!["john.doe@alice.it"]);
+        // Nothing at all in the file, or a line that is not a pref: nothing found.
+        assert!(parse_prefs("", "Thunderbird").is_empty());
+        assert!(parse_prefs("user_pref(mail.identity.id1.useremail, john.doe@gmail.com);", "Thunderbird").is_empty());
+    }
+
+    #[test]
+    fn test_auto_scan_pref_values() {
+        use crate::auto_scan::parse_prefs;
+        // A name with a \u escape, an escaped quote and a backslash, as prefs.js writes them.
+        let prefs = TB_PREFS.replace(
+            r#"user_pref("mail.identity.id2.fullName", "John Doe");"#,
+            r#"user_pref("mail.identity.id2.fullName", "Jos\u00e9 \"Jo\" O:\\Mail");"#);
+        let a = parse_prefs(&prefs, "Thunderbird").into_iter().find(|a| a.email == "john@example.com").unwrap();
+        assert_eq!(a.name, "José \"Jo\" O:\\Mail");
+        // The lines after it are still read.
+        assert_eq!(srv(a.imap.as_ref()), ("imap.example.com", "993", "john@example.com"));
+    }
+
+    #[test]
+    fn test_auto_scan_profile_dirs() {
+        use crate::auto_scan::profile_dirs;
+        let abs = if cfg!(windows) { "D:/Mail/Profiles/wxyz9876.default" } else { "/srv/Mail/Profiles/wxyz9876.default" };
+        let ini = format!(r#"[InstallF70CDFEFA1B9B2DEC310184631102A00]
+Default=1
+IsRelative=1
+Path=Profiles/ignored.default-release
+
+[Profile0]
+Name=default-release
+IsRelative=1
+Path=Profiles/abcd1234.default-release
+Default=1
+
+[Profile1]
+Name=old
+IsRelative=0
+Path={abs}
+
+[General]
+StartWithLastProfile=1
+Version=2
+"#);
+        let base = std::path::Path::new(if cfg!(windows) { "C:/Users/Me/AppData/Roaming/Thunderbird" } else { "/home/me/.thunderbird" });
+        let dirs = profile_dirs(&ini, base);
+        // The [Install…] section points at the default profile again: not a second one.
+        assert_eq!(dirs.len(), 2, "{dirs:?}");
+        assert_eq!(dirs[0], base.join("Profiles").join("abcd1234.default-release"));
+        assert_eq!(dirs[1], std::path::PathBuf::from(abs));
+        // A file with no profile section, or no Path, gives nothing.
+        assert!(profile_dirs("[General]\nVersion=2\n", base).is_empty());
+        assert!(profile_dirs("", base).is_empty());
+    }
+
+    #[test]
+    fn test_auto_scan_dedupe_by_email() {
+        use crate::auto_scan::{dedupe, parse_prefs};
+        // The same profile seen twice (Betterbird reads Thunderbird's directory), the
+        // address written with other capitals, and alice.it as an IMAP account too.
+        let again = TB_PREFS
+            .replace("john@example.com", "JOHN@EXAMPLE.com")
+            .replace(r#"user_pref("mail.server.server3.type", "pop3");"#, r#"user_pref("mail.server.server3.type", "imap");"#)
+            .replace(r#"user_pref("mail.server.server3.hostname", "in.alice.it");"#, r#"user_pref("mail.server.server3.hostname", "imap.alice.it");"#)
+            .replace(r#"user_pref("mail.server.server3.port", 995);"#, r#"user_pref("mail.server.server3.port", 993);"#);
+        let all = dedupe([parse_prefs(TB_PREFS, "Thunderbird"), parse_prefs(&again, "Betterbird")].concat());
+        let emails: Vec<&str> = all.iter().map(|a| a.email.as_str()).collect();
+        assert_eq!(emails, vec!["john.doe@gmail.com", "john@example.com", "john.doe@alice.it"]);
+        assert_eq!(all[1].email, "john@example.com", "the first spelling wins");
+        // An IMAP entry beats the POP3 one for the same address.
+        assert!(!all[2].pop3);
+        assert_eq!(srv(all[2].imap.as_ref()), ("imap.alice.it", "993", "john.doe@alice.it"));
+        assert_eq!(all[2].client, "Betterbird");
+    }
+
+    // ── Auto-scan: classic Outlook (registry) ─────────────────────────────────
+
+    /// A REG_BINARY value as `reg query` writes it: UTF-16LE, NUL-terminated, one hex line.
+    fn reg_u16(text: &str) -> String {
+        text.encode_utf16()
+            .chain(std::iter::once(0))
+            .map(|u| format!("{:02x}{:02x}", u & 0xff, u >> 8))
+            .collect()
+    }
+
+    /// One key of a `reg query … /s` output: its path, then its values.
+    fn reg_block(path: &str, values: &[(&str, &str, &str)]) -> String {
+        let mut out = format!("\n{path}\n");
+        for (name, kind, data) in values {
+            out.push_str(&format!("    {name}    {kind}    {data}\n"));
+        }
+        out
+    }
+
+    // One Outlook profile, three accounts: an IMAP one, a POP3 one and an Exchange one.
+    fn outlook_reg() -> String {
+        let base = r"HKEY_CURRENT_USER\Software\Microsoft\Office\16.0\Outlook\Profiles\Outlook\9375CFF0413111d3B88A00104B2A6676";
+        let b = reg_u16;
+        let mut out = String::new();
+        out.push_str(&reg_block(&format!(r"{base}\00000001"), &[
+            ("Account Name", "REG_BINARY", &b("john.doe@example.com")),
+            ("Display Name", "REG_BINARY", &b("John Doe")),
+            ("Email", "REG_BINARY", &b("john.doe@example.com")),
+            ("IMAP Server", "REG_BINARY", &b("imap.example.com")),
+            ("IMAP User", "REG_BINARY", &b("john.doe@example.com")),
+            ("IMAP Port", "REG_DWORD", "0x3e1"),
+            ("IMAP Use SSL", "REG_DWORD", "0x1"),
+            ("SMTP Server", "REG_BINARY", &b("smtp.example.com")),
+            ("SMTP User", "REG_BINARY", &b("john.doe@example.com")),
+            ("SMTP Port", "REG_DWORD", "0x24b"),
+            ("SMTP Use SSL", "REG_DWORD", "0x0"),
+            ("SMTP Secure Connection", "REG_DWORD", "0x1"),
+            ("Service UID", "REG_BINARY", "c3d19a7b801bc44a960ae5b63bf97c7e"),
+        ]));
+        out.push_str(&reg_block(&format!(r"{base}\00000002"), &[
+            ("Account Name", "REG_BINARY", &b("john@contoso.com")),
+            ("Display Name", "REG_BINARY", &b("John Doe")),
+            ("Email", "REG_BINARY", &b("john@contoso.com")),
+            ("POP3 Server", "REG_BINARY", &b("pop3.contoso.com")),
+            ("POP3 User", "REG_BINARY", &b("john@contoso.com")),
+            ("POP3 Password", "REG_BINARY", "01000000d08c9ddf0115d1118c7a00c04fc297eb"),
+            ("POP3 Port", "REG_DWORD", "0x3e3"),
+            ("POP3 Use SSL", "REG_DWORD", "0x1"),
+            ("SMTP Server", "REG_BINARY", &b("smtp.contoso.com")),
+            ("SMTP Port", "REG_DWORD", "0x1d1"),
+            ("SMTP Use SSL", "REG_DWORD", "0x1"),
+        ]));
+        out.push_str(&reg_block(&format!(r"{base}\00000003"), &[
+            ("Account Name", "REG_BINARY", &b("john@contoso.com")),
+            ("Display Name", "REG_BINARY", &b("John Doe")),
+            ("Email", "REG_BINARY", &b("john@contoso.com")),
+            ("Mdb Name", "REG_BINARY", &b("Mailbox On Contoso")),
+            ("Microsoft Exchange Server", "REG_BINARY", &b("mail.contoso.com")),
+        ]));
+        out.push_str("\nEnd of search: 3 different entries found.\n");
+        out
+    }
+
+    #[test]
+    fn test_auto_scan_outlook_reg_imap_pop3_and_exchange() {
+        use crate::auto_scan::parse_outlook_reg;
+        let found = parse_outlook_reg(&outlook_reg());
+        let emails: Vec<&str> = found.iter().map(|a| a.email.as_str()).collect();
+        // The Exchange account writes no IMAP server: this app could not use it.
+        assert_eq!(emails, vec!["john.doe@example.com", "john@contoso.com"]);
+
+        let a = &found[0];
+        assert_eq!((a.client.as_str(), a.label.as_str(), a.name.as_str()), ("Outlook", "john.doe@example.com", "John Doe"));
+        assert!(!a.pop3);
+        assert_eq!(srv(a.imap.as_ref()), ("imap.example.com", "993", "john.doe@example.com"));
+        assert_eq!(srv(a.smtp.as_ref()), ("smtp.example.com", "587", "john.doe@example.com"));
+        assert_eq!((a.imap_issue.as_str(), a.smtp_issue.as_str()), ("", ""));
+
+        let b = &found[1];
+        assert!(b.pop3, "a POP3 server is shown, but cannot be added");
+        assert!(b.imap.is_none());
+        assert_eq!(b.imap_issue, "", "the reason is that it is POP3, not its security");
+        assert_eq!(srv(b.smtp.as_ref()), ("smtp.contoso.com", "465", "john@contoso.com"), "no SMTP User: the address");
+    }
+
+    #[test]
+    fn test_auto_scan_outlook_reg_security_and_spellings() {
+        use crate::auto_scan::parse_outlook_reg;
+        let one = |reg: String| {
+            parse_outlook_reg(&reg).into_iter().find(|a| a.email == "john.doe@example.com").unwrap()
+        };
+        // Incoming mail only speaks implicit TLS: an account without SSL has nothing to offer.
+        let a = one(outlook_reg().replace("    IMAP Use SSL    REG_DWORD    0x1", "    IMAP Use SSL    REG_DWORD    0x0"));
+        assert!(a.imap.is_none());
+        assert_eq!(a.imap_issue, "plain");
+        assert_eq!(srv(a.smtp.as_ref()), ("smtp.example.com", "587", "john.doe@example.com"), "the other side is untouched");
+        // An IMAP account with SSL and no port written: the usual one.
+        let a = one(outlook_reg().replace("    IMAP Port    REG_DWORD    0x3e1\n", ""));
+        assert_eq!(srv(a.imap.as_ref()), ("imap.example.com", "993", "john.doe@example.com"));
+        // A string written as REG_SZ instead of a UTF-16 REG_BINARY is read as well,
+        // and a value name is matched whatever its capitals.
+        let a = one(outlook_reg()
+            .replace(&format!("    IMAP Server    REG_BINARY    {}\n", reg_u16("imap.example.com")), "    IMAP Server    REG_SZ    imap.example.com\n")
+            .replace("    Email    REG_BINARY", "    email    REG_BINARY"));
+        assert_eq!(srv(a.imap.as_ref()), ("imap.example.com", "993", "john.doe@example.com"));
+        // Nothing at all, or an output that names no key: nothing found.
+        assert!(parse_outlook_reg("").is_empty());
+        assert!(parse_outlook_reg("End of search: 0 different entries found.\n").is_empty());
+    }
+
+    // ── Auto-scan: Evolution (source keyfiles) ────────────────────────────────
+
+    // The three files of one Evolution account: itself, its identity, its transport.
+    const EVO_ACCOUNT: &str = r#"[Autoconfig]
+Revision=005
+
+[Data Source]
+DisplayName=Company Account
+Enabled=true
+Parent=
+
+[Authentication]
+Host=imap.example.com
+Method=plain/password
+Port=993
+RememberPassword=true
+User=me@example.com
+CredentialName=
+
+[Mail Account]
+BackendName=imapx
+IdentityUid=0-ac-002
+ArchiveFolder=folder://0-ac-001/INBOX/Archive
+
+[Security]
+Method=ssl-on-alternate-port
+"#;
+
+    const EVO_IDENTITY: &str = r#"[Data Source]
+DisplayName=Company Account
+Enabled=true
+Parent=0-ac-001
+
+[Mail Identity]
+Address=me@example.com
+Name=John Doe
+Organization=
+ReplyTo=
+
+[Mail Submission]
+TransportUid=0-ac-003
+RepliesToOriginFolder=false
+"#;
+
+    const EVO_TRANSPORT: &str = r#"[Data Source]
+DisplayName=smtp.example.com
+Enabled=true
+Parent=0-ac-001
+
+[Mail Transport]
+BackendName=smtp
+
+[Authentication]
+Host=smtp.example.com
+Method=plain/password
+Port=465
+User=me@example.com
+
+[Security]
+Method=ssl-on-alternate-port
+"#;
+
+    fn evo_files() -> Vec<(String, String)> {
+        vec![
+            ("0-ac-001".to_string(), EVO_ACCOUNT.to_string()),
+            ("0-ac-002".to_string(), EVO_IDENTITY.to_string()),
+            ("0-ac-003".to_string(), EVO_TRANSPORT.to_string()),
+            // Local Folders: a mail account, but one with no server at all.
+            ("0-ac-004".to_string(), "[Data Source]\nDisplayName=On This Computer\nParent=\n\n[Mail Account]\nBackendName=maildir\n".to_string()),
+        ]
+    }
+
+    #[test]
+    fn test_auto_scan_evolution_triplet() {
+        use crate::auto_scan::parse_evolution;
+        let found = parse_evolution(&evo_files());
+        assert_eq!(found.len(), 1, "{found:?}");
+        let a = &found[0];
+        assert_eq!((a.client.as_str(), a.label.as_str(), a.name.as_str(), a.email.as_str()),
+            ("Evolution", "Company Account", "John Doe", "me@example.com"));
+        assert!(!a.pop3);
+        assert!(!a.oauth, "plain/password is an ordinary password");
+        assert_eq!(srv(a.imap.as_ref()), ("imap.example.com", "993", "me@example.com"));
+        assert_eq!(srv(a.smtp.as_ref()), ("smtp.example.com", "465", "me@example.com"));
+        assert_eq!((a.imap_issue.as_str(), a.smtp_issue.as_str()), ("", ""));
+        // An account whose identity file is not there has no address, so it is no account.
+        assert!(parse_evolution(&evo_files()[..1]).is_empty());
+        assert!(parse_evolution(&[]).is_empty());
+    }
+
+    #[test]
+    fn test_auto_scan_evolution_starttls_pop_and_oauth() {
+        use crate::auto_scan::parse_evolution;
+        let one = |account: String| {
+            parse_evolution(&[
+                ("0-ac-001".to_string(), account),
+                ("0-ac-002".to_string(), EVO_IDENTITY.to_string()),
+                ("0-ac-003".to_string(), EVO_TRANSPORT.to_string()),
+            ])
+            .into_iter().next().unwrap()
+        };
+        // STARTTLS on 143: incoming mail only speaks implicit TLS.
+        let a = one(EVO_ACCOUNT
+            .replace("Method=ssl-on-alternate-port", "Method=starttls-on-standard-port")
+            .replace("Port=993", "Port=143"));
+        assert!(a.imap.is_none());
+        assert_eq!(a.imap_issue, "starttls");
+        assert_eq!(srv(a.smtp.as_ref()), ("smtp.example.com", "465", "me@example.com"), "the other side is untouched");
+        assert_eq!(one(EVO_ACCOUNT.replace("Method=ssl-on-alternate-port", "Method=none")).imap_issue, "plain");
+        // Outgoing: STARTTLS on 587 is one of the two ways this app can send.
+        let mut files = evo_files();
+        files[2] = ("0-ac-003".to_string(), EVO_TRANSPORT
+            .replace("Method=ssl-on-alternate-port", "Method=starttls-on-standard-port")
+            .replace("Port=465", "Port=587"));
+        let a = parse_evolution(&files).remove(0);
+        assert_eq!(srv(a.smtp.as_ref()), ("smtp.example.com", "587", "me@example.com"));
+        // A POP3 account is shown but cannot be added, a token login is told.
+        let a = one(EVO_ACCOUNT.replace("BackendName=imapx", "BackendName=pop"));
+        assert!(a.pop3);
+        assert!(a.imap.is_none());
+        assert!(one(EVO_ACCOUNT.replace("Method=plain/password", "Method=oauth2-with-plain")).oauth);
+        // An account with no transport of its own still comes as an incoming one.
+        let a = parse_evolution(&[
+            ("0-ac-001".to_string(), EVO_ACCOUNT.to_string()),
+            ("0-ac-002".to_string(), EVO_IDENTITY.replace("TransportUid=0-ac-003", "TransportUid="),),
+        ])[0].clone();
+        assert!(a.smtp.is_none());
+        assert_eq!(a.smtp_issue, "");
+        assert_eq!(srv(a.imap.as_ref()), ("imap.example.com", "993", "me@example.com"));
+    }
+
+    /// Auto-scan against the mail apps on this computer.
+    /// Run with: cargo test test_auto_scan_live -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn test_auto_scan_live() {
+        use crate::auto_scan::scan;
+        let found = scan();
+        println!("{} account(s) found", found.len());
+        for a in &found {
+            println!("{} | {} | {} | pop3={} oauth={} imap={:?} ({}) smtp={:?} ({})", a.client, a.label, a.email, a.pop3, a.oauth, srv(a.imap.as_ref()), a.imap_issue, srv(a.smtp.as_ref()), a.smtp_issue);
+        }
+    }
+
+    // ── Complete configuration lifecycle ────────────────────────────────────
+
+    fn isolated_test_dir(label: &str) -> std::path::PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "courriel-{label}-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed),
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn test_first_launch_from_missing_config_is_empty_and_usable() {
+        let dir = isolated_test_dir("first-launch");
+        let cfg = Config::load_from(&dir.join("config.toml")).unwrap();
+        assert!(cfg.accounts.is_empty());
+        assert!(cfg.projects.is_empty());
+        assert_eq!(cfg.user.theme, "brutalist");
+        assert_eq!(cfg.user.language, "en");
+        assert_eq!(cfg.ai.provider(), "anthropic");
+        assert_eq!(cfg.gifs.key(), DEFAULT_GIPHY_KEY);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_malformed_config_reports_an_error_instead_of_resetting_data() {
+        let dir = isolated_test_dir("bad-config");
+        let path = dir.join("config.toml");
+        std::fs::write(&path, "this = [is not valid TOML").unwrap();
+        let err = Config::load_from(&path).unwrap_err().to_string();
+        assert!(err.contains("Failed to parse config.toml"), "{err}");
+        assert_eq!(std::fs::read_to_string(path).unwrap(), "this = [is not valid TOML");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_empty_app_can_become_fully_configured_and_survive_restart() {
+        use crate::dto::AiSettingsDto;
+        use std::collections::BTreeMap;
+
+        let dir = isolated_test_dir("full-lifecycle");
+        let path = dir.join("config.toml");
+        let empty = Config::load_from(&path).unwrap();
+        let accounts = vec![
+            AccountDto {
+                label: "Work".into(), imap_host: "imap.work.test".into(), imap_port: "993".into(),
+                imap_user: "remi@work.test".into(), imap_pass: "imap-secret".into(), imap_mailbox: "INBOX".into(),
+                imap_fetch: "75".into(), smtp_host: "smtp.work.test".into(), smtp_port: "465".into(),
+                smtp_user: "remi@work.test".into(), smtp_pass: "smtp-secret".into(),
+                smtp_from: "\"Remi Work\" <remi@work.test>".into(), signature_file: "signature-abc123.html".into(),
+                signature_on_new: true, signature_on_reply: false,
+            },
+            AccountDto {
+                label: "Personal".into(), imap_host: "imap.personal.test".into(), imap_port: "".into(),
+                imap_user: "me@personal.test".into(), imap_pass: "shared-secret".into(), imap_mailbox: "".into(),
+                imap_fetch: "".into(), smtp_host: "smtp.personal.test".into(), smtp_port: "".into(),
+                smtp_user: "".into(), smtp_pass: "".into(), smtp_from: "".into(), signature_file: String::new(),
+                signature_on_new: false, signature_on_reply: true,
+            },
+        ];
+        let ai = AiSettingsDto {
+            provider: "openai".into(),
+            model: " test-model ".into(),
+            base_url: " https://ai.example/v1/ ".into(),
+            keys: BTreeMap::from([
+                ("openai".into(), "  secret-key  ".into()),
+                ("unknown".into(), "must-not-persist".into()),
+                ("mistral".into(), "  ".into()),
+            ]),
+        };
+        let mut configured = crate::settings::apply_to_config(
+            empty, None, &accounts, &ai, " custom-giphy ", 1.25, Some("aero"), Some("fr"), None,
+        );
+        configured.projects = vec![
+            ProjectConfig { name: "Research".into(), description: "Paper and experiments".into(), urgency: "high".into() },
+            ProjectConfig { name: "Home".into(), description: "Personal work".into(), urgency: "normal".into() },
+        ];
+        configured.supabase = Some(SupabaseConfig { url: "https://cloud.example".into(), anon_key: "public-key".into() });
+
+        crate::config::write_to(&configured, &path).unwrap();
+        let restarted = Config::load_from(&path).unwrap();
+        assert_eq!(restarted.accounts.len(), 2);
+        assert_eq!(restarted.accounts[0].name, "Work");
+        assert_eq!(restarted.accounts[0].signature.file, "signature-abc123.html");
+        assert_eq!(restarted.accounts[1].imap.port, 993);
+        assert_eq!(restarted.accounts[1].imap.mailbox, "INBOX");
+        assert_eq!(restarted.accounts[1].imap.fetch_count, 50);
+        assert_eq!(restarted.accounts[1].smtp.port, 587);
+        assert_eq!(restarted.user.theme, "aero");
+        assert_eq!(restarted.user.language, "fr");
+        assert!((restarted.user.font_scale - 1.25).abs() < f32::EPSILON);
+        assert_eq!(restarted.ai.provider(), "openai");
+        assert_eq!(restarted.ai.model, "test-model");
+        assert_eq!(restarted.ai.base_url, "https://ai.example/v1/");
+        assert_eq!(restarted.ai.key(), "secret-key");
+        assert!(!restarted.ai.keys.contains_key("unknown"));
+        assert!(!restarted.ai.keys.contains_key("mistral"));
+        assert_eq!(restarted.gifs.giphy_api_key, "custom-giphy");
+        assert_eq!(restarted.projects.len(), 2);
+        assert!(restarted.supabase_settings().is_some());
+
+        let dto = crate::settings::config_to_dto(&restarted);
+        assert_eq!(dto.accounts.len(), 2);
+        assert_eq!(dto.ai.provider, "openai");
+        assert_eq!(dto.supabase_url, "https://cloud.example");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_settings_reject_unknown_language_and_provider() {
+        use crate::dto::AiSettingsDto;
+        let mut original = make_test_config();
+        original.user.language = "ja".into();
+        original.ai.provider = "mistral".into();
+        let ai = AiSettingsDto { provider: "evil-provider".into(), ..Default::default() };
+        let updated = crate::settings::apply_to_config(
+            original, None, &[], &ai, "", 1.0, None, Some("xx"), None,
+        );
+        assert_eq!(updated.user.language, "ja");
+        assert_eq!(updated.ai.provider(), "mistral");
+    }
+
+    #[test]
+    fn test_all_supported_languages_survive_settings_application() {
+        use crate::dto::AiSettingsDto;
+        for (language, _) in crate::i18n::LANGUAGES {
+            let updated = crate::settings::apply_to_config(
+                Config::default(), None, &[], &AiSettingsDto::default(), "", 1.0, None, Some(language), None,
+            );
+            assert_eq!(&updated.user.language, language);
+        }
+    }
+
+    #[test]
+    fn test_account_defaults_are_applied_to_invalid_numeric_input() {
+        let dto = AccountDto {
+            label: "Defaults".into(), imap_port: "not-a-port".into(), imap_fetch: "NaN".into(),
+            smtp_port: "70000".into(), ..Default::default()
+        };
+        let account = crate::settings::account_from_dto(&dto);
+        assert_eq!(account.imap.port, 993);
+        assert_eq!(account.imap.fetch_count, 50);
+        assert_eq!(account.smtp.port, 587);
+        assert_eq!(account.imap.mailbox, "INBOX");
+    }
+
+    #[test]
+    fn test_smtp_fallback_builds_safe_sender_name() {
+        let mut cfg = make_test_config();
+        let account = &mut cfg.accounts[0];
+        account.imap.username = "user@example.com".into();
+        account.smtp.username.clear();
+        account.smtp.password.clear();
+        account.smtp.from_address.clear();
+        let smtp = account.smtp_for_sending("Remi <Admin> \"Quoted\"");
+        assert_eq!(smtp.username, account.imap.username);
+        assert_eq!(smtp.password, account.imap.password);
+        assert_eq!(smtp.from_address, "\"Remi Admin Quoted\" <user@example.com>");
+    }
+
+    #[test]
+    fn test_legacy_single_account_file_migrates_without_losing_projects() {
+        let dir = isolated_test_dir("legacy-config");
+        let path = dir.join("config.toml");
+        std::fs::write(&path, r#"
+[user]
+display_name = "Legacy User"
+
+[imap]
+host = "imap.legacy.test"
+port = 993
+username = "legacy@example.com"
+password = "secret"
+mailbox = "INBOX"
+fetch_count = 20
+
+[smtp]
+host = "smtp.legacy.test"
+port = 587
+username = "legacy@example.com"
+password = "secret"
+from_address = "legacy@example.com"
+
+[claude]
+api_key = "legacy-ai-key"
+model = "legacy-model"
+max_tokens = 222
+
+[[projects]]
+name = "Legacy project"
+description = "Keep me"
+urgency = "high"
+"#).unwrap();
+        let migrated = Config::load_from(&path).unwrap();
+        assert_eq!(migrated.accounts.len(), 1);
+        assert_eq!(migrated.accounts[0].name, "Default");
+        assert_eq!(migrated.projects[0].name, "Legacy project");
+        assert_eq!(migrated.ai.provider(), "anthropic");
+        assert_eq!(migrated.ai.model, "legacy-model");
+        assert_eq!(migrated.ai.key(), "legacy-ai-key");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_config_write_failure_does_not_panic() {
+        let dir = isolated_test_dir("write-failure");
+        let missing_parent = dir.join("missing").join("config.toml");
+        let error = crate::config::write_to(&Config::default(), &missing_parent).unwrap_err();
+        assert!(error.to_string().contains("Failed to write config.toml"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }
+

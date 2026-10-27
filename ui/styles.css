@@ -156,6 +156,8 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 
 .greeting  { font-size: 1.25rem; font-weight: 700; }
 .briefing  { font-size: 0.82rem; color: var(--text-dim); margin-top: 2px; }
+#ov-setup-ai { margin-top: 8px; }
+#ov-setup-ai.hidden { display: none; }
 
 /* ── Overview Grid ─────────────────────────────────────────────────────────── */
 #ov-grid {
@@ -187,6 +189,23 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   border-bottom: var(--border-w) solid var(--border);
   flex-shrink: 0;
 }
+
+.ov-box-title-tools { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ov-filter-btn {
+  padding: 3px 7px;
+  background: var(--bg3);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.67rem;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+}
+.ov-filter-btn:hover { border-color: var(--accent); color: var(--text); }
+.ov-filter-btn.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 
 .ov-box-body {
   flex: 1;
@@ -260,7 +279,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .email-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 /* Importance: a bar in the priority's colour on every row's leading edge (both writing
    directions). The selected row is shown by its background. */
-.email-row.has-mark { border-inline-start: 4px solid var(--prio, transparent); }
+.email-row.has-mark { border-inline-start: 6px solid var(--prio, transparent); }
 /* Seen or not: a small neutral square, filled while unread, hollow once read.
    In the inbox it is a button (toggle read); its padding makes a bigger click area. */
 .row-mark {
@@ -312,6 +331,38 @@ button.row-mark:hover::before { transform: scale(1.2); }
 }
 .email-from { font-size: 0.82rem; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .email-date { font-size: 0.72rem; color: var(--text-dim); flex-shrink: 0; }
+/* Discussions: the arrow on the latest email unfolds the others, indented below it. */
+.thread-toggle {
+  flex: none;
+  align-self: center;
+  display: inline-flex; align-items: center; gap: 3px;
+  font: inherit; font-size: 0.7rem; font-weight: 600;
+  color: var(--text-dim);
+  background: var(--bg2);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius);
+  padding: 0 6px 0 4px;
+  cursor: pointer;
+}
+.thread-toggle:hover { color: var(--text); border-color: var(--text-dim); }
+.thread-arrow { display: inline-block; transition: transform 0.15s; }
+.thread-open .thread-arrow { transform: rotate(90deg); }
+[dir="rtl"] .thread-arrow { transform: scaleX(-1); }
+[dir="rtl"] .thread-open .thread-arrow { transform: rotate(90deg); }
+.email-row.thread-child { padding-inline-start: 28px; background: var(--bg2); }
+.email-row.thread-child:hover, .email-row.thread-child.active { background: var(--bg3); }
+.email-row.thread-child.collapsed { display: none; }
+.email-project {
+  font-size: 0.65rem;
+  color: var(--accent);
+  border: var(--border-w) solid var(--accent-dim);
+  border-radius: var(--radius);
+  padding: 0 6px;
+  max-width: 40%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex-shrink: 1;
+  align-self: center;
+}
 .email-subject { font-size: 0.8rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .email-summary { font-size: 0.73rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -345,6 +396,54 @@ button.row-mark:hover::before { transform: scale(1.2); }
 }
 .list-title { font-weight: 600; font-size: 0.9rem; }
 .list-count { font-size: 0.75rem; color: var(--text-dim); }
+.list-tools { display: flex; align-items: center; gap: 6px; }
+.list-sort-wrap { position: relative; }
+.list-sort-button,
+.list-sort-direction {
+  background: var(--bg3);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.72rem;
+  padding: 4px 7px;
+  white-space: nowrap;
+}
+.list-sort-label { color: var(--text-dim); }
+.list-sort-button { max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
+.list-sort-direction { min-width: 28px; font-weight: 700; }
+.list-sort-button:hover,
+.list-sort-direction:hover { border-color: var(--accent); }
+.list-sort-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  z-index: 20;
+  min-width: 155px;
+  padding: 4px;
+  background: var(--dialog-bg, var(--bg2));
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+.list-sort-menu.hidden { display: none; }
+.list-sort-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 7px 9px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.78rem;
+  text-align: start;
+}
+.list-sort-option:hover { background: var(--bg3); }
+.list-sort-option.active { background: var(--accent); color: var(--on-accent); }
+[dir="rtl"] .list-sort-menu { right: auto; left: 0; }
 
 .email-list { flex: 1; overflow-y: auto; }
 
@@ -573,8 +672,7 @@ button.row-mark:hover::before { transform: scale(1.2); }
   flex-shrink: 0;
 }
 #projects-new-form.hidden { display: none; }
-#projects-new-form input,
-#projects-new-form select {
+#projects-new-form input {
   background: var(--bg3);
   border: var(--border-w) solid var(--border);
   color: var(--text);
@@ -595,6 +693,7 @@ button.row-mark:hover::before { transform: scale(1.2); }
   background: var(--bg3);
   color: var(--text);
 }
+.projects-new-actions button:disabled { cursor: default; opacity: 0.6; }
 #projects-new-create { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 
 #projects-list {
@@ -627,9 +726,66 @@ button.row-mark:hover::before { transform: scale(1.2); }
   padding: 14px 16px 8px;
   border-bottom: var(--border-w) solid var(--border);
   flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 #projects-detail-name { font-size: 1rem; font-weight: 700; }
 #projects-detail-urgency { font-size: 0.75rem; color: var(--text-dim); margin-top: 2px; }
+.projects-detail-title-wrap { flex: 1; min-width: 0; }
+#projects-title-display.hidden,
+#projects-rename-form.hidden,
+#projects-rename.hidden { display: none; }
+#projects-rename-form { display: flex; flex-direction: column; gap: 6px; }
+#projects-rename-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg3);
+  border: var(--border-w) solid var(--accent);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.85rem;
+  padding: 5px 8px;
+}
+#projects-rename-error { color: var(--danger); font-size: 0.72rem; }
+#projects-rename-error:empty { display: none; }
+.projects-rename-actions { display: flex; gap: 6px; }
+.projects-rename-actions button {
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg3);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 4px 9px;
+}
+#projects-rename-save { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.projects-rename-actions button:disabled { cursor: default; opacity: 0.6; }
+.projects-detail-actions { display: flex; align-items: center; gap: 6px; }
+#projects-rename,
+#projects-delete {
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+#projects-rename:hover { background: var(--bg3); color: var(--text); }
+#projects-delete {
+  border-color: var(--danger);
+  color: var(--danger);
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2px 7px 4px;
+}
+#projects-delete:hover { background: var(--danger-bg); }
+#projects-rename:disabled,
+#projects-delete:disabled { cursor: default; opacity: 0.55; }
 
 #projects-desc {
   margin: 10px 16px 4px;
@@ -717,6 +873,7 @@ button.row-mark:hover::before { transform: scale(1.2); }
 .dialog label { font-size: 0.8rem; color: var(--text-dim); margin-top: 4px; }
 .dialog input[type=text],
 .dialog input[type=password],
+.dialog input[type=date],
 .dialog select,
 .dialog textarea {
   background: var(--bg3);
@@ -737,12 +894,46 @@ button.row-mark:hover::before { transform: scale(1.2); }
   border-radius: var(--radius-sm); padding: 7px 20px; font-size: 0.85rem; cursor: pointer;
 }
 .primary-btn:hover { background: var(--accent-dim); }
+.primary-btn:disabled { cursor: default; opacity: 0.6; }
 
 .secondary-btn {
   background: var(--bg3); color: var(--text); border: var(--border-w) solid var(--border);
   border-radius: var(--radius-sm); padding: 7px 14px; font-size: 0.85rem; cursor: pointer;
 }
 .secondary-btn:hover { background: var(--border); }
+
+/* ── Account Setup Dialog (Auto-setup) ─────────────────────────────────────── */
+/* Stacked over Settings (100); the toast (200) stays above it. */
+.setup-overlay { z-index: 150; }
+.unsaved-list { margin: 4px 0 4px 20px; font-size: 0.9rem; }
+.confirm-overlay { z-index: 160; }
+.setup-result { display: flex; flex-direction: column; gap: 4px; border-top: var(--border-w) solid var(--border); padding-top: 10px; }
+.setup-line { font-size: 0.9rem; }
+.setup-issues { color: var(--urgent); font-size: 0.8rem; }
+.setup-link { color: var(--link); cursor: pointer; text-decoration: underline; }
+.setup-step { display: block; margin-top: 2px; }
+.setup-result.hidden, .setup-hint.hidden, #setup-use.hidden, #setup-manual.hidden { display: none; }
+
+/* ── Account Setup Dialog, step 1 (Auto-scan) ──────────────────────────────── */
+.setup-scan { display: flex; flex-direction: column; gap: 6px; }
+/* Step 2 keeps the spacing the dialog gives its fields, now that they sit in a step. */
+#setup-form { display: flex; flex-direction: column; gap: 10px; }
+.setup-scan.hidden, #setup-form.hidden { display: none; }
+.setup-scan-list { display: flex; flex-direction: column; gap: 4px; max-height: 45vh; overflow-y: auto; }
+.setup-scan-row { display: flex; gap: 8px; align-items: flex-start; border: var(--border-w) solid var(--border); border-radius: var(--radius-sm); padding: 6px 8px; cursor: pointer; }
+.setup-scan-row.disabled { opacity: 0.55; cursor: default; }
+.setup-scan-row input[type="checkbox"] { margin-top: 3px; flex: none; }
+.setup-scan-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.setup-scan-name { overflow-wrap: anywhere; }
+.setup-scan-client { font-size: 0.75rem; color: var(--text-dim); }
+.setup-scan-issue { font-size: 0.8rem; color: var(--urgent); }
+.setup-scan .settings-note { margin-top: 0; }
+
+.calendar-task-dialog { width: 380px; }
+.calendar-task-error { color: var(--danger); font-size: 0.75rem; min-height: 1em; }
+.cal-cell { cursor: pointer; }
+.cal-cell:hover { box-shadow: inset 0 0 0 1px var(--accent); }
+.cal-dl-pill.task { border-left-color: var(--success); }
 
 /* ── Settings Tabs ─────────────────────────────────────────────────────────── */
 .tabs { display: flex; gap: 4px; border-bottom: var(--border-w) solid var(--border); padding-bottom: 8px; }
@@ -755,6 +946,22 @@ button.row-mark:hover::before { transform: scale(1.2); }
 
 .tab-content { display: none; flex-direction: column; gap: 8px; padding-top: 8px; }
 .tab-content.active { display: flex; }
+
+.update-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--bg3);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius);
+}
+.update-version-row { display: flex; justify-content: space-between; align-items: center; }
+.update-auto-label { margin: 2px 0 4px; }
+.update-progress { height: 7px; overflow: hidden; background: var(--bg); border-radius: var(--radius-pill); }
+.update-progress.hidden, .update-notes.hidden, #s-update-install.hidden { display: none; }
+.update-progress > div { width: 0; height: 100%; background: var(--accent); transition: width 160ms ease; }
+.update-notes { padding: 10px; background: var(--bg); border-radius: var(--radius-sm); white-space: pre-wrap; font-size: 0.78rem; }
 
 /* Account block in settings */
 .account-block {
@@ -793,6 +1000,8 @@ button.row-mark:hover::before { transform: scale(1.2); }
   padding: 4px 6px; opacity: 0.45;
 }
 .pw-toggle:hover, .pw-toggle.on { opacity: 1; }
+/* Windows' webview adds its own eye while a new password is typed: keep only ours. */
+input::-ms-reveal, input::-ms-clear { display: none; }
 .account-advanced summary { cursor: pointer; font-size: 0.8rem; color: var(--text-dim); padding: 4px 0; }
 .account-title { cursor: pointer; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-actions { display: flex; gap: 6px; flex: none; }
@@ -943,6 +1152,7 @@ button.row-mark:hover::before { transform: scale(1.2); }
   cursor: pointer;
 }
 .kanban-source:hover { color: var(--accent); }
+.kanban-date { font-size: 0.72rem; color: var(--text-dim); margin-top: 4px; }
 
 .kanban-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .kanban-chip {
@@ -974,6 +1184,14 @@ button.row-mark:hover::before { transform: scale(1.2); }
   font-size: 0.85rem;
 }
 .composer.hidden { display: none; }
+/* A composer window (one per email being written): only the composer, filling the window. */
+body.compose-window > :not(#composer):not(#toast) { display: none !important; }
+body.compose-window .composer {
+  inset: 0; width: auto !important; height: auto !important;
+  max-width: none; max-height: none; border-radius: 0; box-shadow: none; transform: none;
+}
+body.compose-window .composer-header,
+body.compose-window .composer-resize { display: none; }
 
 .composer.expanded {
   right: 50%;
@@ -1473,8 +1691,10 @@ button.row-mark:hover::before { transform: scale(1.2); }
 [data-theme="brutalist"] .today .week-day-num,
 [data-theme="brutalist"] .cal-cell.today .cal-day-num,
 [data-theme="brutalist"] .kanban-source:hover,
-[data-theme="brutalist"] .kanban-chip.ai { color: #000; }
-[data-theme="brutalist"] .kanban-chip.ai { background: var(--accent); border-color: #000; }
+[data-theme="brutalist"] .kanban-chip.ai,
+[data-theme="brutalist"] .email-project { color: #000; }
+[data-theme="brutalist"] .kanban-chip.ai,
+[data-theme="brutalist"] .email-project { background: var(--accent); border-color: #000; }
 [data-theme="brutalist"] .row-mark::before,
 [data-theme="terminal"] .row-mark::before { border-radius: 0; }
 [data-theme="brutalist"] .row-mark { --mark: #000; }
@@ -1865,5 +2085,5 @@ button.row-mark:hover::before { transform: scale(1.2); }
 [dir="rtl"] .email-row.has-mark.active,
 [data-theme] .email-row.has-mark.active {
   border-left: none; border-right: none;
-  border-inline-start: 4px solid var(--prio, transparent);
+  border-inline-start: 6px solid var(--prio, transparent);
 }

@@ -145,6 +145,14 @@ pub fn up_to_date(l: Lang) -> &'static str {
     match l { Lang::En => "Up to date.", Lang::Fr => "À jour." }
 }
 
+/// Title of the notification for several new emails at once.
+pub fn new_emails(n: usize, l: Lang) -> String {
+    match l {
+        Lang::En => format!("{} new emails", n),
+        Lang::Fr => format!("{} nouveaux e-mails", n),
+    }
+}
+
 pub fn unknown_date(l: Lang) -> &'static str {
     match l { Lang::En => "Unknown", Lang::Fr => "Inconnue" }
 }

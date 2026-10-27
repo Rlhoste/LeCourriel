@@ -1,6 +1,6 @@
 {
   "productName": "Le courriel",
-  "version": "0.1.2",
+  "version": "0.2.2",
   "identifier": "io.courriel.app",
   "build": {
     "frontendDist": "../ui"
@@ -25,6 +25,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "icon": [
       "icons/32x32.png",
@@ -56,6 +57,15 @@
     }
   },
   "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZDN0ZDNkEzMDEyM0Q1QzEKUldUQjFTTUJvOFovYkRwMi8yMWtSWjhBNHFWWXd2Z1IxdzkvODNIZTZZaU5leGR5eldIQ2l4Z00K",
+      "endpoints": [
+        "https://github.com/Rlhoste/LeCourriel/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    },
     "shell": {
       "open": true
     }

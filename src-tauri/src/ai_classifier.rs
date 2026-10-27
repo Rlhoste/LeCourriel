@@ -40,20 +40,22 @@ const PARSE_FAILED: &str = "Unable to summarize email.";
 /// False for the placeholder results returned when the API call or parsing failed;
 /// those must not be stored and reused on other computers.
 pub fn is_real_result(c: &ClassifiedEmail) -> bool {
-    c.summary != CLASSIFY_FAILED && c.summary != PARSE_FAILED
+    is_real_summary(&c.summary)
 }
 
-/// True when the AI couldn't be reached for this email (error, usage limit, or sorting
-/// skipped or stopped early): it stays unsorted and is tried again at the next refresh.
-pub fn not_classified(summary: &str) -> bool {
-    summary == CLASSIFY_FAILED
+/// Whether an email's summary comes from the AI. Empty (never sorted, e.g. the AI was not
+/// set up yet) and the failure placeholders (also found in caches of older versions) mean
+/// the email still has to be sorted.
+pub fn is_real_summary(summary: &str) -> bool {
+    !summary.trim().is_empty() && summary != CLASSIFY_FAILED && summary != PARSE_FAILED
 }
 
-/// The result for an email the AI couldn't sort, or that wasn't sent to it.
+/// The result for an email the AI couldn't sort, or that wasn't sent to it: left unsorted
+/// (empty summary), so it is sorted again at the next refresh.
 pub fn unclassified() -> ClassifiedEmail {
     ClassifiedEmail {
         priority: Priority::Information,
-        summary: CLASSIFY_FAILED.to_string(),
+        summary: String::new(),
         project: None,
         deadline: None,
         task: None,
@@ -127,13 +129,21 @@ pub async fn classify(
         meeting_link: None,
     };
 
-    let text = crate::ai::complete(ai, crate::ai::Request {
+    let text = match crate::ai::complete(ai, crate::ai::Request {
         system: &system_prompt,
         user: &user_content,
         max_tokens: ai.max_tokens,
         json: true,
     })
-    .await?;
+    .await
+    {
+        Ok(t) => t,
+        Err(e) => {
+            // Not a placeholder: the email stays unsorted and is tried again at the next refresh.
+            warn!("AI classification failed: {:#}", e);
+            return Err(e);
+        }
+    };
     debug!("AI raw response: {}", text);
 
     match serde_json::from_str::<ClassificationResult>(crate::ai::extract_json(&text)) {

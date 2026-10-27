@@ -3,12 +3,13 @@ const invoke = window.__TAURI__.core.invoke;
 const { listen } = window.__TAURI__.event;
 
 const BUG_REPORT_TO = 'remi.lhoste@o2game.com';
-const SPONSOR_URL = 'https://github.com/sponsors/Rlhoste';
+const SPONSOR_URL = 'https://ko-fi.com/rlhoste';
 
 // ── State ──────────────────────────────────────────────────────────────────
 let appState = null;
 let activePanel = 'overview';
 let fontScale = 1.0;
+let showOpenedAttention = false;
 
 // ── Tauri helpers ──────────────────────────────────────────────────────────
 async function cmd(name, args = {}) {
@@ -18,6 +19,9 @@ async function cmd(name, args = {}) {
 
 // ── Startup ────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
+  // A composer window (see openCompose) shows only the composer.
+  if (window.__COMPOSE__) { startComposeWindow(window.__COMPOSE__); return; }
+
   // Register listeners FIRST before anything else to avoid race condition
   await listen('state-updated', e => {
     appState = e.payload;
@@ -33,14 +37,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('ov-briefing').textContent = e.payload;
   });
 
+  await listen('update-progress', e => renderUpdateProgress(e.payload || {}));
+  await listen('compose-sent', () => showToast(t('cmp.sent')));
+
   initLang();          // language from the last session, until settings arrive
   applyStaticI18n();
   updateTranslateButton();
   setupSidebar();
+  setupOverview();
   setupSplitPanels();
   setupCompose();
   setupSettings();
   setupCalendarNav();
+  setupCalendarTaskDialog();
   setupNewProject();
   setupKanban();
   setupSearch();
@@ -53,17 +62,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     applyTheme(s.theme);
     if (s.language && s.language !== LANG) applyLanguage(s.language);
     await loadComposeAccounts();
-    // First start (or no account yet): open Settings on Accounts, with an empty account to fill in.
-    if (!s.accounts || !s.accounts.length) {
+    // First start (or no account yet): open Settings on Accounts, with the setup dialog on top.
+    if (CourrielCore.needsAccountSetup(s)) {
       document.getElementById('ov-briefing').textContent = t('ov.noAccount');
       await openSettings();
       switchSettingsTab('accounts');
-      if (!settingsData.accounts.length) document.getElementById('s-add-account').click();
+      if (!settingsData.accounts.length) openSetupDialog();
     }
   } catch (_) {}
 
   // Tell backend we're ready — it will now send cache then start live refresh
   await invoke('app_ready');
+  checkAutomaticUpdates();
 });
 
 // ── Sidebar navigation ─────────────────────────────────────────────────────
@@ -102,6 +112,25 @@ function switchPanel(panel) {
   if (appState) renderPanel(panel);
 }
 
+function setupOverview() {
+  document.getElementById('ov-setup-ai').addEventListener('click', async () => {
+    await openSettings();
+    switchSettingsTab('ai');
+  });
+  document.getElementById('ov-toggle-opened').addEventListener('click', () => {
+    showOpenedAttention = !showOpenedAttention;
+    if (appState) renderOverview();
+    else renderOverviewOpenedToggle();
+  });
+}
+
+function renderOverviewOpenedToggle() {
+  const button = document.getElementById('ov-toggle-opened');
+  button.textContent = t(showOpenedAttention ? 'ov.hideOpened' : 'ov.showOpened');
+  button.classList.toggle('active', showOpenedAttention);
+  button.setAttribute('aria-pressed', String(showOpenedAttention));
+}
+
 // ── Split panels bootstrap ─────────────────────────────────────────────────
 const SPLIT_PANELS = {
   inbox:     { title: 'Inbox',     key: 'all_emails' },
@@ -112,6 +141,13 @@ const SPLIT_PANELS = {
   spam:      { title: 'Spam',      key: 'spam_emails' },
   trash:     { title: 'Trash',     key: 'trash_emails' },
 };
+const emailSort = Object.fromEntries(Object.keys(SPLIT_PANELS).map(panel => [panel, {
+  key: 'date', ascending: false,
+}]));
+const EMAIL_SORT_OPTIONS = [
+  ['date', 'mail.sort.date'], ['sender', 'mail.sort.sender'], ['subject', 'mail.sort.subject'],
+  ['read', 'mail.sort.read'], ['priority', 'mail.sort.priority'], ['project', 'mail.sort.project'],
+];
 
 function setupSplitPanels() {
   const tpl = document.getElementById('tpl-split-panel');
@@ -121,8 +157,32 @@ function setupSplitPanels() {
     const title = clone.querySelector('.list-title');
     title.dataset.i18n = `nav.${panelId}`;
     title.textContent = t(title.dataset.i18n);
+    clone.querySelector('.list-sort-label').textContent = t('mail.sortBy');
+    const sortButton = clone.querySelector('.list-sort-button');
+    const sortMenu = clone.querySelector('.list-sort-menu');
+    sortButton.addEventListener('click', e => {
+      e.stopPropagation();
+      document.querySelectorAll('.list-sort-menu').forEach(menu => {
+        if (menu !== sortMenu) menu.classList.add('hidden');
+      });
+      sortMenu.classList.toggle('hidden');
+    });
+    sortMenu.addEventListener('click', e => {
+      const option = e.target.closest('.list-sort-option');
+      if (!option) return;
+      emailSort[panelId].key = option.dataset.sort;
+      emailSort[panelId].ascending = option.dataset.sort !== 'date';
+      sortMenu.classList.add('hidden');
+      renderSplitPanel(panelId, meta);
+    });
+    clone.querySelector('.list-sort-direction').addEventListener('click', () => {
+      emailSort[panelId].ascending = !emailSort[panelId].ascending;
+      renderSplitPanel(panelId, meta);
+    });
     section.appendChild(clone);
   }
+  document.addEventListener('click', () =>
+    document.querySelectorAll('.list-sort-menu').forEach(menu => menu.classList.add('hidden')));
 }
 
 // ── Render all ─────────────────────────────────────────────────────────────
@@ -143,11 +203,15 @@ function renderPanel(panel) {
 // ── Overview ────────────────────────────────────────────────────────────────
 function renderOverview() {
   if (!appState) return;
+  renderOverviewOpenedToggle();
   document.getElementById('ov-greeting').textContent = appState.user_name !== undefined ? greetingText(appState) : appState.greeting;
   document.getElementById('ov-briefing').textContent = appState.briefing ? briefingText(appState.briefing) : appState.briefing_time;
+  // Nothing gets sorted without the AI: offer to set it up (also when it fails, e.g. a wrong key).
+  const aiKind = appState.briefing?.kind;
+  document.getElementById('ov-setup-ai').classList.toggle('hidden', aiKind !== 'ai_missing' && aiKind !== 'ai_error');
 
   // Urgent + High
-  const urgent = [...appState.urgent_emails, ...appState.high_emails].filter(e => !e.is_read);
+  const urgent = CourrielCore.attentionEmails(appState, showOpenedAttention);
   const urgentList = document.getElementById('ov-urgent-list');
   renderEmailRows(urgentList, urgent, uid => switchToEmail(uid));
   attachSwipes(urgentList, urgent, e => trashFromOverview(e.uid));
@@ -165,7 +229,7 @@ function renderOverview() {
   attachSwipes(dl, appState.deadlines, d => dismissFromOverview('deadline', d.uid));
 
   // Tasks
-  const taskList = appState.tasks.filter(t => t.status === 'todo' || t.status === 'in_progress');
+  const taskList = CourrielCore.activeTasks(appState);
   const tasksEl = document.getElementById('ov-tasks-list');
   renderTaskRows(tasksEl, taskList);
   attachSwipes(tasksEl, taskList, t => setTaskStatus(t.id, 'given_up'));
@@ -177,6 +241,17 @@ function renderOverview() {
 
   // Week strip
   renderWeekStrip();
+  updateUnreadCount();
+}
+
+// Unread inbox emails, shown on the app icon and in the window title. Runs after every
+// change of the list (refresh, read/unread, deletion), which all redraw the Overview.
+let shownUnreadCount = null;
+function updateUnreadCount() {
+  const count = appState.all_emails.filter(e => !e.is_read).length;
+  if (count === shownUnreadCount) return;
+  shownUnreadCount = count;
+  cmd('set_unread_count', { count }).catch(() => {});
 }
 
 // ── Swipe right to delete (Overview) ───────────────────────────────────────
@@ -288,23 +363,7 @@ async function dismissFromOverview(kind, uid) {
 
 // kind = null: the email is gone, drop it everywhere; otherwise only from that list.
 function removeFromState(uid, kind) {
-  const drop = key => { appState[key] = appState[key].filter(e => e.uid !== uid); };
-  if (kind === 'meeting') drop('meeting_items');
-  else if (kind === 'deadline') drop('deadlines');
-  else {
-    // Sent/Drafts/Trash have their own UID numbering, so leave them alone.
-    const skip = ['week_days', 'projects', 'sent_emails', 'drafts_emails', 'trash_emails', 'spam_emails'];
-    for (const [key, val] of Object.entries(appState)) {
-      if (Array.isArray(val) && !skip.includes(key)) drop(key);
-    }
-  }
-  if (kind === null || kind === 'deadline') {
-    for (const day of appState.week_days) {
-      for (const n of [1, 2, 3]) {
-        if (day[`dl${n}_uid`] === uid) day[`dl${n}_subject`] = '';
-      }
-    }
-  }
+  CourrielCore.removeEmailFromState(appState, uid, kind);
   renderAll();
 }
 
@@ -313,7 +372,8 @@ function renderTaskRows(container, items) {
   for (const task of items) {
     const row = document.createElement('div');
     row.className = 'email-row';
-    const meta = [task.status === 'in_progress' ? t('kanban.inProgress') : t('kanban.todo'), task.project, task.source_from]
+    const meta = [task.status === 'in_progress' ? t('kanban.inProgress') : t('kanban.todo'), task.project, task.source_from,
+      task.created_ts ? t('kanban.appeared', { date: fmtDay(task.created_ts) }) : '']
       .filter(Boolean).join(' · ');
     row.innerHTML = `<div class="email-row-top"><span class="email-from">${esc(task.title)}</span></div><div class="email-summary">${esc(meta)}</div>`;
     row.addEventListener('click', () => {
@@ -354,19 +414,34 @@ function renderWeekStrip() {
 }
 
 // ── Split panel rendering ──────────────────────────────────────────────────
+// Unfolded discussions ("panel:message-id"), kept when the list is redrawn.
+const openThreads = new Set();
 function renderSplitPanel(panelId, meta) {
   const section = document.getElementById(`panel-${panelId}`);
-  const emails = appState[meta.key] || [];
+  const sort = emailSort[panelId];
+  const emails = CourrielCore.sortEmails(appState[meta.key], sort, langInfo().locale);
   const listEl = section.querySelector('.email-list');
   const countEl = section.querySelector('.list-count');
+  const sortCurrent = section.querySelector('.list-sort-current');
+  const sortMenu = section.querySelector('.list-sort-menu');
+  const directionBtn = section.querySelector('.list-sort-direction');
   countEl.textContent = emails.length;
+  const selectedSort = EMAIL_SORT_OPTIONS.find(([value]) => value === sort.key);
+  sortCurrent.textContent = t(selectedSort?.[1] || 'mail.sort.date');
+  sortMenu.innerHTML = EMAIL_SORT_OPTIONS
+    .map(([value, key]) => `<button class="list-sort-option${value === sort.key ? ' active' : ''}" data-sort="${value}"><span>${t(key)}</span>${value === sort.key ? '<span>✓</span>' : ''}</button>`)
+    .join('');
+  directionBtn.textContent = sort.ascending ? '↑' : '↓';
+  directionBtn.title = sort.key === 'date'
+    ? (sort.ascending ? t('mail.oldestFirst') : t('mail.newestFirst'))
+    : t(sort.ascending ? 'mail.ascending' : 'mail.descending');
 
   // Remember active uid
   const active = section.querySelector('.email-row.active');
   const activeUid = active ? +active.dataset.uid : null;
 
   listEl.innerHTML = '';
-  for (const e of emails) {
+  const addRow = e => {
     const row = emailRow(e);
     row.dataset.uid = e.uid;
     if (e.uid === activeUid) row.classList.add('active');
@@ -376,6 +451,37 @@ function renderSplitPanel(panelId, meta) {
       showEmail(section, e);
     });
     listEl.appendChild(row);
+    return row;
+  };
+  // A discussion shows its latest email; the arrow unfolds the other ones below it.
+  for (const { lead, replies } of CourrielCore.groupThreads(emails)) {
+    const leadRow = addRow(lead);
+    if (!replies.length) continue;
+    const key = `${panelId}:${lead.message_id || lead.uid}`;
+    if (replies.some(e => e.uid === activeUid)) openThreads.add(key);
+    const childRows = replies.map(e => {
+      const row = addRow(e);
+      row.classList.add('thread-child');
+      return row;
+    });
+    const toggle = document.createElement('button');
+    toggle.className = 'thread-toggle';
+    toggle.title = t('mail.thread', { n: replies.length + 1 });
+    toggle.innerHTML = `<span class="thread-arrow">▸</span>${replies.length + 1}`;
+    const setOpen = open => {
+      leadRow.classList.toggle('thread-open', open);
+      toggle.setAttribute('aria-expanded', String(open));
+      childRows.forEach(r => r.classList.toggle('collapsed', !open));
+    };
+    setOpen(openThreads.has(key));
+    toggle.addEventListener('pointerdown', e => e.stopPropagation());   // not the start of a swipe
+    toggle.addEventListener('click', e => {
+      e.stopPropagation();   // don't open the email
+      const open = !openThreads.has(key);
+      if (open) openThreads.add(key); else openThreads.delete(key);
+      setOpen(open);
+    });
+    leadRow.querySelector('.email-row-top').prepend(toggle);
   }
 }
 
@@ -524,6 +630,7 @@ function retagInState(uid, project) {
     for (const e of val) if (e.uid === uid && 'project' in e) e.project = project;
   }
   for (const t of appState.tasks) if (t.source_uid === uid) t.project = project || null;
+  setRowProject(uid, project);
   for (const p of appState.projects) {
     p.email_count = appState.all_emails.filter(e => e.project === p.name).length;
   }
@@ -623,7 +730,10 @@ function setIframeContent(iframe, email) {
   const html = email.body_html
     ? wrapHtml(email.body_html)
     : `<html><body style="font-family:system-ui,sans-serif;font-size:14px;padding:16px;white-space:pre-wrap;color:#111">${esc(email.body_text)}</body></html>`;
-  const blob = new Blob([html], { type: 'text/html' });
+  // The backend has already decoded MIME charsets into a Unicode string. Declare
+  // UTF-8 explicitly so stale charset meta tags in the original mail cannot turn
+  // French characters such as é into mojibake.
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   iframe.src = url;
   iframe.onload = () => URL.revokeObjectURL(url);
@@ -951,6 +1061,62 @@ function setupCalendarNav() {
   });
 }
 
+function setupCalendarTaskDialog() {
+  const overlay = document.getElementById('calendar-task-overlay');
+  const title = document.getElementById('calendar-task-title');
+  const date = document.getElementById('calendar-task-date');
+  const project = document.getElementById('calendar-task-project');
+  const error = document.getElementById('calendar-task-error');
+  const create = document.getElementById('calendar-task-create');
+
+  const close = () => {
+    overlay.classList.add('hidden');
+    error.textContent = '';
+  };
+  const save = async () => {
+    const taskTitle = title.value.trim();
+    if (!taskTitle) { error.textContent = t('cal.enterTask'); return; }
+    create.disabled = true;
+    try {
+      const tasks = await cmd('create_task', {
+        title: taskTitle,
+        project: project.value || null,
+        dueDate: date.value,
+      });
+      close();
+      setTasks(tasks);
+    } catch (e) {
+      error.textContent = String(e);
+    } finally {
+      create.disabled = false;
+    }
+  };
+
+  document.getElementById('calendar-task-close').onclick = close;
+  document.getElementById('calendar-task-cancel').onclick = close;
+  create.onclick = save;
+  title.onkeydown = e => {
+    if (e.key === 'Enter') save();
+    if (e.key === 'Escape') close();
+  };
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !overlay.classList.contains('hidden')) close();
+  });
+}
+
+function openCalendarTaskDialog(iso) {
+  const overlay = document.getElementById('calendar-task-overlay');
+  const project = document.getElementById('calendar-task-project');
+  document.getElementById('calendar-task-title').value = '';
+  document.getElementById('calendar-task-date').value = iso;
+  document.getElementById('calendar-task-error').textContent = '';
+  project.innerHTML = `<option value="">${t('cal.noProject')}</option>`
+    + appState.projects.map(p => `<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('');
+  overlay.classList.remove('hidden');
+  document.getElementById('calendar-task-title').focus();
+}
+
 function renderCalendar() {
   if (!appState) return;
   if (!calYear) { calYear = appState.calendar_year; calMonth = appState.calendar_month; }
@@ -978,7 +1144,14 @@ function renderCalendar() {
   // Deadlines by YYYY-MM-DD, placed in their day's cell.
   const byDay = {};
   for (const d of appState.deadlines) {
-    (byDay[d.date_iso] ||= []).push(d);
+    (byDay[d.date_iso] ||= []).push({ ...d, kind: 'email' });
+  }
+  for (const task of appState.tasks) {
+    if (task.due_date && (task.status === 'todo' || task.status === 'in_progress')) {
+      (byDay[task.due_date] ||= []).push({
+        kind: 'task', id: task.id, subject: task.title, project: task.project || '',
+      });
+    }
   }
   const urgencyOf = Object.fromEntries(appState.projects.map(p => [p.name, p.urgency]));
   const pad = n => String(n).padStart(2, '0');
@@ -1010,6 +1183,7 @@ function renderCalendar() {
     cell.innerHTML = `<div class="cal-day-num">${day}</div>`;
     const iso = isoOf(year, month, day);
     renderCalendarEvents(cell, byDay[iso] || [], iso < todayIso, urgencyOf);
+    cell.addEventListener('click', () => openCalendarTaskDialog(iso));
     grid.appendChild(cell);
   }
 }
@@ -1023,11 +1197,20 @@ function renderCalendarEvents(cell, events, past, urgencyOf, expanded = false) {
   for (const d of shown) {
     const pill = document.createElement('div');
     pill.className = 'cal-dl-pill'
+      + (d.kind === 'task' ? ' task' : '')
       + (urgencyOf[d.project] === 'high' ? ' high' : '')
       + (past ? ' past' : '');
     pill.textContent = d.subject;
     pill.title = d.project ? `${d.project} · ${d.subject}` : d.subject;
-    pill.addEventListener('click', () => switchToEmail(d.uid));
+    pill.addEventListener('click', e => {
+      e.stopPropagation();
+      if (d.kind === 'task') {
+        activeBoard = d.project || null;
+        switchPanel('tasks');
+      } else {
+        switchToEmail(d.uid);
+      }
+    });
     cell.appendChild(pill);
   }
   const hidden = events.length - shown.length;
@@ -1035,7 +1218,10 @@ function renderCalendarEvents(cell, events, past, urgencyOf, expanded = false) {
     const more = document.createElement('div');
     more.className = 'cal-more';
     more.textContent = t('cal.more', { n: hidden });
-    more.addEventListener('click', () => renderCalendarEvents(cell, events, past, urgencyOf, true));
+    more.addEventListener('click', e => {
+      e.stopPropagation();
+      renderCalendarEvents(cell, events, past, urgencyOf, true);
+    });
     cell.appendChild(more);
   }
 }
@@ -1052,7 +1238,7 @@ function setupKanban() {
     const title = input.value.trim();
     if (!title) return;
     try {
-      setTasks(await cmd('create_task', { title, project: activeBoard }));
+      setTasks(await cmd('create_task', { title, project: activeBoard, dueDate: null }));
       input.value = '';
     } catch (err) {
       input.placeholder = String(err);
@@ -1126,9 +1312,14 @@ function kanbanCard(task) {
 
   const chips = [];
   if (activeBoard === null && task.project) chips.push(`<span class="kanban-chip">${esc(task.project)}</span>`);
+  if (task.due_date) chips.push(`<span class="kanban-chip">${esc(fmtDayMonth(task.due_date))}</span>`);
   if (task.ai_verdict) chips.push(`<span class="kanban-chip ai" title="${t('kanban.aiMoved')}">${esc(task.ai_verdict === 'done' ? t('kanban.aiDone') : t('kanban.aiObsolete'))}</span>`);
   const source = task.source_uid
     ? `<div class="kanban-source" title="${t('kanban.openEmail')}">✉ ${esc(task.source_from)} · ${esc(task.source_subject)}</div>`
+    : '';
+  // When the task appeared: its email's date, or the day it was added by hand.
+  const appeared = task.created_ts
+    ? `<div class="kanban-date">${esc(t('kanban.appeared', { date: fmtDay(task.created_ts) }))}</div>`
     : '';
 
   card.innerHTML = `
@@ -1137,6 +1328,7 @@ function kanbanCard(task) {
       <button class="kanban-delete" title="${t('kanban.delete')}">×</button>
     </div>
     ${source}
+    ${appeared}
     ${chips.length ? `<div class="kanban-chips">${chips.join('')}</div>` : ''}
   `;
 
@@ -1179,41 +1371,56 @@ function renderProjects() {
 
 function setupNewProject() {
   const form = document.getElementById('projects-new-form');
-  const nameEl = document.getElementById('projects-new-name');
+  const sentenceEl = document.getElementById('projects-new-sentence');
   const errEl = document.getElementById('projects-new-error');
+  const createBtn = document.getElementById('projects-new-create');
+  const cancelBtn = document.getElementById('projects-new-cancel');
+  let creating = false;
 
   const closeForm = () => {
+    if (creating) return;
     form.classList.add('hidden');
-    nameEl.value = '';
+    sentenceEl.value = '';
     errEl.textContent = '';
   };
 
   const create = async () => {
-    const name = nameEl.value.trim();
-    const urgency = document.getElementById('projects-new-urgency').value;
-    if (!name) { errEl.textContent = t('proj.enterName'); return; }
+    if (creating) return;
+    const sentence = sentenceEl.value.trim();
+    if (!sentence) { errEl.textContent = t('proj.enterSentence'); return; }
+    creating = true;
+    createBtn.disabled = true;
+    cancelBtn.disabled = true;
+    createBtn.textContent = t('proj.analysing');
+    let project;
     try {
-      await cmd('add_project', { name, urgency });
+      project = await cmd('add_project', { sentence });
     } catch (e) {
       errEl.textContent = String(e);
       return;
+    } finally {
+      creating = false;
+      createBtn.disabled = false;
+      cancelBtn.disabled = false;
+      createBtn.textContent = t('proj.create');
     }
-    const project = { name, urgency, description: '', email_count: 0 };
-    if (appState) appState.projects.push(project);
+    // The backend already redrew the lists with the project and the emails filed into it.
+    if (appState && !appState.projects.some(x => x.name === project.name)) appState.projects.push(project);
     closeForm();
-    activeProject = name;
+    activeProject = project.name;
     renderProjects();
     showProject(project);
     document.getElementById('projects-desc').focus();
+    showToast(project.warning || t('proj.filed', { n: project.email_count }));
   };
 
   document.getElementById('projects-new').addEventListener('click', () => {
     form.classList.remove('hidden');
-    nameEl.focus();
+    sentenceEl.focus();
   });
-  document.getElementById('projects-new-cancel').addEventListener('click', closeForm);
-  document.getElementById('projects-new-create').addEventListener('click', create);
-  nameEl.addEventListener('keydown', e => {
+  cancelBtn.addEventListener('click', closeForm);
+  createBtn.addEventListener('click', create);
+  sentenceEl.addEventListener('keydown', e => {
     if (e.key === 'Enter') create();
     if (e.key === 'Escape') closeForm();
   });
@@ -1225,9 +1432,108 @@ function showProject(p) {
   document.getElementById('projects-detail-urgency').textContent = t('proj.urgency.' + (p.urgency === 'high' ? 'high' : 'normal'));
   document.getElementById('projects-desc').value = p.description || '';
 
+  const renameBtn = document.getElementById('projects-rename');
+  const deleteBtn = document.getElementById('projects-delete');
+  const titleDisplay = document.getElementById('projects-title-display');
+  const renameForm = document.getElementById('projects-rename-form');
+  const renameInput = document.getElementById('projects-rename-input');
+  const renameError = document.getElementById('projects-rename-error');
+  const renameSave = document.getElementById('projects-rename-save');
+  const renameCancel = document.getElementById('projects-rename-cancel');
+  deleteBtn.setAttribute('aria-label', t('proj.delete'));
+  titleDisplay.classList.remove('hidden');
+  renameForm.classList.add('hidden');
+  renameBtn.classList.remove('hidden');
+  renameError.textContent = '';
+  renameBtn.disabled = false;
+  deleteBtn.disabled = false;
+  renameBtn.onclick = () => {
+    renameInput.value = p.name;
+    titleDisplay.classList.add('hidden');
+    renameForm.classList.remove('hidden');
+    renameBtn.classList.add('hidden');
+    renameInput.focus();
+    renameInput.select();
+  };
+  const closeRename = () => {
+    titleDisplay.classList.remove('hidden');
+    renameForm.classList.add('hidden');
+    renameBtn.classList.remove('hidden');
+    renameError.textContent = '';
+  };
+  const saveRename = async () => {
+    const oldName = p.name;
+    const newName = renameInput.value.trim();
+    if (!newName) { renameError.textContent = t('proj.enterName'); return; }
+    if (newName === oldName) { closeRename(); return; }
+    renameInput.disabled = true;
+    renameSave.disabled = true;
+    renameCancel.disabled = true;
+    deleteBtn.disabled = true;
+    try {
+      p.name = await cmd('rename_project', { name: oldName, newName });
+      for (const [key, value] of Object.entries(appState)) {
+        if (key === 'projects' || !Array.isArray(value)) continue;
+        for (const item of value) if (item?.project === oldName) item.project = p.name;
+      }
+      renameProjectChips(oldName, p.name);
+      if (activeBoard === oldName) activeBoard = p.name;
+      activeProject = p.name;
+      renderProjects();
+      showProject(p);
+    } catch (e) {
+      renameError.textContent = String(e);
+      renameInput.disabled = false;
+      renameSave.disabled = false;
+      renameCancel.disabled = false;
+      deleteBtn.disabled = false;
+    }
+  };
+  renameInput.disabled = false;
+  renameSave.disabled = false;
+  renameCancel.disabled = false;
+  renameSave.onclick = saveRename;
+  renameCancel.onclick = closeRename;
+  renameInput.onkeydown = e => {
+    if (e.key === 'Enter') saveRename();
+    if (e.key === 'Escape') closeRename();
+  };
+  deleteBtn.onclick = async () => {
+    if (!(await askInApp(t('proj.deleteConfirm', { name: p.name }), t('proj.delete')))) return;
+    deleteBtn.disabled = true;
+    try {
+      await cmd('delete_project', { name: p.name });
+      appState.projects = appState.projects.filter(project => project.name !== p.name);
+      for (const [key, value] of Object.entries(appState)) {
+        if (key === 'projects' || key === 'tasks' || !Array.isArray(value)) continue;
+        for (const item of value) if (item?.project === p.name) item.project = '';
+      }
+      for (const task of appState.tasks) if (task.project === p.name) task.project = null;
+      renameProjectChips(p.name, null);
+      if (activeBoard === p.name) activeBoard = null;
+      activeProject = null;
+      document.getElementById('projects-detail').classList.add('hidden');
+      document.getElementById('projects-reading-pane').classList.add('hidden');
+      renderProjects();
+    } catch (e) {
+      deleteBtn.disabled = false;
+      showToast(String(e));
+    }
+  };
+
   document.getElementById('projects-save-desc').onclick = async () => {
     const desc = document.getElementById('projects-desc').value;
-    await cmd('save_project_description', { name: p.name, description: desc });
+    const btn = document.getElementById('projects-save-desc');
+    btn.disabled = true;
+    try {
+      // Saving also files the emails already there that match the new description.
+      const n = await cmd('save_project_description', { name: p.name, description: desc });
+      showToast(t('proj.filed', { n }));
+    } catch (e) {
+      showToast(String(e));
+    } finally {
+      btn.disabled = false;
+    }
   };
 
   const emailList = document.getElementById('projects-emails-list');
@@ -1770,7 +2076,44 @@ function senderLabel(email) {
 // openCompose()                         new message
 // openCompose({ mode: 'reply', email })  reply with the original quoted
 // openCompose({ mode: 'forward', email }) forward with the original below
-function openCompose({ mode = 'new', email = null, to: presetTo = '', subject: presetSubject = '',
+// Each call opens a new window, so several emails can be written at the same time.
+function openCompose(options = {}) {
+  const { mode = 'new', email = null, subject = '' } = options;
+  const title = email && mode === 'reply' ? `Re: ${email.subject}`
+    : email && mode === 'forward' ? `Fwd: ${email.subject}`
+    : subject || t('cmp.newMessage');
+  cmd('open_compose_window', { args: options, title }).catch(e => showToast(String(e)));
+}
+
+// Runs in a composer window: the composer fills the window, nothing else is set up.
+async function startComposeWindow(options) {
+  document.body.classList.add('compose-window');
+  initLang();
+  applyStaticI18n();
+  updateTranslateButton();
+  setupCompose();
+  try {
+    const s = await invoke('get_settings');
+    fontScale = s.font_scale || 1.0;
+    document.documentElement.style.fontSize = `${fontScale * 14}px`;
+    applyTheme(s.theme);
+    if (s.language && s.language !== LANG) applyLanguage(s.language);
+  } catch (_) {}
+  await loadComposeAccounts();
+  fillCompose(options);
+
+  const win = window.__TAURI__.window.getCurrentWindow();
+  const setTitle = () => win.setTitle($c('compose-subject').value.trim() || t('cmp.newMessage')).catch(() => {});
+  $c('compose-subject').addEventListener('input', setTitle);
+  setTitle();
+  // Closing the window with something typed asks first, like the discard button.
+  win.onCloseRequested(e => {
+    if (composeDirty && !composeClosing) { e.preventDefault(); requestCloseCompose(); }
+  });
+}
+let composeClosing = false;   // the composer window is closing on purpose (sent or discarded)
+
+function fillCompose({ mode = 'new', email = null, to: presetTo = '', subject: presetSubject = '',
                        cc: presetCc = '', html: presetHtml = '', inReplyTo: presetInReplyTo = null } = {}) {
   let to = presetTo, subject = presetSubject, html = presetHtml || '<div><br></div>';
   composeInReplyTo = presetInReplyTo;
@@ -1867,6 +2210,11 @@ function requestCloseCompose(force = false) {
 }
 
 function closeCompose() {
+  if (window.__COMPOSE__) {
+    composeClosing = true;
+    window.__TAURI__.window.getCurrentWindow().close();
+    return;
+  }
   $c('composer').classList.add('hidden');
   $c('composer').classList.remove('minimized', 'expanded');
   $c('compose-body').innerHTML = '';
@@ -1893,8 +2241,9 @@ async function sendEmail() {
   try {
     await cmd('send_email', { to, cc, bcc, subject, html, inReplyTo: composeInReplyTo,
                               account: Number($c('compose-from').value) || 0 });
+    if (window.__COMPOSE__) window.__TAURI__.event.emit('compose-sent').catch(() => {});
+    else showToast(t('cmp.sent'));
     closeCompose();
-    showToast(t('cmp.sent'));
   } catch (e) {
     btn.disabled = false;
     setComposeStatus(t('cmp.sendFailed', { err: e }), true);
@@ -1985,6 +2334,13 @@ function applyLanguage(code) {
     settingsData.accounts = collectAccounts();   // keep unsaved edits while re-rendering labels
     renderAccountBlocks(settingsData.accounts);
   }
+  if (!document.getElementById('setup-overlay').classList.contains('hidden')) {
+    renderSetupHint(document.getElementById('setup-email').value);
+    if (!document.getElementById('setup-scan').classList.contains('hidden')) renderScanRows();
+    if (!document.getElementById('setup-result').classList.contains('hidden')) {
+      renderSetupArea(document.getElementById('setup-email').value);
+    }
+  }
 }
 
 let savedLang = 'en';   // last saved; restored if Settings closes without saving
@@ -1999,6 +2355,7 @@ async function openSettings() {
   const langSelect = document.getElementById('s-language');
   langSelect.innerHTML = LANGUAGES.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
   langSelect.value = LANG;
+  document.getElementById('s-notify').checked = settingsData.notify_new_mail !== false;
   savedFontScale = settingsData.font_scale || 1.0;
   renderThemePicker();
   fontScale = settingsData.font_scale;
@@ -2012,8 +2369,11 @@ async function openSettings() {
   document.getElementById('s-cloud-password').value = '';
   setCloudStatus('');
   renderCloudStatus(await cmd('cloud_status'));
+  document.getElementById('s-update-auto').checked = autoUpdatesEnabled();
+  document.getElementById('s-update-current').textContent = await cmd('app_version');
 
   renderAccountBlocks(settingsData.accounts);
+  settingsBaseline = settingsSnapshot();
   document.getElementById('settings-overlay').classList.remove('hidden');
   // Default to general tab
   switchSettingsTab('general');
@@ -2134,7 +2494,12 @@ function renderAccountBlocks(accounts) {
     };
     block.querySelector('.collapse-account-btn').addEventListener('click', toggle);
     block.querySelector('.account-title').addEventListener('click', toggle);
-    block.querySelector('.remove-account-btn').addEventListener('click', () => {
+    block.querySelector('.remove-account-btn').addEventListener('click', async () => {
+      // A block with nothing typed in it goes without asking; any other asks first.
+      const filled = [...block.querySelectorAll('input:not([type=checkbox])')].some(i => i.value.trim());
+      const name = block.querySelector('.account-title').textContent.trim();
+      if (filled && !(await askInApp(t('set.removeAccountConfirm', { name }), t('set.removeAccount')))) return;
+      settingsData.accounts = collectAccounts();   // keep what was typed in the other blocks
       settingsData.accounts.splice(idx, 1);
       renderAccountBlocks(settingsData.accounts);
     });
@@ -2213,7 +2578,13 @@ function addPasswordToggles(root) {
 function setupSettings() {
   addPasswordToggles(document.getElementById('settings-overlay'));
   // Only the × closes Settings: a click beside the window must not lose what was typed.
-  document.getElementById('settings-close').addEventListener('click', closeSettings);
+  // With unsaved changes it asks first, listing them.
+  document.getElementById('settings-close').addEventListener('click', askCloseSettings);
+  document.getElementById('unsaved-save').addEventListener('click', () => { hideUnsaved(); saveSettings(); });
+  document.getElementById('unsaved-discard').addEventListener('click', () => { hideUnsaved(); closeSettings(); });
+  document.getElementById('unsaved-back').addEventListener('click', hideUnsaved);
+  keepFocusIn(document.getElementById('unsaved-overlay'), hideUnsaved);
+  keepFocusIn(document.getElementById('confirm-overlay'), () => document.getElementById('confirm-cancel').click());
 
   document.querySelectorAll('.tab').forEach(t => {
     t.addEventListener('click', () => switchSettingsTab(t.dataset.tab));
@@ -2225,21 +2596,33 @@ function setupSettings() {
     document.documentElement.style.fontSize = `${fontScale * 14}px`;
   });
 
-  document.getElementById('s-add-account').addEventListener('click', () => {
-    settingsData.accounts.push({
-      // All blank: the placeholders show the defaults used for blank fields.
-      label: '', imap_host: '', imap_port: '', imap_user: '', imap_pass: '',
-      imap_mailbox: '', imap_fetch: '',
-      smtp_host: '', smtp_port: '', smtp_user: '', smtp_pass: '', smtp_from: '',
-      signature_file: '', signature_on_new: true, signature_on_reply: true,
-    });
-    renderAccountBlocks(settingsData.accounts);
+  document.getElementById('s-add-account').addEventListener('click', openSetupDialog);
+
+  // The setup dialog: name, email and password, then Auto-setup looks for the servers.
+  addPasswordToggles(document.getElementById('setup-overlay'));
+  document.getElementById('setup-close').addEventListener('click', closeSetupDialog);
+  document.getElementById('setup-next').addEventListener('click', setupNext);
+  document.getElementById('setup-email').addEventListener('input', e => {
+    renderSetupHint(e.target.value);
+    document.getElementById('setup-result').classList.add('hidden');   // the result was for the old address
+  });
+  document.getElementById('setup-use').addEventListener('click', () => setupAddAccount(true));
+  document.getElementById('setup-manual').addEventListener('click', () => setupAddAccount(false));
+  // Step 1: the accounts Auto-scan found in another mail app.
+  document.getElementById('setup-scan-add').addEventListener('click', setupScanAdd);
+  document.getElementById('setup-scan-skip').addEventListener('click', setupScanSkip);
+  // Enter goes on with what was typed: it adds the ticked accounts on step 1.
+  document.getElementById('setup-overlay').addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || e.target.tagName === 'A') return;
+    if (!document.getElementById('setup-scan').classList.contains('hidden')) { setupScanAdd(); return; }
+    if (document.getElementById('setup-result').classList.contains('hidden')) setupNext();
   });
 
   document.getElementById('settings-save').addEventListener('click', saveSettings);
   document.getElementById('s-language').addEventListener('change', e => applyLanguage(e.target.value));   // live preview
   setupCloudSettings();
   setupAiSettings();
+  setupUpdateSettings();
 
   document.getElementById('s-show-qr').addEventListener('click', async () => {
     const qr = await cmd('get_qr');
@@ -2249,9 +2632,380 @@ function setupSettings() {
   });
 }
 
+function autoUpdatesEnabled() {
+  return CourrielCore.autoUpdatesEnabled(localStorage);
+}
+
+function setupUpdateSettings() {
+  document.getElementById('s-update-auto').addEventListener('change', e => {
+    CourrielCore.saveAutoUpdates(localStorage, e.target.checked);
+  });
+  document.getElementById('s-update-check').addEventListener('click', () => checkForUpdates(true));
+  document.getElementById('s-update-install').addEventListener('click', installAvailableUpdate);
+}
+
+async function checkForUpdates(manual = false) {
+  const checkBtn = document.getElementById('s-update-check');
+  const installBtn = document.getElementById('s-update-install');
+  const status = document.getElementById('s-update-status');
+  const notes = document.getElementById('s-update-notes');
+  if (manual) {
+    checkBtn.disabled = true;
+    status.textContent = t('set.updateChecking');
+    notes.classList.add('hidden');
+  }
+  try {
+    const info = await cmd('check_for_update');
+    document.getElementById('s-update-current').textContent = info.current_version;
+    if (!info.available) {
+      installBtn.classList.add('hidden');
+      if (manual) status.textContent = t('set.updateLatest');
+      return info;
+    }
+    installBtn.classList.remove('hidden');
+    status.textContent = t('set.updateAvailable', { version: info.version });
+    notes.textContent = info.notes || '';
+    notes.classList.toggle('hidden', !info.notes);
+    return info;
+  } catch (e) {
+    if (manual) status.textContent = t('set.updateError', { err: String(e) });
+    else console.warn('automatic update check', e);
+    return null;
+  } finally {
+    checkBtn.disabled = false;
+  }
+}
+
+async function installAvailableUpdate() {
+  const checkBtn = document.getElementById('s-update-check');
+  const installBtn = document.getElementById('s-update-install');
+  const status = document.getElementById('s-update-status');
+  checkBtn.disabled = true;
+  installBtn.disabled = true;
+  status.textContent = t('set.updateDownloading');
+  document.getElementById('s-update-progress').classList.remove('hidden');
+  try {
+    await cmd('install_update');
+  } catch (e) {
+    status.textContent = t('set.updateError', { err: String(e) });
+    checkBtn.disabled = false;
+    installBtn.disabled = false;
+  }
+}
+
+function renderUpdateProgress(progress) {
+  const bar = document.getElementById('s-update-progress');
+  const fill = bar.querySelector('div');
+  bar.classList.remove('hidden');
+  const percent = CourrielCore.updateProgressPercent(progress);
+  if (progress.finished) {
+    fill.style.width = `${percent}%`;
+    document.getElementById('s-update-status').textContent = t('set.updateRestarting');
+  } else if (percent !== null) {
+    fill.style.width = `${percent}%`;
+  }
+}
+
+async function checkAutomaticUpdates() {
+  if (!autoUpdatesEnabled()) return;
+  const info = await checkForUpdates(false);
+  if (info?.available) installAvailableUpdate();
+}
+
 function switchSettingsTab(tab) {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === `tab-${tab}`));
+}
+
+// ── Account setup dialog (Auto-setup) ───────────────────────────────────────
+const GMAIL_APP_PASSWORDS_URL = 'https://myaccount.google.com/apppasswords';
+// Google only offers app passwords once 2-Step Verification is on; before that its page
+// says "the setting you are looking for is not available for your account".
+const GMAIL_2SV_URL = 'https://myaccount.google.com/signinoptions/twosv';
+
+let setupFound;   // what Auto-setup returned: undefined = not asked yet, null = nothing found
+let setupNote;    // { key, vars }: one quiet line shown instead of a result
+
+// What a provider needs beyond a password, in one place (Auto-scan reuses this):
+// 'gmail' → an app password, 'ms' → no password any more, so not supported yet.
+// The key is an email address or an incoming server's host; null = nothing special.
+function providerHint(key) {
+  const s = (key || '').toLowerCase().trim();
+  const labels = (s.includes('@') ? s.slice(s.lastIndexOf('@') + 1) : s).split('.');
+  const listed = list => labels.some(l => list.some(d => l === d || l.startsWith(`${d}-`)));
+  if (listed(['gmail', 'googlemail', 'google'])) return 'gmail';
+  if (listed(['outlook', 'hotmail', 'live', 'msn', 'office365', 'microsoftonline'])) return 'ms';
+  return null;
+}
+
+// The note a provider needs beyond a password, written into the element it is given:
+// Auto-setup's password field and every Auto-scan row have one of their own.
+function fillHint(el, key) {
+  const kind = providerHint(key);
+  el.innerHTML = '';
+  el.classList.toggle('hidden', !kind);
+  if (!kind) return;
+  el.textContent = t(kind === 'gmail' ? 'setup.hint.gmail' : 'setup.hint.ms');
+  if (kind !== 'gmail') return;
+  // The two steps, in order, each one a link to its Google page.
+  [['setup.hint.gmail2sv', GMAIL_2SV_URL], ['setup.hint.gmailLink', GMAIL_APP_PASSWORDS_URL]].forEach(([k, url]) => {
+    const link = document.createElement('a');
+    link.className = 'setup-link';
+    link.href = url;
+    link.textContent = t(k);
+    // Opens in the system browser (Tauri shell plugin), not inside the app window.
+    link.addEventListener('click', e => {
+      e.preventDefault();
+      window.__TAURI__.shell.open(url).catch(err => console.error('open Google page', err));
+    });
+    const step = document.createElement('span');
+    step.className = 'setup-step';
+    step.append(link);
+    el.append(step);
+  });
+}
+
+// What the hint is about: a custom domain hosted by Google or Microsoft only shows who it
+// is through its incoming server.
+function hintKey(email, host) {
+  return providerHint(email) ? email : (host || '');
+}
+
+// The note under the password field.
+function renderSetupHint(key) {
+  fillHint(document.getElementById('setup-hint'), key);
+}
+
+// Step 1 (Auto-scan) when another mail app holds an account this one does not have yet,
+// step 2 (Auto-setup) otherwise.
+async function openSetupDialog() {
+  setupFound = undefined;
+  setupNote = null;
+  document.getElementById('setup-name').value = '';
+  document.getElementById('setup-email').value = '';
+  const pass = document.getElementById('setup-pass');
+  pass.value = '';
+  pass.type = 'password';   // the eye button keeps its place
+  document.getElementById('setup-next').disabled = false;
+  document.getElementById('setup-result').classList.add('hidden');
+  renderSetupHint('');
+  scanFound = await scanMailClients();
+  scanBoxes = [];
+  renderScanStep();
+  document.getElementById('setup-overlay').classList.remove('hidden');
+  document.getElementById(scanFound.length ? 'setup-scan-add' : 'setup-email').focus();
+}
+
+function closeSetupDialog() {
+  document.getElementById('setup-overlay').classList.add('hidden');
+}
+
+// ── Auto-scan ─────────────────────────────────────────────────────────────────
+
+let scanFound = [];   // the accounts the other mail apps hold, none of them in this app
+let scanBoxes = [];   // their checkboxes, in the same order
+
+// The accounts Auto-scan found, less the ones already set up here. A mail app that is not
+// installed gives nothing, so the dialog opens on Auto-setup as if none was found.
+async function scanMailClients() {
+  let found;
+  try {
+    found = await cmd('scan_mail_clients', {});
+  } catch (e) {
+    console.error('scan mail clients', e);
+    return [];
+  }
+  const known = new Set(collectAccounts()
+    .flatMap(a => [splitSender(a.smtp_from).email, a.imap_user])
+    .map(s => (s || '').trim().toLowerCase())
+    .filter(Boolean));
+  return (found || []).filter(a => !known.has((a.email || '').toLowerCase()));
+}
+
+// Which step to show: the list only when it has something to show.
+function renderScanStep() {
+  const found = !!scanFound.length;
+  document.getElementById('setup-scan').classList.toggle('hidden', !found);
+  document.getElementById('setup-form').classList.toggle('hidden', found);
+  if (found) renderScanRows();
+}
+
+// One row per account: its name and address, the app it was found in, what it needs and
+// what it cannot do. Ticking is kept when the labels are redrawn in another language.
+function renderScanRows() {
+  const was = scanBoxes.map(b => b.checked);
+  const list = document.getElementById('setup-scan-list');
+  list.innerHTML = '';
+  scanBoxes = [];
+  scanFound.forEach((a, i) => {
+    const key = hintKey(a.email, a.imap ? a.imap.host : '');
+    const row = document.createElement('label');
+    row.className = 'setup-scan-row';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    // Everything usable starts ticked, except what no longer accepts a password.
+    box.checked = was[i] === undefined ? (!a.pop3 && !!a.imap && providerHint(key) !== 'ms') : was[i];
+    // POP3, or an incoming server this app cannot reach: nothing a block could use.
+    if (a.pop3 || !a.imap) {
+      box.checked = false;
+      box.disabled = true;
+      row.classList.add('disabled');
+    }
+    const main = document.createElement('span');
+    main.className = 'setup-scan-main';
+    const name = document.createElement('span');
+    name.className = 'setup-scan-name';
+    name.textContent = `${a.label} \u2014 ${a.email}`;
+    const client = document.createElement('span');
+    client.className = 'setup-scan-client';
+    client.textContent = a.client;
+    main.append(name, client);
+    const problems = (a.pop3 ? t('setup.scan.pop3') + ' ' : '') + issueLines(a);
+    if (problems.trim()) {
+      const issue = document.createElement('p');
+      issue.className = 'setup-scan-issue';
+      issue.textContent = problems.trim();
+      main.append(issue);
+    }
+    const hint = document.createElement('p');
+    hint.className = 'settings-note setup-hint';
+    fillHint(hint, key);
+    main.append(hint);
+    row.append(box, main);
+    list.append(row);
+    scanBoxes.push(box);
+  });
+}
+
+// Add selected: one filled block each, without any password. Nothing is saved: the user
+// still presses Save. Nothing ticked goes on to Auto-setup, like Skip.
+function setupScanAdd() {
+  const picked = scanFound.filter((a, i) => scanBoxes[i] && scanBoxes[i].checked);
+  if (!picked.length) { setupScanSkip(); return; }
+  settingsData.accounts = collectAccounts();   // keep what was typed in the other blocks
+  const first = settingsData.accounts.length;
+  picked.forEach(a => settingsData.accounts.push(accountFromServers({
+    label: a.label,
+    name: (a.name || '').replace(/["<>]/g, ''),
+    email: a.email,
+    imap: a.imap,
+    smtp: a.smtp,
+    pass: '',   // a password never comes from the other app
+  })));
+  closeSetupDialog();
+  renderAccountBlocks(settingsData.accounts);
+  const block = document.querySelectorAll('.account-block')[first];
+  if (block) block.querySelector('.a-imap-pass').focus();   // the one thing still missing
+}
+
+// Skip: on to Auto-setup.
+function setupScanSkip() {
+  document.getElementById('setup-scan').classList.add('hidden');
+  document.getElementById('setup-form').classList.remove('hidden');
+  document.getElementById('setup-email').focus();
+}
+
+// Next: only the domain of the address goes to the backend, which tries its sources
+// one after the other.
+async function setupNext() {
+  const email = document.getElementById('setup-email').value.trim();
+  const next = document.getElementById('setup-next');
+  renderSetupHint(email);
+  setupFound = undefined;
+  // A domain without a dot ("o2game" instead of "o2game.com") cannot be looked up.
+  if (!isEmail(email) || !email.split('@').pop().includes('.')) { setupNote = { key: 'setup.badEmail' }; renderSetupArea(email); return; }
+  setupNote = { key: 'setup.looking' };
+  renderSetupArea(email);
+  next.disabled = true;
+  try {
+    setupFound = await cmd('lookup_mail_settings', { email });   // null: nobody knows that domain
+    setupNote = null;
+  } catch (e) {
+    setupNote = { key: 'setup.failed', vars: { err: e } };
+  }
+  next.disabled = false;
+  renderSetupArea(email);
+}
+
+// The result area: what was found, why one side is missing, where the settings came
+// from, then Use these / Enter manually.
+function renderSetupArea(email) {
+  const domain = (email.split('@').pop() || '').toLowerCase();
+  const line = document.getElementById('setup-line');
+  const issues = document.getElementById('setup-issues');
+  const source = document.getElementById('setup-source');
+  const use = document.getElementById('setup-use');
+  const manual = document.getElementById('setup-manual');
+  document.getElementById('setup-result').classList.remove('hidden');
+  issues.textContent = '';
+  source.textContent = '';
+  use.classList.add('hidden');
+  manual.classList.add('hidden');
+  line.textContent = setupNote ? t(setupNote.key, setupNote.vars || {}) : '';
+  if (setupFound === undefined) {
+    // A failed lookup still leaves a way forward.
+    if (setupNote && setupNote.key === 'setup.failed') manual.classList.remove('hidden');
+    return;
+  }
+  if (setupFound === null) {
+    line.textContent = t('setup.notFound', { domain });
+    manual.classList.remove('hidden');
+    return;
+  }
+  const s = setupFound;
+  const servers = [s.imap, s.smtp].filter(Boolean).map(v => `${v.host}:${v.port}`).join(' · ');
+  line.textContent = servers ? t('setup.found', { provider: s.provider || domain, servers }) : '';
+  source.textContent = t('setup.source', { host: s.source });
+  issues.textContent = issueLines(s);
+  manual.classList.remove('hidden');
+  // A custom domain hosted by Google or Microsoft only shows who it is through its servers.
+  const key = hintKey(email, s.imap ? s.imap.host : '');
+  renderSetupHint(key);
+  if ((s.imap || s.smtp) && providerHint(key) !== 'ms') use.classList.remove('hidden');
+}
+
+// Why one side of what was found is missing: the same sentences for Auto-setup and
+// Auto-scan.
+function issueLines(a) {
+  const problems = [];
+  if (!a.imap && a.imap_issue) problems.push(t(`setup.imapIssue.${a.imap_issue}`));
+  if (!a.smtp && a.smtp_issue) problems.push(t(`setup.smtpIssue.${a.smtp_issue}`));
+  return problems.join(' ');
+}
+
+// The AccountDto of a block whose servers are known already: what Auto-setup looked up and
+// what Auto-scan read from a profile are the same three values. No block is ever filled
+// with a password it did not get from the user.
+function accountFromServers({ label, name, email, imap, smtp, pass }) {
+  const field = (side, f) => (side ? side[f] : '');
+  return {
+    label: label || email,
+    imap_host: field(imap, 'host'), imap_port: field(imap, 'port'),
+    imap_user: imap ? imap.user : email, imap_pass: pass,
+    imap_mailbox: '', imap_fetch: '',
+    smtp_host: field(smtp, 'host'), smtp_port: field(smtp, 'port'),
+    smtp_user: smtp ? smtp.user : email, smtp_pass: pass,
+    smtp_from: name ? `"${name}" <${email}>` : email,
+    signature_file: '', signature_on_new: true, signature_on_reply: true,
+  };
+}
+
+// The usual account block, filled with what is known, then the usual Test. Nothing is
+// saved: the user still presses Save.
+function setupAddAccount(withSettings) {
+  const name = document.getElementById('setup-name').value.trim().replace(/["<>]/g, '');
+  const email = document.getElementById('setup-email').value.trim();
+  const pass = document.getElementById('setup-pass').value;
+  const s = withSettings ? setupFound : null;
+  settingsData.accounts = collectAccounts();   // keep what was typed in the other blocks
+  settingsData.accounts.push(accountFromServers({
+    label: email, name, email,
+    imap: s ? s.imap : null, smtp: s ? s.smtp : null, pass,
+  }));
+  closeSetupDialog();
+  renderAccountBlocks(settingsData.accounts);
+  const blocks = document.querySelectorAll('.account-block');
+  if (s && (s.imap || s.smtp)) testAccount(blocks[blocks.length - 1]);
 }
 
 function collectAccounts() {
@@ -2292,6 +3046,7 @@ async function saveSettings() {
       accounts, ai: collectAiSettings(), giphyKey, fontScale,
       theme: document.documentElement.dataset.theme,
       language: LANG,
+      notifyNewMail: document.getElementById('s-notify').checked,
     });
     await saveCloudProject();   // Supabase settings are local-only: they have their own command
     savedTheme = document.documentElement.dataset.theme;
@@ -2300,7 +3055,7 @@ async function saveSettings() {
     await loadComposeAccounts();   // senders and signatures may have changed
     closeSettings();
   } catch (e) {
-    alert(t('set.saveFailed', { err: e }));
+    showToast(t('set.saveFailed', { err: e }));   // alert() is not shown in the app window
   }
 }
 
@@ -2592,6 +3347,7 @@ async function saveCloudProject() {
   renderCloudStatus(await cmd('set_cloud', { url, anonKey }));
   settingsData.supabase_url = url;
   settingsData.supabase_anon_key = anonKey;
+  if (settingsBaseline) settingsBaseline.cloud = cloudProjectFields();   // saved now: no longer unsaved
 }
 
 function setupCloudSettings() {
@@ -2632,6 +3388,89 @@ function setupCloudSettings() {
   }));
 }
 
+// Yes/no question in the app's own look (the webview's confirm() is not shown in the
+// app window, and a system dialog does not follow the theme). Resolves true on `okLabel`.
+function askInApp(message, okLabel) {
+  const overlay = document.getElementById('confirm-overlay');
+  document.getElementById('confirm-text').textContent = message;
+  const ok = document.getElementById('confirm-ok'), cancel = document.getElementById('confirm-cancel');
+  ok.textContent = okLabel;
+  cancel.textContent = t('proj.cancel');
+  overlay.classList.remove('hidden');
+  cancel.focus();
+  return new Promise(resolve => {
+    const done = answer => { overlay.classList.add('hidden'); resolve(answer); };
+    ok.onclick = () => done(true);
+    cancel.onclick = () => done(false);
+  });
+}
+
+// What Settings holds, in the shape the unsaved-changes recap compares.
+let settingsBaseline = null;   // taken when Settings opens
+
+function settingsSnapshot() {
+  return {
+    theme: document.documentElement.dataset.theme, fontScale, language: LANG,
+    notify: document.getElementById('s-notify').checked,
+    accounts: collectAccounts(),
+    // A provider only looked at leaves an empty key behind: not a change.
+    ai: JSON.stringify(collectAiSettings(), (k, v) => v === '' ? undefined : v),
+    giphy: document.getElementById('s-giphy-key').value,
+    cloud: cloudProjectFields(),
+  };
+}
+
+function cloudProjectFields() {
+  return document.getElementById('s-cloud-url').value.trim() + '\n' + document.getElementById('s-cloud-anon').value.trim();
+}
+
+// One line per change since Settings opened; accounts are matched by their name in the app.
+function unsavedChanges() {
+  const a = settingsBaseline, b = settingsSnapshot(), lines = [];
+  if (b.theme !== a.theme) lines.push(t('set.theme'));
+  if (b.fontScale !== a.fontScale) lines.push(t('set.fontScale'));
+  if (b.language !== a.language) lines.push(t('set.language'));
+  if (b.notify !== a.notify) lines.push(t('set.notify'));
+  const name = (acc, i) => acc.label || t('set.account', { n: i + 1 });
+  const before = new Map(a.accounts.map((acc, i) => [name(acc, i), JSON.stringify(acc)]));
+  const after = new Map(b.accounts.map((acc, i) => [name(acc, i), JSON.stringify(acc)]));
+  for (const [n, json] of after) {
+    if (!before.has(n)) lines.push(t('set.unsavedAdded', { name: n }));
+    else if (before.get(n) !== json) lines.push(t('set.unsavedChanged', { name: n }));
+  }
+  for (const n of before.keys()) if (!after.has(n)) lines.push(t('set.unsavedRemoved', { name: n }));
+  // Two accounts with the same name hide each other above: still say the accounts changed.
+  if (!lines.length && JSON.stringify(a.accounts) !== JSON.stringify(b.accounts)) lines.push(t('set.accounts'));
+  if (b.ai !== a.ai) lines.push(t('set.ai'));
+  if (b.giphy !== a.giphy) lines.push(t('set.giphyKey'));
+  if (b.cloud !== a.cloud) lines.push(t('set.cloud'));
+  return lines;
+}
+
+function askCloseSettings() {
+  const lines = unsavedChanges();
+  if (!lines.length) return closeSettings();
+  document.getElementById('unsaved-list').innerHTML = lines.map(l => `<li dir="auto">${esc(l)}</li>`).join('');
+  document.getElementById('unsaved-overlay').classList.remove('hidden');
+  document.getElementById('unsaved-back').focus();
+}
+
+// While a question is open, Tab stays on its buttons and Escape answers "no".
+function keepFocusIn(overlay, onEscape) {
+  overlay.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onEscape(); }
+    if (e.key !== 'Tab') return;
+    e.preventDefault();
+    const btns = [...overlay.querySelectorAll('button')];
+    const i = btns.indexOf(document.activeElement);
+    btns[(i + (e.shiftKey ? -1 : 1) + btns.length) % btns.length].focus();
+  });
+}
+
+function hideUnsaved() {
+  document.getElementById('unsaved-overlay').classList.add('hidden');
+}
+
 // Closing without saving undoes the live previews (theme, font size).
 function closeSettings() {
   document.getElementById('settings-overlay').classList.add('hidden');
@@ -2658,6 +3497,7 @@ function emailRow(email) {
     <div class="email-row-body">
       <div class="email-row-top">
         <span class="email-from">${esc(email.from_name)}</span>
+        ${projectChip(email.project)}
         <span class="email-date">${esc(emailDateShort(email))}</span>
       </div>
       <div class="email-subject">${esc(email.subject)}</div>
@@ -2673,6 +3513,27 @@ function emailRow(email) {
     });
   }
   return row;
+}
+
+function projectChip(project) {
+  return project ? `<span class="email-project" title="${esc(project)}">${esc(project)}</span>` : '';
+}
+
+// Updates the project chip of the inbox rows showing this email.
+function setRowProject(uid, project) {
+  document.querySelectorAll(`.email-row[data-uid="${uid}"]`).forEach(row => {
+    if (row.closest(NON_INBOX_PANELS)) return;
+    row.querySelector('.email-project')?.remove();
+    row.querySelector('.email-date')?.insertAdjacentHTML('beforebegin', projectChip(project));
+  });
+}
+
+// After a project is renamed (newName) or deleted (null).
+function renameProjectChips(oldName, newName) {
+  document.querySelectorAll('.email-project').forEach(chip => {
+    if (chip.textContent !== oldName) return;
+    if (newName) { chip.textContent = newName; chip.title = newName; } else chip.remove();
+  });
 }
 
 function readToggleTitle(isRead) {

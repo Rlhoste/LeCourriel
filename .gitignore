@@ -21,3 +21,7 @@ signature.html
 # Local tooling / scratch
 .claude/
 image.png
+__pycache__/
+
+# End-to-end test dependencies
+node_modules/
