@@ -2495,9 +2495,10 @@ function renderAccountBlocks(accounts) {
     block.querySelector('.collapse-account-btn').addEventListener('click', toggle);
     block.querySelector('.account-title').addEventListener('click', toggle);
     block.querySelector('.remove-account-btn').addEventListener('click', async () => {
-      // A block with nothing in it goes without asking; one that names an account asks first.
-      const name = block.querySelector('.a-sender-email').value.trim() || loginEmail(block);
-      if (name && !(await askInApp(t('set.removeAccountConfirm', { name }), t('set.removeAccount')))) return;
+      // A block with nothing typed in it goes without asking; any other asks first.
+      const filled = [...block.querySelectorAll('input:not([type=checkbox])')].some(i => i.value.trim());
+      const name = block.querySelector('.account-title').textContent.trim();
+      if (filled && !(await askInApp(t('set.removeAccountConfirm', { name }), t('set.removeAccount')))) return;
       settingsData.accounts = collectAccounts();   // keep what was typed in the other blocks
       settingsData.accounts.splice(idx, 1);
       renderAccountBlocks(settingsData.accounts);
@@ -2582,6 +2583,8 @@ function setupSettings() {
   document.getElementById('unsaved-save').addEventListener('click', () => { hideUnsaved(); saveSettings(); });
   document.getElementById('unsaved-discard').addEventListener('click', () => { hideUnsaved(); closeSettings(); });
   document.getElementById('unsaved-back').addEventListener('click', hideUnsaved);
+  keepFocusIn(document.getElementById('unsaved-overlay'), hideUnsaved);
+  keepFocusIn(document.getElementById('confirm-overlay'), () => document.getElementById('confirm-cancel').click());
 
   document.querySelectorAll('.tab').forEach(t => {
     t.addEventListener('click', () => switchSettingsTab(t.dataset.tab));
@@ -3052,7 +3055,7 @@ async function saveSettings() {
     await loadComposeAccounts();   // senders and signatures may have changed
     closeSettings();
   } catch (e) {
-    alert(t('set.saveFailed', { err: e }));
+    showToast(t('set.saveFailed', { err: e }));   // alert() is not shown in the app window
   }
 }
 
@@ -3266,6 +3269,7 @@ async function saveCloudProject() {
   renderCloudStatus(await cmd('set_cloud', { url, anonKey }));
   settingsData.supabase_url = url;
   settingsData.supabase_anon_key = anonKey;
+  if (settingsBaseline) settingsBaseline.cloud = cloudProjectFields();   // saved now: no longer unsaved
 }
 
 function setupCloudSettings() {
@@ -3331,18 +3335,23 @@ function settingsSnapshot() {
     theme: document.documentElement.dataset.theme, fontScale, language: LANG,
     notify: document.getElementById('s-notify').checked,
     accounts: collectAccounts(),
-    ai: JSON.stringify(collectAiSettings()),
+    // A provider only looked at leaves an empty key behind: not a change.
+    ai: JSON.stringify(collectAiSettings(), (k, v) => v === '' ? undefined : v),
     giphy: document.getElementById('s-giphy-key').value,
-    cloud: document.getElementById('s-cloud-url').value + '\n' + document.getElementById('s-cloud-anon').value,
+    cloud: cloudProjectFields(),
   };
+}
+
+function cloudProjectFields() {
+  return document.getElementById('s-cloud-url').value.trim() + '\n' + document.getElementById('s-cloud-anon').value.trim();
 }
 
 // One line per change since Settings opened; accounts are matched by their name in the app.
 function unsavedChanges() {
   const a = settingsBaseline, b = settingsSnapshot(), lines = [];
-  if (b.theme !== savedTheme) lines.push(t('set.theme'));
-  if (b.fontScale !== savedFontScale) lines.push(t('set.fontScale'));
-  if (b.language !== savedLang) lines.push(t('set.language'));
+  if (b.theme !== a.theme) lines.push(t('set.theme'));
+  if (b.fontScale !== a.fontScale) lines.push(t('set.fontScale'));
+  if (b.language !== a.language) lines.push(t('set.language'));
   if (b.notify !== a.notify) lines.push(t('set.notify'));
   const name = (acc, i) => acc.label || t('set.account', { n: i + 1 });
   const before = new Map(a.accounts.map((acc, i) => [name(acc, i), JSON.stringify(acc)]));
@@ -3352,6 +3361,8 @@ function unsavedChanges() {
     else if (before.get(n) !== json) lines.push(t('set.unsavedChanged', { name: n }));
   }
   for (const n of before.keys()) if (!after.has(n)) lines.push(t('set.unsavedRemoved', { name: n }));
+  // Two accounts with the same name hide each other above: still say the accounts changed.
+  if (!lines.length && JSON.stringify(a.accounts) !== JSON.stringify(b.accounts)) lines.push(t('set.accounts'));
   if (b.ai !== a.ai) lines.push(t('set.ai'));
   if (b.giphy !== a.giphy) lines.push(t('set.giphyKey'));
   if (b.cloud !== a.cloud) lines.push(t('set.cloud'));
@@ -3363,6 +3374,19 @@ function askCloseSettings() {
   if (!lines.length) return closeSettings();
   document.getElementById('unsaved-list').innerHTML = lines.map(l => `<li dir="auto">${esc(l)}</li>`).join('');
   document.getElementById('unsaved-overlay').classList.remove('hidden');
+  document.getElementById('unsaved-back').focus();
+}
+
+// While a question is open, Tab stays on its buttons and Escape answers "no".
+function keepFocusIn(overlay, onEscape) {
+  overlay.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onEscape(); }
+    if (e.key !== 'Tab') return;
+    e.preventDefault();
+    const btns = [...overlay.querySelectorAll('button')];
+    const i = btns.indexOf(document.activeElement);
+    btns[(i + (e.shiftKey ? -1 : 1) + btns.length) % btns.length].focus();
+  });
 }
 
 function hideUnsaved() {
