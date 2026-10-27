@@ -36,7 +36,7 @@ STRINGS.ar = {
     'kanban.title': 'المهام', 'kanban.todo': 'للتنفيذ', 'kanban.inProgress': 'قيد التنفيذ',
     'kanban.done': 'منجزة', 'kanban.givenUp': 'متروكة',
     'kanban.add': '+ إضافة مهمة…', 'kanban.addTo': '+ إضافة مهمة إلى {project}…', 'kanban.all': 'كل المهام',
-    'kanban.delete': 'حذف المهمة', 'kanban.openEmail': 'فتح الرسالة',
+    'kanban.delete': 'حذف المهمة', 'kanban.openEmail': 'فتح الرسالة', 'kanban.appeared': 'ظهرت في {date}',
     'kanban.aiMoved': 'نقلها الذكاء الاصطناعي تلقائيًا', 'kanban.aiDone': 'الذكاء الاصطناعي: منجزة', 'kanban.aiObsolete': 'الذكاء الاصطناعي: لم تعد لازمة',
 
     'cal.title': 'التقويم', 'cal.more': '+{n} أخرى',
@@ -52,7 +52,7 @@ STRINGS.ar = {
     'proj.new': '+ مشروع جديد', 'proj.namePlaceholder': 'اسم المشروع',
     'proj.sentencePlaceholder': 'صِف المشروع في جملة قصيرة واحدة…',
     'proj.urgency.normal': 'عادية', 'proj.urgency.high': 'عالية',
-    'proj.create': 'إنشاء', 'proj.cancel': 'إلغاء', 'proj.descPlaceholder': 'وصف المشروع…', 'proj.save': 'حفظ',
+    'proj.create': 'إنشاء', 'proj.filed': 'الرسائل في هذا المشروع: {n}', 'proj.cancel': 'إلغاء', 'proj.descPlaceholder': 'وصف المشروع…', 'proj.save': 'حفظ',
     'proj.analysing': 'جارٍ التحليل…', 'proj.enterSentence': 'صِف المشروع في جملة قصيرة واحدة.',
     'proj.delete': 'حذف المشروع', 'proj.deleteConfirm': 'هل أنت متأكد من حذف المشروع «{name}»؟',
     'proj.rename': 'إعادة التسمية', 'proj.renamePrompt': 'اسم المشروع الجديد:',

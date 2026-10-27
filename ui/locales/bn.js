@@ -31,7 +31,7 @@ STRINGS.bn = {
     'kanban.title': 'কাজ', 'kanban.todo': 'করণীয়', 'kanban.inProgress': 'চলছে',
     'kanban.done': 'সম্পন্ন', 'kanban.givenUp': 'বাদ দেওয়া',
     'kanban.add': '+ কাজ যোগ করুন…', 'kanban.addTo': '+ {project}-এ কাজ যোগ করুন…', 'kanban.all': 'সব কাজ',
-    'kanban.delete': 'কাজ মুছুন', 'kanban.openEmail': 'ইমেল খুলুন',
+    'kanban.delete': 'কাজ মুছুন', 'kanban.openEmail': 'ইমেল খুলুন', 'kanban.appeared': '{date} তারিখে এসেছে',
     'kanban.aiMoved': 'AI স্বয়ংক্রিয়ভাবে সরিয়েছে', 'kanban.aiDone': 'AI: সম্পন্ন', 'kanban.aiObsolete': 'AI: অপ্রাসঙ্গিক',
 
     'cal.title': 'ক্যালেন্ডার', 'cal.more': 'আরও {n}টি',
@@ -47,7 +47,7 @@ STRINGS.bn = {
     'proj.new': '+ নতুন প্রজেক্ট', 'proj.namePlaceholder': 'প্রজেক্টের নাম',
     'proj.sentencePlaceholder': 'একটি ছোট বাক্যে প্রজেক্টটি বর্ণনা করুন…',
     'proj.urgency.normal': 'সাধারণ', 'proj.urgency.high': 'উচ্চ',
-    'proj.create': 'তৈরি করুন', 'proj.cancel': 'বাতিল', 'proj.descPlaceholder': 'প্রজেক্টের বিবরণ…', 'proj.save': 'সংরক্ষণ করুন',
+    'proj.create': 'তৈরি করুন', 'proj.filed': 'এই প্রকল্পে ইমেল: {n}', 'proj.cancel': 'বাতিল', 'proj.descPlaceholder': 'প্রজেক্টের বিবরণ…', 'proj.save': 'সংরক্ষণ করুন',
     'proj.analysing': 'বিশ্লেষণ করা হচ্ছে…', 'proj.enterSentence': 'একটি ছোট বাক্যে প্রজেক্টটি বর্ণনা করুন।',
     'proj.delete': 'প্রজেক্ট মুছুন', 'proj.deleteConfirm': 'আপনি কি “{name}” প্রজেক্টটি মুছতে চান?',
     'proj.rename': 'নাম পরিবর্তন করুন', 'proj.renamePrompt': 'প্রজেক্টের নতুন নাম:',

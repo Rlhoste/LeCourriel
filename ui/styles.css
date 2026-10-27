@@ -1123,6 +1123,7 @@ button.row-mark:hover::before { transform: scale(1.2); }
   cursor: pointer;
 }
 .kanban-source:hover { color: var(--accent); }
+.kanban-date { font-size: 0.72rem; color: var(--text-dim); margin-top: 4px; }
 
 .kanban-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .kanban-chip {

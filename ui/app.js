@@ -372,7 +372,8 @@ function renderTaskRows(container, items) {
   for (const task of items) {
     const row = document.createElement('div');
     row.className = 'email-row';
-    const meta = [task.status === 'in_progress' ? t('kanban.inProgress') : t('kanban.todo'), task.project, task.source_from]
+    const meta = [task.status === 'in_progress' ? t('kanban.inProgress') : t('kanban.todo'), task.project, task.source_from,
+      task.created_ts ? t('kanban.appeared', { date: fmtDay(task.created_ts) }) : '']
       .filter(Boolean).join(' · ');
     row.innerHTML = `<div class="email-row-top"><span class="email-from">${esc(task.title)}</span></div><div class="email-summary">${esc(meta)}</div>`;
     row.addEventListener('click', () => {
@@ -1316,6 +1317,10 @@ function kanbanCard(task) {
   const source = task.source_uid
     ? `<div class="kanban-source" title="${t('kanban.openEmail')}">✉ ${esc(task.source_from)} · ${esc(task.source_subject)}</div>`
     : '';
+  // When the task appeared: its email's date, or the day it was added by hand.
+  const appeared = task.created_ts
+    ? `<div class="kanban-date">${esc(t('kanban.appeared', { date: fmtDay(task.created_ts) }))}</div>`
+    : '';
 
   card.innerHTML = `
     <div class="kanban-card-top">
@@ -1323,6 +1328,7 @@ function kanbanCard(task) {
       <button class="kanban-delete" title="${t('kanban.delete')}">×</button>
     </div>
     ${source}
+    ${appeared}
     ${chips.length ? `<div class="kanban-chips">${chips.join('')}</div>` : ''}
   `;
 
@@ -1398,12 +1404,14 @@ function setupNewProject() {
       cancelBtn.disabled = false;
       createBtn.textContent = t('proj.create');
     }
-    if (appState) appState.projects.push(project);
+    // The backend already redrew the lists with the project and the emails filed into it.
+    if (appState && !appState.projects.some(x => x.name === project.name)) appState.projects.push(project);
     closeForm();
     activeProject = project.name;
     renderProjects();
     showProject(project);
     document.getElementById('projects-desc').focus();
+    showToast(project.warning || t('proj.filed', { n: project.email_count }));
   };
 
   document.getElementById('projects-new').addEventListener('click', () => {
@@ -1509,13 +1517,23 @@ function showProject(p) {
       renderProjects();
     } catch (e) {
       deleteBtn.disabled = false;
-      flash(String(e));
+      showToast(String(e));
     }
   };
 
   document.getElementById('projects-save-desc').onclick = async () => {
     const desc = document.getElementById('projects-desc').value;
-    await cmd('save_project_description', { name: p.name, description: desc });
+    const btn = document.getElementById('projects-save-desc');
+    btn.disabled = true;
+    try {
+      // Saving also files the emails already there that match the new description.
+      const n = await cmd('save_project_description', { name: p.name, description: desc });
+      showToast(t('proj.filed', { n }));
+    } catch (e) {
+      showToast(String(e));
+    } finally {
+      btn.disabled = false;
+    }
   };
 
   const emailList = document.getElementById('projects-emails-list');

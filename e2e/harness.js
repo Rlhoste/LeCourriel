@@ -153,8 +153,13 @@ async function save(browser) {
     timeoutMsg: 'Settings did not close after Save' });
 }
 
+/** Open a sidebar panel. Clicks again if the page moved under the first click (it can
+ *  while a big mailbox is still being drawn). */
 async function showPanel(browser, panel) {
-  await (await browser.$(`.nav-btn[data-panel="${panel}"]`)).click();
+  await browser.waitUntil(async () => {
+    await (await browser.$(`.nav-btn[data-panel="${panel}"]`)).click();
+    return (await browser.$(`#panel-${panel}`)).getAttribute('class').then(c => c.split(' ').includes('active'));
+  }, { timeout: 10000, interval: 500, timeoutMsg: `The ${panel} panel did not open` });
 }
 
 /** Text of an element, '' if it is missing or hidden. (WebKitWebDriver's getText drops

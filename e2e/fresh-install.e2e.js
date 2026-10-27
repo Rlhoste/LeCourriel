@@ -73,8 +73,14 @@ async function assertTriaged(browser) {
   await h.waitText(browser, '#ov-week-strip', fx.SUBJECTS.task);
   await h.waitText(browser, '#ov-meetings-list', fx.SUBJECTS.meeting);
 
+  // Each task shows when it appeared: the date of its email (received 2 hours ago).
+  const appeared = await browser.execute(ts => t('kanban.appeared', { date: fmtDay(ts) }),
+    Math.floor(Date.now() / 1000) - 2 * 3600);
+  await h.waitText(browser, '#ov-tasks-list', appeared);
+
   await h.showPanel(browser, 'tasks');
   await h.waitText(browser, '.kanban-col[data-status="todo"] .kanban-cards', fx.TASK_TEXT);
+  await h.waitText(browser, '.kanban-col[data-status="todo"] .kanban-cards', appeared);
 
   await h.showPanel(browser, 'inbox');
   const inbox = await h.textOf(browser, '#panel-inbox .email-list');
@@ -119,6 +125,32 @@ test('account and AI set up in the same Save: everything is sorted', async () =>
     await (await browser.$('#ov-toggle-opened')).click();
     await h.waitText(browser, '#ov-urgent-list', fx.SUBJECTS.readUrgent);
     await (await browser.$('#ov-toggle-opened')).click();
+
+    // A new project from one short sentence: the AI gets the related emails and the
+    // description comes back as "<sentence>. People: …. Keywords: …."
+    ai.project = {
+      name: 'Production outage', summary: 'Handling the production server outage reported by Alice',
+      people: ['Alice Ops (operations)'], keywords: ['production server', 'outage', 'downtime'], importance: 'high',
+    };
+    ai.projectMatch = /Subject: Production server is down/;
+    await h.showPanel(browser, 'projects');
+    await (await h.waitVisible(browser, '#projects-new')).click();
+    await (await h.waitVisible(browser, '#projects-new-sentence')).setValue('the server outage alice told me about');
+    await (await browser.$('#projects-new-create')).click();
+    const desc = await h.waitVisible(browser, '#projects-desc');
+    await browser.waitUntil(async () => (await desc.getValue()).includes('Keywords:'),
+      { timeout: 15000, timeoutMsg: 'The project description was not prepared by the AI' });
+    assert.equal(await desc.getValue(),
+      'Handling the production server outage reported by Alice. People: Alice Ops (operations). ' +
+      'Keywords: production server, outage, downtime.');
+    const asked = ai.requests.find(r => r.kind === 'project');
+    assert.ok(asked.user.includes('REQUEST: the server outage alice told me about'), asked.user);
+    assert.ok(asked.user.includes(`Subject: ${fx.SUBJECTS.urgent}`), `the related email was not sent:\n${asked.user}`);
+    // The emails already in the inbox that belong to it are filed straight away.
+    await h.waitText(browser, '#projects-emails-list', fx.SUBJECTS.urgent);
+    assert.ok(!(await h.textOf(browser, '#projects-emails-list')).includes(fx.SUBJECTS.newsletter));
+    await h.waitText(browser, '#projects-list', 'Production outage');
+    await h.showPanel(browser, 'overview');
 
     // A new email arrives while the app is open.
     imap.append('INBOX', fx.lateEmail());

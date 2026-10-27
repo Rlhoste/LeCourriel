@@ -66,6 +66,9 @@ pub struct ProjectDto {
     pub urgency: String,
     pub description: String,
     pub email_count: i32,
+    /// Set when a new project was created but its emails could not be filed (AI error).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

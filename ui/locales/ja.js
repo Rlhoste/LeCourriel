@@ -31,7 +31,7 @@ STRINGS.ja = {
     'kanban.title': 'タスク', 'kanban.todo': '未着手', 'kanban.inProgress': '進行中',
     'kanban.done': '完了', 'kanban.givenUp': '中止',
     'kanban.add': '+ タスクを追加…', 'kanban.addTo': '+ {project} にタスクを追加…', 'kanban.all': 'すべてのタスク',
-    'kanban.delete': 'タスクを削除', 'kanban.openEmail': 'メールを開く',
+    'kanban.delete': 'タスクを削除', 'kanban.openEmail': 'メールを開く', 'kanban.appeared': '{date} に発生',
     'kanban.aiMoved': 'AI が自動で移動しました', 'kanban.aiDone': 'AI：完了', 'kanban.aiObsolete': 'AI：不要',
 
     'cal.title': 'カレンダー', 'cal.more': '他 {n} 件',
@@ -47,7 +47,7 @@ STRINGS.ja = {
     'proj.new': '+ 新規プロジェクト', 'proj.namePlaceholder': 'プロジェクト名',
     'proj.sentencePlaceholder': 'プロジェクトを短い一文で説明してください…',
     'proj.urgency.normal': '標準', 'proj.urgency.high': '高',
-    'proj.create': '作成', 'proj.cancel': 'キャンセル', 'proj.descPlaceholder': 'プロジェクトの説明…', 'proj.save': '保存',
+    'proj.create': '作成', 'proj.filed': 'このプロジェクトのメール：{n}', 'proj.cancel': 'キャンセル', 'proj.descPlaceholder': 'プロジェクトの説明…', 'proj.save': '保存',
     'proj.analysing': '分析中…', 'proj.enterSentence': 'プロジェクトを短い一文で説明してください。',
     'proj.delete': 'プロジェクトを削除', 'proj.deleteConfirm': 'プロジェクト「{name}」を削除してもよろしいですか？',
     'proj.rename': '名前を変更', 'proj.renamePrompt': '新しいプロジェクト名：',

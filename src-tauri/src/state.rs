@@ -15,6 +15,8 @@ pub struct AppState {
     pub spam_folder: String,
     /// Sent folder name of each account (same order as the config), found during refresh.
     pub sent_folders: Vec<String>,
+    /// The briefing line last shown, kept when the screen is redrawn without a refresh.
+    pub briefing: Option<crate::dto::Briefing>,
     /// Why config.toml could not be loaded at startup, shown once in the UI.
     pub startup_error: Option<String>,
 }

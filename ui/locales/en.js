@@ -34,7 +34,7 @@ STRINGS.en = {
     'kanban.title': 'Tasks', 'kanban.todo': 'Todo', 'kanban.inProgress': 'In progress',
     'kanban.done': 'Done', 'kanban.givenUp': 'Given up',
     'kanban.add': '+ Add a task…', 'kanban.addTo': '+ Add a task to {project}…', 'kanban.all': 'All tasks',
-    'kanban.delete': 'Delete task', 'kanban.openEmail': 'Open the email',
+    'kanban.delete': 'Delete task', 'kanban.openEmail': 'Open the email', 'kanban.appeared': 'Appeared {date}',
     'kanban.aiMoved': 'Moved automatically by the AI', 'kanban.aiDone': 'AI: done', 'kanban.aiObsolete': 'AI: obsolete',
 
     // Calendar
@@ -52,7 +52,7 @@ STRINGS.en = {
     'proj.new': '+ New project', 'proj.namePlaceholder': 'Project name',
     'proj.sentencePlaceholder': 'Describe the project in one short sentence…',
     'proj.urgency.normal': 'Normal', 'proj.urgency.high': 'High',
-    'proj.create': 'Create', 'proj.cancel': 'Cancel', 'proj.descPlaceholder': 'Project description…', 'proj.save': 'Save',
+    'proj.create': 'Create', 'proj.filed': 'Emails in this project: {n}', 'proj.cancel': 'Cancel', 'proj.descPlaceholder': 'Project description…', 'proj.save': 'Save',
     'proj.analysing': 'Analysing…', 'proj.enterSentence': 'Please describe the project in one short sentence.',
     'proj.delete': 'Delete project', 'proj.deleteConfirm': 'Are you sure you want to delete “{name}”?',
     'proj.rename': 'Rename', 'proj.renamePrompt': 'New project name:',

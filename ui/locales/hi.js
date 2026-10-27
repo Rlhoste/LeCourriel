@@ -31,7 +31,7 @@ STRINGS.hi = {
     'kanban.title': 'कार्य', 'kanban.todo': 'करना है', 'kanban.inProgress': 'जारी है',
     'kanban.done': 'पूरा', 'kanban.givenUp': 'छोड़ दिया',
     'kanban.add': '+ कार्य जोड़ें…', 'kanban.addTo': '+ {project} में कार्य जोड़ें…', 'kanban.all': 'सभी कार्य',
-    'kanban.delete': 'कार्य हटाएँ', 'kanban.openEmail': 'ईमेल खोलें',
+    'kanban.delete': 'कार्य हटाएँ', 'kanban.openEmail': 'ईमेल खोलें', 'kanban.appeared': '{date} को आया',
     'kanban.aiMoved': 'AI द्वारा अपने-आप ले जाया गया', 'kanban.aiDone': 'AI: पूरा', 'kanban.aiObsolete': 'AI: अप्रचलित',
 
     'cal.title': 'कैलेंडर', 'cal.more': '+{n} और',
@@ -47,7 +47,7 @@ STRINGS.hi = {
     'proj.new': '+ नया प्रोजेक्ट', 'proj.namePlaceholder': 'प्रोजेक्ट का नाम',
     'proj.sentencePlaceholder': 'एक छोटे वाक्य में प्रोजेक्ट का वर्णन करें…',
     'proj.urgency.normal': 'सामान्य', 'proj.urgency.high': 'उच्च',
-    'proj.create': 'बनाएँ', 'proj.cancel': 'रद्द करें', 'proj.descPlaceholder': 'प्रोजेक्ट का विवरण…', 'proj.save': 'सहेजें',
+    'proj.create': 'बनाएँ', 'proj.filed': 'इस प्रोजेक्ट में ईमेल: {n}', 'proj.cancel': 'रद्द करें', 'proj.descPlaceholder': 'प्रोजेक्ट का विवरण…', 'proj.save': 'सहेजें',
     'proj.analysing': 'विश्लेषण हो रहा है…', 'proj.enterSentence': 'एक छोटे वाक्य में प्रोजेक्ट का वर्णन करें।',
     'proj.delete': 'प्रोजेक्ट हटाएँ', 'proj.deleteConfirm': 'क्या आप वाकई “{name}” को हटाना चाहते हैं?',
     'proj.rename': 'नाम बदलें', 'proj.renamePrompt': 'प्रोजेक्ट का नया नाम:',

@@ -65,6 +65,18 @@ class FakeAi {
         const subject = (user.match(/^Subject: (.*)$/m) || [])[1] || '';
         this.requests.push({ kind: 'classify', subject });
         content = JSON.stringify(classify(subject, this.rules));
+      } else if (system.startsWith('The user creates a project')) {
+        // Echo which related emails the app sent, so the test can check them.
+        this.requests.push({ kind: 'project', user });
+        content = JSON.stringify(this.project || { name: 'Project', summary: 'A project', people: [], keywords: [] });
+      } else if (system.startsWith('The user has a project')) {
+        // Files the emails whose line matches `projectMatch` (set by the test).
+        this.requests.push({ kind: 'project-match', user });
+        const ids = user.split('\n')
+          .filter(l => this.projectMatch && this.projectMatch.test(l))
+          .map(l => Number((l.match(/^\[(\d+)\]/) || [])[1]))
+          .filter(Boolean);
+        content = JSON.stringify({ ids });
       } else if (system.startsWith("You track a user's to-do list")) {
         this.requests.push({ kind: 'task-check' });
         content = JSON.stringify({ done: [], obsolete: [] });

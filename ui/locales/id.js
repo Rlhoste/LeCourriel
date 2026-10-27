@@ -31,7 +31,7 @@ STRINGS.id = {
     'kanban.title': 'Tugas', 'kanban.todo': 'Akan dikerjakan', 'kanban.inProgress': 'Sedang dikerjakan',
     'kanban.done': 'Selesai', 'kanban.givenUp': 'Dibatalkan',
     'kanban.add': '+ Tambah tugas…', 'kanban.addTo': '+ Tambah tugas ke {project}…', 'kanban.all': 'Semua tugas',
-    'kanban.delete': 'Hapus tugas', 'kanban.openEmail': 'Buka email',
+    'kanban.delete': 'Hapus tugas', 'kanban.openEmail': 'Buka email', 'kanban.appeared': 'Muncul {date}',
     'kanban.aiMoved': 'Dipindahkan otomatis oleh AI', 'kanban.aiDone': 'AI: selesai', 'kanban.aiObsolete': 'AI: usang',
 
     'cal.title': 'Kalender', 'cal.more': '+{n} lainnya',
@@ -47,7 +47,7 @@ STRINGS.id = {
     'proj.new': '+ Proyek baru', 'proj.namePlaceholder': 'Nama proyek',
     'proj.sentencePlaceholder': 'Jelaskan proyek dalam satu kalimat singkat…',
     'proj.urgency.normal': 'Normal', 'proj.urgency.high': 'Tinggi',
-    'proj.create': 'Buat', 'proj.cancel': 'Batal', 'proj.descPlaceholder': 'Deskripsi proyek…', 'proj.save': 'Simpan',
+    'proj.create': 'Buat', 'proj.filed': 'Email dalam proyek ini: {n}', 'proj.cancel': 'Batal', 'proj.descPlaceholder': 'Deskripsi proyek…', 'proj.save': 'Simpan',
     'proj.analysing': 'Menganalisis…', 'proj.enterSentence': 'Jelaskan proyek dalam satu kalimat singkat.',
     'proj.delete': 'Hapus proyek', 'proj.deleteConfirm': 'Yakin ingin menghapus “{name}”?',
     'proj.rename': 'Ubah nama', 'proj.renamePrompt': 'Nama proyek baru:',

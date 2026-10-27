@@ -34,7 +34,7 @@ STRINGS.ru = {
     'kanban.title': 'Задачи', 'kanban.todo': 'К выполнению', 'kanban.inProgress': 'В работе',
     'kanban.done': 'Готово', 'kanban.givenUp': 'Отменено',
     'kanban.add': '+ Добавить задачу…', 'kanban.addTo': '+ Добавить задачу в {project}…', 'kanban.all': 'Все задачи',
-    'kanban.delete': 'Удалить задачу', 'kanban.openEmail': 'Открыть письмо',
+    'kanban.delete': 'Удалить задачу', 'kanban.openEmail': 'Открыть письмо', 'kanban.appeared': 'Появилась {date}',
     'kanban.aiMoved': 'Перемещено ИИ автоматически', 'kanban.aiDone': 'ИИ: готово', 'kanban.aiObsolete': 'ИИ: неактуально',
 
     'cal.title': 'Календарь', 'cal.more': 'ещё +{n}',
@@ -50,7 +50,7 @@ STRINGS.ru = {
     'proj.new': '+ Новый проект', 'proj.namePlaceholder': 'Название проекта',
     'proj.sentencePlaceholder': 'Опишите проект одним коротким предложением…',
     'proj.urgency.normal': 'Обычная', 'proj.urgency.high': 'Высокая',
-    'proj.create': 'Создать', 'proj.cancel': 'Отмена', 'proj.descPlaceholder': 'Описание проекта…', 'proj.save': 'Сохранить',
+    'proj.create': 'Создать', 'proj.filed': 'Писем в проекте: {n}', 'proj.cancel': 'Отмена', 'proj.descPlaceholder': 'Описание проекта…', 'proj.save': 'Сохранить',
     'proj.analysing': 'Анализ…', 'proj.enterSentence': 'Опишите проект одним коротким предложением.',
     'proj.delete': 'Удалить проект', 'proj.deleteConfirm': 'Удалить проект «{name}»?',
     'proj.rename': 'Переименовать', 'proj.renamePrompt': 'Новое название проекта:',

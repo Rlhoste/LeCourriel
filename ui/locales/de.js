@@ -31,7 +31,7 @@ STRINGS.de = {
     'kanban.title': 'Aufgaben', 'kanban.todo': 'Zu erledigen', 'kanban.inProgress': 'In Arbeit',
     'kanban.done': 'Erledigt', 'kanban.givenUp': 'Aufgegeben',
     'kanban.add': '+ Aufgabe hinzufügen…', 'kanban.addTo': '+ Aufgabe zu {project} hinzufügen…', 'kanban.all': 'Alle Aufgaben',
-    'kanban.delete': 'Aufgabe löschen', 'kanban.openEmail': 'E-Mail öffnen',
+    'kanban.delete': 'Aufgabe löschen', 'kanban.openEmail': 'E-Mail öffnen', 'kanban.appeared': 'Erschienen am {date}',
     'kanban.aiMoved': 'Automatisch von der KI verschoben', 'kanban.aiDone': 'KI: erledigt', 'kanban.aiObsolete': 'KI: überholt',
 
     'cal.title': 'Kalender', 'cal.more': '+{n} weitere',
@@ -47,7 +47,7 @@ STRINGS.de = {
     'proj.new': '+ Neues Projekt', 'proj.namePlaceholder': 'Projektname',
     'proj.sentencePlaceholder': 'Beschreiben Sie das Projekt in einem kurzen Satz…',
     'proj.urgency.normal': 'Normal', 'proj.urgency.high': 'Hoch',
-    'proj.create': 'Erstellen', 'proj.cancel': 'Abbrechen', 'proj.descPlaceholder': 'Projektbeschreibung…', 'proj.save': 'Speichern',
+    'proj.create': 'Erstellen', 'proj.filed': 'E-Mails in diesem Projekt: {n}', 'proj.cancel': 'Abbrechen', 'proj.descPlaceholder': 'Projektbeschreibung…', 'proj.save': 'Speichern',
     'proj.analysing': 'Analyse…', 'proj.enterSentence': 'Beschreiben Sie das Projekt in einem kurzen Satz.',
     'proj.delete': 'Projekt löschen', 'proj.deleteConfirm': 'Möchten Sie „{name}“ wirklich löschen?',
     'proj.rename': 'Umbenennen', 'proj.renamePrompt': 'Neuer Projektname:',

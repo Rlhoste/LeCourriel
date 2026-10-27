@@ -71,6 +71,14 @@ function fmtShort(ts, now = Date.now()) {
   return fmt({ day: 'numeric', month: 'short' }).format(d);
 }
 
+// A day from a Unix timestamp: day + month, with the year when it is not this year.
+function fmtDay(ts) {
+  const d = new Date(ts * 1000);
+  const opts = { day: 'numeric', month: 'short' };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+  return fmt(opts).format(d);
+}
+
 function fmtFull(ts) {
   return fmt({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
     .format(new Date(ts * 1000));

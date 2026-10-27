@@ -31,7 +31,7 @@ STRINGS.ur = {
     'kanban.title': 'کام', 'kanban.todo': 'کرنے والے', 'kanban.inProgress': 'جاری',
     'kanban.done': 'مکمل', 'kanban.givenUp': 'ترک شدہ',
     'kanban.add': '+ کام شامل کریں…', 'kanban.addTo': '+ {project} میں کام شامل کریں…', 'kanban.all': 'تمام کام',
-    'kanban.delete': 'کام حذف کریں', 'kanban.openEmail': 'ای میل کھولیں',
+    'kanban.delete': 'کام حذف کریں', 'kanban.openEmail': 'ای میل کھولیں', 'kanban.appeared': '{date} کو آیا',
     'kanban.aiMoved': 'اے آئی نے خودکار طور پر منتقل کیا', 'kanban.aiDone': 'اے آئی: مکمل', 'kanban.aiObsolete': 'اے آئی: غیر متعلق',
 
     'cal.title': 'کیلنڈر', 'cal.more': '+{n} مزید',
@@ -47,7 +47,7 @@ STRINGS.ur = {
     'proj.new': '+ نیا پروجیکٹ', 'proj.namePlaceholder': 'پروجیکٹ کا نام',
     'proj.sentencePlaceholder': 'ایک مختصر جملے میں پروجیکٹ کی وضاحت کریں…',
     'proj.urgency.normal': 'عام', 'proj.urgency.high': 'زیادہ',
-    'proj.create': 'بنائیں', 'proj.cancel': 'منسوخ کریں', 'proj.descPlaceholder': 'پروجیکٹ کی تفصیل…', 'proj.save': 'محفوظ کریں',
+    'proj.create': 'بنائیں', 'proj.filed': 'اس پروجیکٹ میں ای میلز: {n}', 'proj.cancel': 'منسوخ کریں', 'proj.descPlaceholder': 'پروجیکٹ کی تفصیل…', 'proj.save': 'محفوظ کریں',
     'proj.analysing': 'تجزیہ ہو رہا ہے…', 'proj.enterSentence': 'ایک مختصر جملے میں پروجیکٹ کی وضاحت کریں۔',
     'proj.delete': 'پروجیکٹ حذف کریں', 'proj.deleteConfirm': 'کیا آپ واقعی ”{name}“ پروجیکٹ حذف کرنا چاہتے ہیں؟',
     'proj.rename': 'نام تبدیل کریں', 'proj.renamePrompt': 'پروجیکٹ کا نیا نام:',

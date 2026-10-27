@@ -31,7 +31,7 @@ STRINGS.pt = {
     'kanban.title': 'Tarefas', 'kanban.todo': 'A fazer', 'kanban.inProgress': 'Em andamento',
     'kanban.done': 'Concluído', 'kanban.givenUp': 'Abandonada',
     'kanban.add': '+ Adicionar tarefa…', 'kanban.addTo': '+ Adicionar tarefa a {project}…', 'kanban.all': 'Todas as tarefas',
-    'kanban.delete': 'Excluir tarefa', 'kanban.openEmail': 'Abrir o e-mail',
+    'kanban.delete': 'Excluir tarefa', 'kanban.openEmail': 'Abrir o e-mail', 'kanban.appeared': 'Surgiu em {date}',
     'kanban.aiMoved': 'Movida automaticamente pela IA', 'kanban.aiDone': 'IA: concluída', 'kanban.aiObsolete': 'IA: obsoleta',
 
     'cal.title': 'Agenda', 'cal.more': '+{n} mais',
@@ -47,7 +47,7 @@ STRINGS.pt = {
     'proj.new': '+ Novo projeto', 'proj.namePlaceholder': 'Nome do projeto',
     'proj.sentencePlaceholder': 'Descreva o projeto em uma frase curta…',
     'proj.urgency.normal': 'Normal', 'proj.urgency.high': 'Alta',
-    'proj.create': 'Criar', 'proj.cancel': 'Cancelar', 'proj.descPlaceholder': 'Descrição do projeto…', 'proj.save': 'Salvar',
+    'proj.create': 'Criar', 'proj.filed': 'E-mails neste projeto: {n}', 'proj.cancel': 'Cancelar', 'proj.descPlaceholder': 'Descrição do projeto…', 'proj.save': 'Salvar',
     'proj.analysing': 'Analisando…', 'proj.enterSentence': 'Descreva o projeto em uma frase curta.',
     'proj.delete': 'Excluir projeto', 'proj.deleteConfirm': 'Tem certeza de que deseja excluir “{name}”?',
     'proj.rename': 'Renomear', 'proj.renamePrompt': 'Novo nome do projeto:',

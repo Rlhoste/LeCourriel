@@ -31,7 +31,7 @@ STRINGS.zh = {
     'kanban.title': '任务', 'kanban.todo': '待办', 'kanban.inProgress': '进行中',
     'kanban.done': '已完成', 'kanban.givenUp': '已放弃',
     'kanban.add': '+ 添加任务…', 'kanban.addTo': '+ 向 {project} 添加任务…', 'kanban.all': '所有任务',
-    'kanban.delete': '删除任务', 'kanban.openEmail': '打开邮件',
+    'kanban.delete': '删除任务', 'kanban.openEmail': '打开邮件', 'kanban.appeared': '出现于 {date}',
     'kanban.aiMoved': '由 AI 自动移动', 'kanban.aiDone': 'AI：已完成', 'kanban.aiObsolete': 'AI：已过时',
 
     'cal.title': '日历', 'cal.more': '还有 {n} 项',
@@ -47,7 +47,7 @@ STRINGS.zh = {
     'proj.new': '+ 新建项目', 'proj.namePlaceholder': '项目名称',
     'proj.sentencePlaceholder': '用一句简短的话描述项目…',
     'proj.urgency.normal': '普通', 'proj.urgency.high': '高',
-    'proj.create': '创建', 'proj.cancel': '取消', 'proj.descPlaceholder': '项目描述…', 'proj.save': '保存',
+    'proj.create': '创建', 'proj.filed': '此项目中的邮件：{n}', 'proj.cancel': '取消', 'proj.descPlaceholder': '项目描述…', 'proj.save': '保存',
     'proj.analysing': '正在分析…', 'proj.enterSentence': '请用一句简短的话描述项目。',
     'proj.delete': '删除项目', 'proj.deleteConfirm': '确定要删除项目“{name}”吗？',
     'proj.rename': '重命名', 'proj.renamePrompt': '新的项目名称：',

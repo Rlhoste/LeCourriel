@@ -60,6 +60,10 @@ pub struct Task {
     /// Set when the AI moved the task ("done" / "obsolete").
     #[serde(default)]
     pub ai_verdict: Option<String>,
+    /// When the task appeared (Unix seconds): the date of its email, or when it was
+    /// added by hand. 0 = unknown (hand-made tasks from before dates were kept).
+    #[serde(default)]
+    pub created_ts: i64,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -122,6 +126,7 @@ impl Board {
             source_from: String::new(),
             source_subject: String::new(),
             ai_verdict: None,
+            created_ts: chrono::Utc::now().timestamp(),
         });
         id
     }
@@ -141,10 +146,27 @@ impl Board {
         Ok(())
     }
 
+    /// Whether `sync_from_cards` has something to do: an email action item not on the
+    /// board yet, or an email task still without its date.
+    pub fn needs_sync(&self, cards: &[EmailCard]) -> bool {
+        cards.iter().any(|c| {
+            ((c.task.is_some() || c.priority == Priority::Task)
+                && !self.deleted_sources.contains(&c.uid)
+                && !self.tasks.iter().any(|t| t.source_uid == Some(c.uid)))
+                || self.tasks.iter().any(|t| t.created_ts == 0 && c.date_ts != 0 && t.source_uid == Some(c.uid))
+        })
+    }
+
     /// Add a Todo task for every email action item not on the board yet.
     /// Earlier swipes / AI verdicts from `dismissed.json` decide the starting column.
+    /// Email tasks from before dates were kept get the date of their email.
     /// Returns true when something was added.
     pub fn sync_from_cards(&mut self, cards: &[EmailCard], dismissed: &Dismissals) -> bool {
+        for t in self.tasks.iter_mut().filter(|t| t.created_ts == 0) {
+            if let Some(c) = t.source_uid.and_then(|uid| cards.iter().find(|c| c.uid == uid)) {
+                t.created_ts = c.date_ts;
+            }
+        }
         let mut added = false;
         for c in cards {
             if c.task.is_none() && c.priority != Priority::Task {
@@ -173,6 +195,8 @@ impl Board {
                 source_from: c.from_name.clone(),
                 source_subject: c.subject.clone(),
                 ai_verdict: verdict,
+                // The task appeared with its email (now, if the email has no date).
+                created_ts: if c.date_ts != 0 { c.date_ts } else { chrono::Utc::now().timestamp() },
             });
             added = true;
         }

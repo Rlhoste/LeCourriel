@@ -425,6 +425,36 @@ api_key = "k" model = "m" max_tokens = 100
     }
 
     #[test]
+    fn test_board_tasks_keep_the_date_they_appeared() {
+        use crate::dismissals::Dismissals;
+        use crate::tasks::Board;
+        let mut card = make_test_card(30, Priority::Task);
+        card.task = Some("Send the figures".into());
+        card.date_ts = 1_790_000_000;
+        let mut b = Board::default();
+        assert!(b.needs_sync(&[card.clone()]));
+        b.sync_from_cards(&[card.clone()], &Dismissals::default());
+        assert_eq!(b.tasks[0].created_ts, 1_790_000_000, "an email task appears with its email");
+        assert!(!b.needs_sync(&[card.clone()]));
+
+        // A board saved before dates were kept: email tasks get their email's date.
+        let mut old: Board = serde_json::from_str(r#"{"next_id":2,"tasks":[
+            {"id":1,"title":"Send the figures","status":"todo","source_uid":30},
+            {"id":2,"title":"By hand","status":"todo"}]}"#).unwrap();
+        assert_eq!(old.tasks[0].created_ts, 0);
+        assert!(old.needs_sync(&[card.clone()]));
+        assert!(!old.sync_from_cards(&[card.clone()], &Dismissals::default()));
+        assert_eq!(old.tasks[0].created_ts, 1_790_000_000);
+        assert_eq!(old.tasks[1].created_ts, 0, "unknown for old hand-made tasks");
+
+        // Added by hand: now.
+        let before = chrono::Utc::now().timestamp();
+        let id = old.add("Call Bob".into(), None);
+        let t = old.tasks.iter().find(|t| t.id == id).unwrap();
+        assert!(t.created_ts >= before);
+    }
+
+    #[test]
     fn test_board_delete_email_task_is_not_resynced() {
         use crate::dismissals::Dismissals;
         use crate::tasks::{Board, Status};
@@ -1005,6 +1035,77 @@ max_tokens = 10
             (Folder::Inbox, unread),
             (Folder::Sent, search_card(3, "Remi", "Re: manuscrit", "Je vous envoie le manuscrit.", 4_000)),
         ]
+    }
+
+    // ── New project ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_project_description_format() {
+        use crate::ai_project::format_description;
+        let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            format_description("Emails about my PhD defense", &s(&["Prof Martin (jury)", " ADUM ", "adum"]), &s(&["soutenance", "manuscrit."])),
+            "Emails about my PhD defense. People: Prof Martin (jury), ADUM. Keywords: soutenance, manuscrit."
+        );
+        // No people or keywords: no empty labels.
+        assert_eq!(format_description("Garden works.", &[], &[]), "Garden works.");
+    }
+
+    #[test]
+    fn test_project_parse_answer() {
+        use crate::ai_project::parse;
+        let d = parse(r#"Here: {"name":" PhD  defense ","summary":"Organising the PhD defense with the jury","people":["Prof Martin"],"keywords":["jury","soutenance"],"importance":"HIGH"}"#).unwrap();
+        assert_eq!(d.name, "PhD defense");
+        assert_eq!(d.description, "Organising the PhD defense with the jury. People: Prof Martin. Keywords: jury, soutenance.");
+        assert_eq!(d.urgency, "high");
+        let d = parse(r#"{"name":"Garden","summary":"Garden works","importance":"maybe"}"#).unwrap();
+        assert_eq!((d.description.as_str(), d.urgency.as_str()), ("Garden works.", "normal"));
+        assert!(parse(r#"{"name":"","summary":"x"}"#).is_none());
+        assert!(parse("not json").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_project_draft_reads_the_related_emails() {
+        use crate::ai_project::{draft, related_emails};
+        let index = search_index();
+        let related = related_emails(&index, "my thesis defense with the jury", 12);
+        let uids: Vec<u32> = related.iter().map(|c| c.uid).collect();
+        // The jury email first, the email filed in "Thesis" too; not the newsletter.
+        assert_eq!(uids, vec![1, 3]);
+
+        let (base, server) = fake_ai_server(200, r#"{"choices":[{"message":{"content":"{\"name\":\"Thesis defense\",\"summary\":\"Organising the thesis defense with the jury\",\"people\":[\"Prof Martin (jury)\"],\"keywords\":[\"soutenance\",\"jury\"],\"importance\":\"high\"}"}}]}"#).await;
+        let d = draft(&ai_cfg("custom", "m", "k", &base), "my thesis defense with the jury", "Remi <remi@univ.fr>", &related).await.unwrap();
+        assert_eq!(d.name, "Thesis defense");
+        assert_eq!(d.description, "Organising the thesis defense with the jury. People: Prof Martin (jury). Keywords: soutenance, jury.");
+        let (_, body) = server.await.unwrap();
+        let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let user = body["messages"][1]["content"].as_str().unwrap();
+        assert!(user.starts_with("REQUEST: my thesis defense with the jury"), "{}", user);
+        assert!(user.contains("THE USER (not one of the people): Remi <remi@univ.fr>"), "{}", user);
+        assert!(user.contains("Subject: Defense date") && user.contains("Prof Martin <prof.martin@univ.fr>"), "{}", user);
+
+        // An AI failure is reported, not hidden behind a copy of the request.
+        let err = draft(&AiConfig::default(), "my thesis", "Remi", &[]).await.unwrap_err();
+        assert!(format!("{:#}", err).contains("Choose an AI model"), "{:#}", err);
+    }
+
+    #[test]
+    fn test_project_matching_emails() {
+        use crate::ai_project::{match_content, parse_ids};
+        let mut filed = search_card(1, "Prof Martin", "Defense date", "The jury agreed on the date.", 1_000);
+        filed.project = Some("Thesis".into());
+        filed.summary = "The jury agreed on the defense date.".into();
+        let fresh = search_card(2, "Newsletter", "Weekly digest", "Some news.", 2_000);
+        let text = match_content("Defense", "My PhD defense. People: Prof Martin.", &[filed, fresh]);
+        assert!(text.starts_with("PROJECT: Defense\nDESCRIPTION: My PhD defense. People: Prof Martin.\n"), "{}", text);
+        // Its id, where it is now, and the AI summary (or the start of the body when unsorted).
+        assert!(text.contains("[1] From: Prof Martin <prof.martin@univ.fr> | Subject: Defense date | project now: Thesis | The jury agreed on the defense date."), "{}", text);
+        assert!(text.contains("[2] From: Newsletter <newsletter@univ.fr> | Subject: Weekly digest | project now: none | Some news."), "{}", text);
+
+        // Only offered emails; numbers or strings; duplicates once.
+        assert_eq!(parse_ids(r#"{"ids":[2,"1",2,99]}"#, &[1, 2]), Some(vec![1, 2]));
+        assert_eq!(parse_ids(r#"Sure: {"ids":[]}"#, &[1]), Some(vec![]));
+        assert_eq!(parse_ids("no", &[1]), None);
     }
 
     #[test]

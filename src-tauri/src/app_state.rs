@@ -373,6 +373,19 @@ pub fn refresh_briefing(
     }
 }
 
+/// Redraw every list from the emails in memory, after a change that needs no fetch
+/// (emails filed into a new project…). The briefing line stays as it was.
+pub fn redisplay(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>) {
+    use crate::search::Folder;
+    let (index, briefing) = {
+        let s = state.lock().unwrap();
+        (s.search_index.clone(), s.briefing.clone())
+    };
+    let folder = |f: Folder| index.iter().filter(|(g, _)| *g == f).map(|(_, c)| c.clone()).collect::<Vec<_>>();
+    populate(cfg, app, state, folder(Folder::Inbox), folder(Folder::Sent), folder(Folder::Drafts),
+        folder(Folder::Trash), folder(Folder::Spam), briefing);
+}
+
 pub fn load_and_display_cache(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>) {
     let json = match std::fs::read_to_string(crate::paths::file(CACHE_PATH)) {
         Ok(s) => s,
@@ -435,13 +448,9 @@ fn populate(
     all_by_priority.sort_by_key(priority_order);
 
     let dismissed = Dismissals::load();
-    // New email action items land in the Todo column of the task board.
-    let needs_sync = {
-        let board = Board::load();
-        cards.iter().any(|c| (c.task.is_some() || c.priority == Priority::Task)
-            && !board.deleted_sources.contains(&c.uid)
-            && !board.tasks.iter().any(|t| t.source_uid == Some(c.uid)))
-    };
+    // New email action items land in the Todo column of the task board (and email
+    // tasks from before dates were kept get the date of their email).
+    let needs_sync = Board::load().needs_sync(&cards);
     if needs_sync {
         Board::update(|b| b.sync_from_cards(&cards, &dismissed));
     }
@@ -488,7 +497,7 @@ fn populate(
     let project_dtos: Vec<ProjectDto> = cfg.projects.iter().map(|p| {
         let email_count = all_emails.iter()
             .filter(|c| c.project.as_deref() == Some(&p.name)).count() as i32;
-        ProjectDto { name: p.name.clone(), urgency: p.urgency.clone(), description: p.description.clone(), email_count }
+        ProjectDto { name: p.name.clone(), urgency: p.urgency.clone(), description: p.description.clone(), email_count, warning: None }
     }).collect();
 
     // Store all emails in shared state for command lookups.
@@ -508,6 +517,7 @@ fn populate(
         index.extend(tag(Folder::Trash, &trash));
         index.extend(tag(Folder::Spam, &spam));
         s.search_index = index;
+        s.briefing = Some(briefing.clone());
     }
 
     use chrono::Timelike;
