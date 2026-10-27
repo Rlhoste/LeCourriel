@@ -553,6 +553,21 @@
   </div>
 </div>
 
+<!-- ── Unsaved Settings: asked when Settings is closed with changes ─────────── -->
+<div id="unsaved-overlay" class="overlay setup-overlay hidden">
+  <div class="dialog" role="alertdialog" aria-modal="true">
+    <div class="dialog-header">
+      <span data-i18n="set.unsavedTitle">Save your changes?</span>
+    </div>
+    <ul id="unsaved-list" class="unsaved-list"></ul>
+    <div class="dialog-actions">
+      <button id="unsaved-back" class="secondary-btn" data-i18n="set.unsavedBack">Keep editing</button>
+      <button id="unsaved-discard" class="secondary-btn" data-i18n="set.unsavedDiscard">Don't save</button>
+      <button id="unsaved-save" class="primary-btn" data-i18n="set.save">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- Reading pane (shared for email panels) -->
 <template id="tpl-split-panel">
   <div class="email-list-col">

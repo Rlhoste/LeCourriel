@@ -1499,7 +1499,8 @@ function showProject(p) {
     if (e.key === 'Escape') closeRename();
   };
   deleteBtn.onclick = async () => {
-    if (!confirm(t('proj.deleteConfirm', { name: p.name }))) return;
+    // The webview's confirm() is not shown in the app window: a system dialog asks instead.
+    if (!(await window.__TAURI__.dialog.ask(t('proj.deleteConfirm', { name: p.name }), { kind: 'warning' }))) return;
     deleteBtn.disabled = true;
     try {
       await cmd('delete_project', { name: p.name });
@@ -2373,6 +2374,7 @@ async function openSettings() {
   document.getElementById('s-update-current').textContent = await cmd('app_version');
 
   renderAccountBlocks(settingsData.accounts);
+  settingsBaseline = settingsSnapshot();
   document.getElementById('settings-overlay').classList.remove('hidden');
   // Default to general tab
   switchSettingsTab('general');
@@ -2577,7 +2579,11 @@ function addPasswordToggles(root) {
 function setupSettings() {
   addPasswordToggles(document.getElementById('settings-overlay'));
   // Only the × closes Settings: a click beside the window must not lose what was typed.
-  document.getElementById('settings-close').addEventListener('click', closeSettings);
+  // With unsaved changes it asks first, listing them.
+  document.getElementById('settings-close').addEventListener('click', askCloseSettings);
+  document.getElementById('unsaved-save').addEventListener('click', () => { hideUnsaved(); saveSettings(); });
+  document.getElementById('unsaved-discard').addEventListener('click', () => { hideUnsaved(); closeSettings(); });
+  document.getElementById('unsaved-back').addEventListener('click', hideUnsaved);
 
   document.querySelectorAll('.tab').forEach(t => {
     t.addEventListener('click', () => switchSettingsTab(t.dataset.tab));
@@ -3300,6 +3306,52 @@ function setupCloudSettings() {
     renderCloudStatus(await cmd('cloud_sign_out'));
     setCloudStatus('');
   }));
+}
+
+// What Settings holds, in the shape the unsaved-changes recap compares.
+let settingsBaseline = null;   // taken when Settings opens
+
+function settingsSnapshot() {
+  return {
+    theme: document.documentElement.dataset.theme, fontScale, language: LANG,
+    notify: document.getElementById('s-notify').checked,
+    accounts: collectAccounts(),
+    ai: JSON.stringify(collectAiSettings()),
+    giphy: document.getElementById('s-giphy-key').value,
+    cloud: document.getElementById('s-cloud-url').value + '\n' + document.getElementById('s-cloud-anon').value,
+  };
+}
+
+// One line per change since Settings opened; accounts are matched by their name in the app.
+function unsavedChanges() {
+  const a = settingsBaseline, b = settingsSnapshot(), lines = [];
+  if (b.theme !== savedTheme) lines.push(t('set.theme'));
+  if (b.fontScale !== savedFontScale) lines.push(t('set.fontScale'));
+  if (b.language !== savedLang) lines.push(t('set.language'));
+  if (b.notify !== a.notify) lines.push(t('set.notify'));
+  const name = (acc, i) => acc.label || t('set.account', { n: i + 1 });
+  const before = new Map(a.accounts.map((acc, i) => [name(acc, i), JSON.stringify(acc)]));
+  const after = new Map(b.accounts.map((acc, i) => [name(acc, i), JSON.stringify(acc)]));
+  for (const [n, json] of after) {
+    if (!before.has(n)) lines.push(t('set.unsavedAdded', { name: n }));
+    else if (before.get(n) !== json) lines.push(t('set.unsavedChanged', { name: n }));
+  }
+  for (const n of before.keys()) if (!after.has(n)) lines.push(t('set.unsavedRemoved', { name: n }));
+  if (b.ai !== a.ai) lines.push(t('set.ai'));
+  if (b.giphy !== a.giphy) lines.push(t('set.giphyKey'));
+  if (b.cloud !== a.cloud) lines.push(t('set.cloud'));
+  return lines;
+}
+
+function askCloseSettings() {
+  const lines = unsavedChanges();
+  if (!lines.length) return closeSettings();
+  document.getElementById('unsaved-list').innerHTML = lines.map(l => `<li dir="auto">${esc(l)}</li>`).join('');
+  document.getElementById('unsaved-overlay').classList.remove('hidden');
+}
+
+function hideUnsaved() {
+  document.getElementById('unsaved-overlay').classList.add('hidden');
 }
 
 // Closing without saving undoes the live previews (theme, font size).
