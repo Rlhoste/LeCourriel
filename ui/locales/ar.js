@@ -141,6 +141,12 @@ STRINGS.ar = {
     "ai.prov.anthropic": "Claude (Anthropic)",
     "ai.prov.ollama": "Ollama (محلي، مجاني)",
     "ai.prov.custom": "آخر (متوافق مع OpenAI)",
+    "ai.prov.claudeCode": "Claude (اشتراك)",
+    "set.aiSignIn": "تسجيل الدخول باستخدام Claude",
+    "set.aiSigningIn": "أكمل تسجيل الدخول في متصفحك…",
+    "set.aiSignedIn": "✓ تم تسجيل الدخول باسم {email}",
+    "set.aiNeedsPlan": "يتطلب خطة Claude مدفوعة (Pro أو Max أو Team أو Enterprise)",
+    "set.aiGetKey": "الحصول على مفتاح",
     "set.aiNoteLocal": "يبقى كل شيء على حاسوبك: لا تُرسَل رسائلك أبدًا إلى ذكاء اصطناعي سحابي. ثبّت نموذجًا أولًا، مثل «ollama pull qwen2.5». النماذج المحلية الصغيرة أقل دقة في التصنيف من النماذج السحابية الكبيرة.",
     "set.aiNoteCloud": "تُرسَل مقتطفات من رسائلك إلى {provider} لتصنيفها وتلخيصها.",
 };

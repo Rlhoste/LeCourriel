@@ -125,6 +125,12 @@ STRINGS.ja = {
     "ai.prov.anthropic": "Claude（Anthropic）",
     "ai.prov.ollama": "Ollama（ローカル・無料）",
     "ai.prov.custom": "その他（OpenAI 互換）",
+    "ai.prov.claudeCode": "Claude（サブスクリプション）",
+    "set.aiSignIn": "Claude でサインイン",
+    "set.aiSigningIn": "ブラウザーでサインインを完了してください…",
+    "set.aiSignedIn": "✓ {email} としてサインイン済み",
+    "set.aiNeedsPlan": "Claude の有料プラン（Pro、Max、Team、Enterprise）が必要です",
+    "set.aiGetKey": "キーを取得",
     "set.aiNoteLocal": "すべてお使いのコンピューター内で処理され、メールがクラウドの AI に送られることはありません。先にモデルをインストールしてください（例：「ollama pull qwen2.5」）。小さなローカルモデルは、大規模なクラウドモデルより分類の精度が下がります。",
     "set.aiNoteCloud": "メールの抜粋が分類と要約のために {provider} に送信されます。",
 };

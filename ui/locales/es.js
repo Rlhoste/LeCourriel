@@ -125,6 +125,12 @@ STRINGS.es = {
     "ai.prov.anthropic": "Claude (Anthropic)",
     "ai.prov.ollama": "Ollama (local, gratis)",
     "ai.prov.custom": "Otro (compatible con OpenAI)",
+    "ai.prov.claudeCode": "Claude (suscripción)",
+    "set.aiSignIn": "Iniciar sesión con Claude",
+    "set.aiSigningIn": "Termina de iniciar sesión en tu navegador…",
+    "set.aiSignedIn": "✓ Sesión iniciada como {email}",
+    "set.aiNeedsPlan": "Requiere un plan de pago de Claude (Pro, Max, Team o Enterprise)",
+    "set.aiGetKey": "Obtener una clave",
     "set.aiNoteLocal": "Todo se queda en tu ordenador: tus correos nunca se envían a una IA en la nube. Primero instala un modelo, p. ej. «ollama pull qwen2.5». Los modelos locales pequeños clasifican peor que los grandes modelos en la nube.",
     "set.aiNoteCloud": "Se envían fragmentos de tus correos a {provider} para clasificarlos y resumirlos.",
 };

@@ -125,6 +125,12 @@ STRINGS.bn = {
     "ai.prov.anthropic": "Claude (Anthropic)",
     "ai.prov.ollama": "Ollama (লোকাল, বিনামূল্যে)",
     "ai.prov.custom": "অন্যান্য (OpenAI-সামঞ্জস্যপূর্ণ)",
+    "ai.prov.claudeCode": "Claude (সাবস্ক্রিপশন)",
+    "set.aiSignIn": "Claude দিয়ে সাইন ইন করুন",
+    "set.aiSigningIn": "আপনার ব্রাউজারে সাইন ইন শেষ করুন…",
+    "set.aiSignedIn": "✓ {email} হিসেবে সাইন ইন করা হয়েছে",
+    "set.aiNeedsPlan": "পেইড Claude প্ল্যান প্রয়োজন (Pro, Max, Team বা Enterprise)",
+    "set.aiGetKey": "কী নিন",
     "set.aiNoteLocal": "সবকিছু আপনার কম্পিউটারেই থাকে: আপনার ইমেল কখনো ক্লাউড AI-তে পাঠানো হয় না। আগে একটি মডেল ইনস্টল করুন, যেমন “ollama pull qwen2.5”। ছোট লোকাল মডেল বড় ক্লাউড মডেলের চেয়ে কম নির্ভুলভাবে শ্রেণিবদ্ধ করে।",
     "set.aiNoteCloud": "শ্রেণিবিন্যাস ও সারাংশের জন্য আপনার ইমেলের অংশ {provider}-এ পাঠানো হয়।",
 };

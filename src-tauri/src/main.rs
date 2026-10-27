@@ -26,6 +26,7 @@ mod ai_assistant;
 mod ai_classifier;
 mod ai_writer;
 mod app_state;
+mod claude_code;
 #[cfg(test)]
 mod tests;
 mod config;
@@ -264,6 +265,18 @@ async fn ai_list_models(provider: String, base_url: String, api_key: String) -> 
     ai::list_models(&ai_config_from(&provider, "", &base_url, &api_key))
         .await
         .map_err(|e| format!("{:#}", e))
+}
+
+/// Settings → AI → Claude (subscription): is Claude Code installed and signed in?
+#[tauri::command]
+async fn claude_code_status() -> claude_code::Status {
+    claude_code::status().await
+}
+
+/// Settings → AI → "Sign in with Claude": starts Claude Code's browser sign-in.
+#[tauri::command]
+fn claude_code_login() -> Result<(), String> {
+    claude_code::login().map_err(|e| format!("{:#}", e))
 }
 
 /// Settings → Accounts → Test: log in to the incoming server and open the folder.
@@ -781,6 +794,8 @@ fn main() {
             signature_get,
             compose_accounts,
             ai_list_models,
+            claude_code_status,
+            claude_code_login,
             ai_test,
             account_test_imap,
             account_test_smtp,

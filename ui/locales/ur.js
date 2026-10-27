@@ -126,6 +126,12 @@ STRINGS.ur = {
     "ai.prov.anthropic": "Claude (Anthropic)",
     "ai.prov.ollama": "Ollama (مقامی، مفت)",
     "ai.prov.custom": "دیگر (OpenAI کے موافق)",
+    "ai.prov.claudeCode": "Claude (سبسکرپشن)",
+    "set.aiSignIn": "Claude کے ساتھ سائن ان کریں",
+    "set.aiSigningIn": "اپنے براؤزر میں سائن ان مکمل کریں…",
+    "set.aiSignedIn": "✓ بطور {email} سائن ان",
+    "set.aiNeedsPlan": "ادا شدہ Claude پلان درکار ہے (Pro، Max، Team یا Enterprise)",
+    "set.aiGetKey": "کلید حاصل کریں",
     "set.aiNoteLocal": "سب کچھ آپ کے کمپیوٹر پر ہی رہتا ہے: آپ کی ای میلز کبھی کسی کلاؤڈ اے آئی کو نہیں بھیجی جاتیں۔ پہلے کوئی ماڈل انسٹال کریں، مثلاً “ollama pull qwen2.5”۔ چھوٹے مقامی ماڈل بڑے کلاؤڈ ماڈلز کے مقابلے میں کم درست درجہ بندی کرتے ہیں۔",
     "set.aiNoteCloud": "آپ کی ای میلز کے اقتباسات درجہ بندی اور خلاصے کے لیے {provider} کو بھیجے جاتے ہیں۔",
 };

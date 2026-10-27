@@ -2404,7 +2404,8 @@ const AI_DEFAULT_URL = {
   anthropic: 'https://api.anthropic.com/v1', openai: 'https://api.openai.com/v1',
   mistral: 'https://api.mistral.ai/v1', ollama: 'http://localhost:11434/v1', custom: '',
 };
-const AI_DEFAULT_MODEL = { anthropic: 'claude-opus-4-6', mistral: 'mistral-small-latest' };
+const AI_DEFAULT_MODEL = { anthropic: 'claude-opus-4-6', claude_code: 'sonnet', mistral: 'mistral-small-latest' };
+const ANTHROPIC_KEYS_URL = 'https://console.anthropic.com/settings/keys';
 const ai = { provider: 'anthropic', keys: {}, models: {}, urls: {} };
 const $ai = id => document.getElementById(id);
 
@@ -2415,6 +2416,54 @@ function loadAiSettings(s) {
   ai.urls = { [ai.provider]: s?.base_url || '' };
   $ai('s-ai-provider').value = ai.provider;
   showAiProvider();
+  refreshClaudeCode();
+}
+
+// ── Claude (subscription), through the user's Claude Code ──
+// The choice is greyed out when Claude Code isn't installed.
+let ccPoll = null;
+
+async function refreshClaudeCode() {
+  let s;
+  try { s = await cmd('claude_code_status'); } catch { s = { installed: false }; }
+  $ai('s-ai-provider').querySelector('option[value="claude_code"]').disabled = !s.installed;
+  const el = $ai('s-ai-cc-status');
+  el.textContent = s.paid ? t('set.aiSignedIn', { email: s.email })
+    : ccPoll ? t('set.aiSigningIn')
+    : s.logged_in ? t('set.aiNeedsPlan') : '';
+  el.classList.toggle('ok', !!s.paid);
+  el.classList.toggle('error', !!s.logged_in && !s.paid);
+  $ai('s-ai-cc-login').classList.toggle('hidden', !!s.paid);
+  return s;
+}
+
+function stopClaudeCodePoll() {
+  clearTimeout(ccPoll);
+  ccPoll = null;
+}
+
+// Claude Code opens the browser; check every few seconds until a paid plan is signed in (10 min max).
+async function signInWithClaude() {
+  if (ccPoll) return;   // a sign-in is already under way
+  try {
+    await cmd('claude_code_login');
+  } catch (e) {
+    $ai('s-ai-cc-status').textContent = String(e);
+    return;
+  }
+  $ai('s-ai-cc-status').textContent = t('set.aiSigningIn');
+  const until = Date.now() + 10 * 60 * 1000;
+  const check = async () => {
+    const s = await refreshClaudeCode();
+    if (!ccPoll) return;
+    if (s.paid || Date.now() > until || ai.provider !== 'claude_code') {
+      stopClaudeCodePoll();
+      refreshClaudeCode();
+    } else {
+      ccPoll = setTimeout(check, 3000);
+    }
+  };
+  ccPoll = setTimeout(check, 3000);
 }
 
 // Store what is typed for the current provider.
@@ -2430,7 +2479,9 @@ function showAiProvider() {
   $ai('s-ai-model').value = ai.models[p] ?? AI_DEFAULT_MODEL[p] ?? '';
   $ai('s-ai-url').value = ai.urls[p] || '';
   $ai('s-ai-url').placeholder = AI_DEFAULT_URL[p] || 'https://api.example.com/v1';
-  $ai('s-ai-key-row').classList.toggle('hidden', p === 'ollama');
+  $ai('s-ai-key-row').classList.toggle('hidden', ['ollama', 'claude_code'].includes(p));
+  $ai('s-ai-get-key').classList.toggle('hidden', p !== 'anthropic');
+  $ai('s-ai-cc-row').classList.toggle('hidden', p !== 'claude_code');
   $ai('s-ai-url-row').classList.toggle('hidden', !['ollama', 'custom'].includes(p));
   $ai('s-ai-models').innerHTML = '';
   setAiStatus('');
@@ -2475,8 +2526,16 @@ function setupAiSettings() {
     showAiProvider();
     // Ollama needs no key: list the installed models straight away.
     if (ai.provider === 'ollama') loadAiModels(true);
+    if (ai.provider === 'claude_code') { loadAiModels(true); refreshClaudeCode(); }
   });
   $ai('s-ai-load').addEventListener('click', () => loadAiModels());
+  $ai('s-ai-cc-login').addEventListener('click', signInWithClaude);
+  $ai('s-ai-get-key').addEventListener('click', () =>
+    window.__TAURI__.shell.open(ANTHROPIC_KEYS_URL).catch(e => console.error('open keys page', e)));
+  // Check a pasted key straight away: listing the models needs a valid key.
+  $ai('s-ai-key').addEventListener('change', () => {
+    if (ai.provider === 'anthropic' && $ai('s-ai-key').value.trim()) loadAiModels();
+  });
   $ai('s-ai-test').addEventListener('click', async () => {
     const f = aiFields();
     setAiStatus(t('set.aiTesting'));

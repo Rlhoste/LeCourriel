@@ -380,14 +380,22 @@
       <label data-i18n="set.aiProvider">AI provider</label>
       <select id="s-ai-provider" class="settings-select">
         <option value="anthropic" data-i18n="ai.prov.anthropic">Claude (Anthropic)</option>
+        <option value="claude_code" data-i18n="ai.prov.claudeCode" disabled>Claude (subscription)</option>
         <option value="openai">OpenAI</option>
         <option value="mistral">Mistral</option>
         <option value="ollama" data-i18n="ai.prov.ollama">Ollama (local, free)</option>
         <option value="custom" data-i18n="ai.prov.custom">Other (OpenAI-compatible)</option>
       </select>
+      <div id="s-ai-cc-row" class="settings-group db-test-row">
+        <button id="s-ai-cc-login" class="secondary-btn" data-i18n="set.aiSignIn">Sign in with Claude</button>
+        <span id="s-ai-cc-status" class="db-status"></span>
+      </div>
       <div id="s-ai-key-row" class="settings-group">
         <label data-i18n="set.aiKey">API key</label>
-        <input type="password" id="s-ai-key" autocomplete="off" />
+        <div class="ai-model-row">
+          <input type="password" id="s-ai-key" autocomplete="off" />
+          <button id="s-ai-get-key" class="secondary-btn" data-i18n="set.aiGetKey">Get a key</button>
+        </div>
       </div>
       <div id="s-ai-url-row" class="settings-group">
         <label data-i18n="set.aiUrl">Server URL</label>

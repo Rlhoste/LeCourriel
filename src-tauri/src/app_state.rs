@@ -133,7 +133,13 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
         .filter_map(|r| r.date.map(|d| (d, to_recent_mail("sent", r)))).collect();
 
     // Load previously classified emails from cache — reuse results for known UIDs.
+    // With a Claude subscription, emails left unsorted last time (usage limit) count as new,
+    // so they are tried again.
+    let retry_unsorted = cfg.ai.provider() == "claude_code";
     let mut cached_cards = load_cache();
+    if retry_unsorted {
+        cached_cards.retain(|c| !crate::ai_classifier::not_classified(&c.summary));
+    }
     let cached_uids: std::collections::HashSet<u32> = cached_cards.iter().map(|c| c.uid).collect();
 
     // Split inbox into already-known (reuse cache) and new (need AI).
@@ -183,21 +189,35 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
         let ids: Vec<String> = new_raw.iter()
             .map(|r| r.message_id.clone()).filter(|id| !id.is_empty()).collect();
         let stored = crate::cloud::lookup_ai(&ids).await;
-        // A local model answers one request at a time; cloud APIs take several in parallel.
-        let concurrency = if cfg.ai.provider() == "ollama" { 1 } else { 6 };
+        // A local model answers one request at a time; cloud APIs take several in parallel;
+        // Claude Code starts a process per request.
+        let concurrency = match cfg.ai.provider() { "ollama" => 1, "claude_code" => 3, _ => 6 };
         use futures::StreamExt;
         // Owned jobs first: the stream must not borrow from this function across awaits.
         let jobs: Vec<_> = new_raw.iter()
             .map(|email| (stored.get(&email.message_id).cloned(), cfg.ai.clone(), email.clone(), projects.clone()))
             .collect();
+        // With a Claude subscription, after one email fails (e.g. the usage limit is reached)
+        // the rest stay unsorted until the next refresh instead of each failing in turn.
+        let stopped = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         let results: Vec<anyhow::Result<(bool, crate::ai_classifier::ClassifiedEmail)>> =
             futures::stream::iter(jobs)
-                .map(|(reused, ai_cfg, email, projects)| async move {
-                    if let Some(c) = reused {
-                        return anyhow::Ok((false, c));
+                .map(|(reused, ai_cfg, email, projects)| {
+                    let stopped = stopped.clone();
+                    async move {
+                        use std::sync::atomic::Ordering;
+                        if let Some(c) = reused {
+                            return anyhow::Ok((false, c));
+                        }
+                        if stopped.load(Ordering::Relaxed) {
+                            return anyhow::Ok((false, crate::ai_classifier::unclassified()));
+                        }
+                        let c = crate::ai_classifier::classify(&ai_cfg, &email, &projects).await?;
+                        if retry_unsorted && crate::ai_classifier::not_classified(&c.summary) {
+                            stopped.store(true, Ordering::Relaxed);
+                        }
+                        anyhow::Ok((true, c))
                     }
-                    let c = crate::ai_classifier::classify(&ai_cfg, &email, &projects).await?;
-                    anyhow::Ok((true, c))
                 })
                 .buffered(concurrency)
                 .collect()

@@ -747,6 +747,14 @@ max_tokens = 10
         assert!(is_real_result(&c));
         let failed = ClassifiedEmail { summary: "Could not classify email.".into(), ..c };
         assert!(!is_real_result(&failed));
+        // The AI couldn't be reached (e.g. usage limit): try again at the next refresh.
+        use crate::ai_classifier::{not_classified, unclassified};
+        assert!(not_classified(&failed.summary));
+        assert!(not_classified(&unclassified().summary));
+        assert!(!is_real_result(&unclassified()));
+        // An answer that couldn't be parsed is not retried (it would fail the same way).
+        assert!(!not_classified("Unable to summarize email."));
+        assert!(!not_classified("Jury asks for the manuscript"));
     }
 
     #[tokio::test]
@@ -1159,6 +1167,68 @@ max_tokens = 10
         let cfg: Config = toml::from_str("[claude]\napi_key = \"sk-old\"\n[ai]\nprovider = \"ollama\"\nmodel = \"qwen\"\n").unwrap();
         let cfg = cfg.migrated();
         assert_eq!((cfg.ai.provider(), cfg.ai.model.as_str(), cfg.ai.key()), ("ollama", "qwen", ""));
+    }
+
+    #[test]
+    fn test_claude_code_args() {
+        let a = crate::claude_code::args("sonnet", "C:\\tmp\\sys.txt");
+        let pair = |flag: &str, val: &str| a.windows(2).any(|w| w[0] == flag && w[1] == val);
+        assert!(a.contains(&"-p".to_string()));
+        assert!(pair("--model", "sonnet"));
+        assert!(pair("--system-prompt-file", "C:\\tmp\\sys.txt"));
+        assert!(pair("--output-format", "json"));
+        // No tools, no user settings/hooks/MCP servers: a plain question and answer.
+        assert!(pair("--tools", ""));
+        assert!(pair("--setting-sources", ""));
+        assert!(a.contains(&"--strict-mcp-config".to_string()));
+        assert!(a.contains(&"--no-session-persistence".to_string()));
+        assert!(!a.contains(&"--bare".to_string()), "--bare ignores the subscription login");
+        // Empty model: let Claude Code pick its default.
+        assert!(!crate::claude_code::args("", "f").contains(&"--model".to_string()));
+    }
+
+    #[test]
+    fn test_claude_code_answer() {
+        use crate::claude_code::answer;
+        assert_eq!(answer(r#"{"type":"result","is_error":false,"result":"OK"}"#).unwrap(), "OK");
+        let e = answer(r#"{"type":"result","is_error":true,"result":"Claude AI usage limit reached"}"#).unwrap_err();
+        assert!(format!("{:#}", e).contains("usage limit"));
+        assert!(answer(r#"{"type":"result","is_error":false,"result":"  "}"#).is_err());
+        assert!(answer("not json").is_err());
+        // A warning line printed before the JSON is ignored.
+        assert_eq!(answer("[warn] something\n{\"is_error\":false,\"result\":\"Hi\"}").unwrap(), "Hi");
+    }
+
+    #[test]
+    fn test_claude_code_status() {
+        use crate::claude_code::parse_status;
+        let s = parse_status(r#"{"loggedIn":true,"authMethod":"claude.ai","email":"a@b.com","subscriptionType":"team"}"#);
+        assert!(s.installed && s.logged_in && s.paid);
+        assert_eq!(s.email, "a@b.com");
+        for plan in ["pro", "max", "enterprise"] {
+            assert!(parse_status(&format!(r#"{{"loggedIn":true,"authMethod":"claude.ai","subscriptionType":"{}"}}"#, plan)).paid);
+        }
+        // Free plan, API-key login, logged out: not usable for subscription sign-in.
+        assert!(!parse_status(r#"{"loggedIn":true,"authMethod":"claude.ai","subscriptionType":"free"}"#).paid);
+        assert!(!parse_status(r#"{"loggedIn":true,"authMethod":"api_key"}"#).paid);
+        let s = parse_status(r#"{"loggedIn":false}"#);
+        assert!(s.installed && !s.logged_in && !s.paid);
+        assert!(!parse_status("garbage").logged_in);
+        // It is an AI provider like the others.
+        assert!(AI_PROVIDERS.contains(&"claude_code"));
+        assert_eq!(crate::ai::provider_label("claude_code"), "Claude (subscription)");
+    }
+
+    /// Real round trip through the installed, signed-in Claude Code (uses the subscription).
+    /// Run with: cargo test claude_code_live -- --ignored
+    #[tokio::test]
+    #[ignore]
+    async fn test_claude_code_live() {
+        let ai = ai_cfg("claude_code", "haiku", "", "");
+        let req = crate::ai::Request { system: "Reply with the single word OK.", user: "Reply with OK.\nThanks \"quoted\" & <tags>", max_tokens: 20, json: false };
+        let answer = crate::ai::complete(&ai, req).await.unwrap();
+        assert!(answer.to_uppercase().contains("OK"), "{}", answer);
+        assert!(crate::claude_code::status().await.installed);
     }
 
     #[test]

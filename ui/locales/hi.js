@@ -125,6 +125,12 @@ STRINGS.hi = {
     "ai.prov.anthropic": "Claude (Anthropic)",
     "ai.prov.ollama": "Ollama (लोकल, मुफ़्त)",
     "ai.prov.custom": "अन्य (OpenAI-संगत)",
+    "ai.prov.claudeCode": "Claude (सदस्यता)",
+    "set.aiSignIn": "Claude से साइन इन करें",
+    "set.aiSigningIn": "अपने ब्राउज़र में साइन इन पूरा करें…",
+    "set.aiSignedIn": "✓ {email} के रूप में साइन इन",
+    "set.aiNeedsPlan": "सशुल्क Claude प्लान (Pro, Max, Team या Enterprise) चाहिए",
+    "set.aiGetKey": "कुंजी पाएँ",
     "set.aiNoteLocal": "सब कुछ आपके कंप्यूटर पर ही रहता है: आपके ईमेल कभी किसी क्लाउड AI को नहीं भेजे जाते। पहले एक मॉडल इंस्टॉल करें, जैसे “ollama pull qwen2.5”। छोटे लोकल मॉडल बड़े क्लाउड मॉडल की तुलना में कम सटीक वर्गीकरण करते हैं।",
     "set.aiNoteCloud": "आपके ईमेल के अंश वर्गीकरण और सारांश के लिए {provider} को भेजे जाते हैं।",
 };

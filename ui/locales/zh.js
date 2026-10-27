@@ -125,6 +125,12 @@ STRINGS.zh = {
     "ai.prov.anthropic": "Claude（Anthropic）",
     "ai.prov.ollama": "Ollama（本地，免费）",
     "ai.prov.custom": "其他（兼容 OpenAI）",
+    "ai.prov.claudeCode": "Claude（订阅）",
+    "set.aiSignIn": "使用 Claude 登录",
+    "set.aiSigningIn": "请在浏览器中完成登录…",
+    "set.aiSignedIn": "✓ 已登录：{email}",
+    "set.aiNeedsPlan": "需要付费的 Claude 套餐（Pro、Max、Team 或 Enterprise）",
+    "set.aiGetKey": "获取密钥",
     "set.aiNoteLocal": "所有数据都保留在您的电脑上：邮件绝不会发送到云端 AI。请先安装一个模型，例如“ollama pull qwen2.5”。小型本地模型的分类效果不如大型云端模型。",
     "set.aiNoteCloud": "邮件片段会发送给 {provider} 进行分类和摘要。",
 };

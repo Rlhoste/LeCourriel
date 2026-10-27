@@ -143,6 +143,7 @@ pub fn provider_label(provider: &str) -> &'static str {
         "mistral" => "Mistral",
         "ollama" => "Ollama",
         "custom" => "AI",
+        "claude_code" => "Claude (subscription)",
         _ => "Claude (Anthropic)",
     }
 }
@@ -159,6 +160,9 @@ fn connect_error(ai: &AiConfig, e: reqwest::Error) -> anyhow::Error {
 
 /// Send one request to the configured provider and return the answer text.
 pub async fn complete(ai: &AiConfig, req: Request<'_>) -> Result<String> {
+    if ai.provider() == "claude_code" {
+        return crate::claude_code::complete(&ai.model, &req).await;
+    }
     let base = check_ready(ai)?;
     let enc = encode(ai, &req);
     let mut builder = client(ai)?.post(format!("{}{}", base, enc.path)).json(&enc.body);
@@ -177,6 +181,9 @@ pub async fn complete(ai: &AiConfig, req: Request<'_>) -> Result<String> {
 
 /// Model ids offered by the provider (GET {base}/models), sorted.
 pub async fn list_models(ai: &AiConfig) -> Result<Vec<String>> {
+    if ai.provider() == "claude_code" {
+        return Ok(crate::claude_code::MODELS.iter().map(|m| m.to_string()).collect());
+    }
     let base = ai.base_url();
     if base.is_empty() {
         bail!("Enter the server URL first");

@@ -134,6 +134,12 @@ STRINGS.en = {
     "ai.prov.anthropic": "Claude (Anthropic)",
     "ai.prov.ollama": "Ollama (local, free)",
     "ai.prov.custom": "Other (OpenAI-compatible)",
+    "ai.prov.claudeCode": "Claude (subscription)",
+    "set.aiSignIn": "Sign in with Claude",
+    "set.aiSigningIn": "Finish signing in in your browser…",
+    "set.aiSignedIn": "✓ Signed in as {email}",
+    "set.aiNeedsPlan": "Needs a paid Claude plan (Pro, Max, Team or Enterprise)",
+    "set.aiGetKey": "Get a key",
     "set.aiNoteLocal": "Everything stays on your computer: your emails are never sent to a cloud AI. Install a model first, e.g. “ollama pull qwen2.5”. Small local models classify less reliably than large cloud ones.",
     "set.aiNoteCloud": "Email excerpts are sent to {provider} to be classified and summarised.",
 };

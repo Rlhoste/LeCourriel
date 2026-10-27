@@ -125,6 +125,12 @@ STRINGS.de = {
     "ai.prov.anthropic": "Claude (Anthropic)",
     "ai.prov.ollama": "Ollama (lokal, kostenlos)",
     "ai.prov.custom": "Andere (OpenAI-kompatibel)",
+    "ai.prov.claudeCode": "Claude (Abo)",
+    "set.aiSignIn": "Mit Claude anmelden",
+    "set.aiSigningIn": "Anmeldung im Browser abschließen…",
+    "set.aiSignedIn": "✓ Angemeldet als {email}",
+    "set.aiNeedsPlan": "Erfordert ein kostenpflichtiges Claude-Abo (Pro, Max, Team oder Enterprise)",
+    "set.aiGetKey": "Schlüssel holen",
     "set.aiNoteLocal": "Alles bleibt auf deinem Computer: Deine E-Mails werden nie an eine Cloud-KI gesendet. Installiere zuerst ein Modell, z. B. „ollama pull qwen2.5“. Kleine lokale Modelle sortieren weniger zuverlässig als große Cloud-Modelle.",
     "set.aiNoteCloud": "Auszüge deiner E-Mails werden an {provider} gesendet, um sie einzuordnen und zusammenzufassen.",
 };

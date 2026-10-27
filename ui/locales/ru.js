@@ -135,6 +135,12 @@ STRINGS.ru = {
     "ai.prov.anthropic": "Claude (Anthropic)",
     "ai.prov.ollama": "Ollama (локально, бесплатно)",
     "ai.prov.custom": "Другой (совместимый с OpenAI)",
+    "ai.prov.claudeCode": "Claude (подписка)",
+    "set.aiSignIn": "Войти через Claude",
+    "set.aiSigningIn": "Завершите вход в браузере…",
+    "set.aiSignedIn": "✓ Вход выполнен: {email}",
+    "set.aiNeedsPlan": "Нужен платный тариф Claude (Pro, Max, Team или Enterprise)",
+    "set.aiGetKey": "Получить ключ",
     "set.aiNoteLocal": "Всё остаётся на вашем компьютере: письма никогда не отправляются в облачный ИИ. Сначала установите модель, например «ollama pull qwen2.5». Небольшие локальные модели сортируют письма хуже, чем крупные облачные.",
     "set.aiNoteCloud": "Фрагменты ваших писем отправляются в {provider} для классификации и кратких сводок.",
 };

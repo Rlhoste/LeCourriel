@@ -125,6 +125,12 @@ STRINGS.id = {
     "ai.prov.anthropic": "Claude (Anthropic)",
     "ai.prov.ollama": "Ollama (lokal, gratis)",
     "ai.prov.custom": "Lainnya (kompatibel OpenAI)",
+    "ai.prov.claudeCode": "Claude (langganan)",
+    "set.aiSignIn": "Masuk dengan Claude",
+    "set.aiSigningIn": "Selesaikan proses masuk di browser Anda…",
+    "set.aiSignedIn": "✓ Masuk sebagai {email}",
+    "set.aiNeedsPlan": "Memerlukan paket Claude berbayar (Pro, Max, Team, atau Enterprise)",
+    "set.aiGetKey": "Dapatkan kunci",
     "set.aiNoteLocal": "Semuanya tetap di komputer Anda: email Anda tidak pernah dikirim ke AI cloud. Pasang model terlebih dahulu, mis. “ollama pull qwen2.5”. Model lokal yang kecil kurang andal dalam mengklasifikasi dibanding model cloud yang besar.",
     "set.aiNoteCloud": "Cuplikan email Anda dikirim ke {provider} untuk diklasifikasikan dan diringkas.",
 };

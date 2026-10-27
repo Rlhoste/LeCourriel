@@ -43,6 +43,24 @@ pub fn is_real_result(c: &ClassifiedEmail) -> bool {
     c.summary != CLASSIFY_FAILED && c.summary != PARSE_FAILED
 }
 
+/// True when the AI couldn't be reached for this email (error, usage limit, or sorting
+/// stopped early): it stays unsorted and is tried again at the next refresh.
+pub fn not_classified(summary: &str) -> bool {
+    summary == CLASSIFY_FAILED
+}
+
+/// The result for an email that wasn't sent to the AI.
+pub fn unclassified() -> ClassifiedEmail {
+    ClassifiedEmail {
+        priority: Priority::Information,
+        summary: CLASSIFY_FAILED.to_string(),
+        project: None,
+        deadline: None,
+        task: None,
+        meeting_link: None,
+    }
+}
+
 fn build_system_prompt(projects: &[ProjectConfig]) -> String {
     let mut prompt = String::from(
         r#"You are an email priority classifier. Given an email's subject and body, respond ONLY with a JSON object (no explanation, no markdown, no code fences) in this exact format:

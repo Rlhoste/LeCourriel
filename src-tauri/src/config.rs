@@ -193,12 +193,13 @@ pub struct ClaudeConfig {
 
 fn default_model() -> String { "claude-opus-4-6".to_string() }
 
-/// AI providers. Anthropic has its own API; all the others speak the OpenAI Chat Completions format.
-pub const AI_PROVIDERS: [&str; 5] = ["anthropic", "openai", "mistral", "ollama", "custom"];
+/// AI providers. Anthropic has its own API; "claude_code" goes through the user's Claude Code
+/// (their Claude subscription); all the others speak the OpenAI Chat Completions format.
+pub const AI_PROVIDERS: [&str; 6] = ["anthropic", "claude_code", "openai", "mistral", "ollama", "custom"];
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct AiConfig {
-    /// anthropic | openai | mistral | ollama | custom ("" = not chosen yet: anthropic).
+    /// anthropic | claude_code | openai | mistral | ollama | custom ("" = not chosen yet: anthropic).
     #[serde(default)]
     pub provider: String,
     #[serde(default)]
