@@ -336,6 +336,7 @@ fn parse_fetch(fetch: &Fetch) -> Option<RawEmail> {
     let reply_to = header("Reply-To");
     let bcc = header("Bcc");
     let message_id = header("Message-ID");
+    let references = format!("{} {}", header("In-Reply-To"), header("References")).trim().to_string();
 
     let date_str = parsed.headers.get_first_value("Date").unwrap_or_default();
     let date: Option<DateTime<Utc>> = mailparse::dateparse(&date_str)
@@ -355,6 +356,7 @@ fn parse_fetch(fetch: &Fetch) -> Option<RawEmail> {
         reply_to,
         bcc,
         message_id,
+        references,
         seen,
         deleted,
         date,
@@ -363,35 +365,98 @@ fn parse_fetch(fetch: &Fetch) -> Option<RawEmail> {
     })
 }
 
-fn extract_bodies(mail: &mailparse::ParsedMail) -> (String, Option<String>) {
+/// Inline images bigger than this are left out (they would bloat the cache).
+const MAX_INLINE_IMAGE: usize = 3 * 1024 * 1024;
+
+pub(crate) fn extract_bodies(mail: &mailparse::ParsedMail) -> (String, Option<String>) {
     let mut plain = String::new();
     let mut html: Option<String> = None;
-    collect_parts(mail, &mut plain, &mut html);
+    let mut inline = Vec::new();
+    collect_parts(mail, &mut plain, &mut html, &mut inline);
     if plain.is_empty() {
-        if let Ok(body) = mail.get_body() {
+        if let Ok(body) = decode_text_body(mail) {
             plain = body;
         }
     }
-    (plain, html)
+    (plain, html.map(|h| embed_inline_images(h, inline)))
 }
 
-fn collect_parts(mail: &mailparse::ParsedMail, plain: &mut String, html: &mut Option<String>) {
+/// Inline images (signatures, logos) are attached parts that the HTML points to with
+/// `cid:<Content-ID>`. The reading pane cannot fetch those, so put each image in the
+/// HTML itself as a data: URL.
+fn embed_inline_images(mut html: String, mut inline: Vec<(String, String)>) -> String {
+    // Longest first, so "cid:a@b" is not replaced inside "cid:a@b.c".
+    inline.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+    for (cid, data_url) in inline {
+        for prefix in ["cid:", "CID:", "Cid:"] {
+            html = html.replace(&format!("{prefix}{cid}"), &data_url);
+        }
+    }
+    html
+}
+
+/// Decode a transfer-decoded text part using its declared charset. A surprising
+/// number of messages omit the charset while still containing Windows-1252 bytes
+/// (especially French mail from older Outlook versions), so try UTF-8 and then
+/// Windows-1252 instead of mailparse's lossy US-ASCII default.
+pub(crate) fn decode_text_body(mail: &mailparse::ParsedMail) -> Result<String, mailparse::MailParseError> {
+    let raw = mail.get_body_raw()?;
+    if let Some(encoding) = mail
+        .ctype
+        .params
+        .get("charset")
+        .and_then(|label| encoding_rs::Encoding::for_label(label.trim().as_bytes()))
+    {
+        let (text, _, had_errors) = encoding.decode(&raw);
+        if !had_errors {
+            return Ok(text.trim_start_matches('\u{feff}').to_string());
+        }
+    }
+
+    let (utf8, _, had_errors) = encoding_rs::UTF_8.decode(&raw);
+    if !had_errors {
+        return Ok(utf8.trim_start_matches('\u{feff}').to_string());
+    }
+    let (windows, _, _) = encoding_rs::WINDOWS_1252.decode(&raw);
+    Ok(windows.into_owned())
+}
+
+fn collect_parts(
+    mail: &mailparse::ParsedMail,
+    plain: &mut String,
+    html: &mut Option<String>,
+    inline: &mut Vec<(String, String)>,
+) {
     let ctype = mail.ctype.mimetype.to_lowercase();
     if ctype == "text/plain" {
-        if let Ok(body) = mail.get_body() {
+        if let Ok(body) = decode_text_body(mail) {
             if plain.is_empty() {
                 *plain = body;
             }
         }
     } else if ctype == "text/html" {
         if html.is_none() {
-            if let Ok(body) = mail.get_body() {
+            if let Ok(body) = decode_text_body(mail) {
                 *html = Some(body);
+            }
+        }
+    } else if mail.subparts.is_empty() {
+        let cid = mail.headers.get_first_value("Content-ID").unwrap_or_default();
+        let cid = cid.trim().trim_start_matches('<').trim_end_matches('>').trim();
+        if cid.is_empty() {
+            return;
+        }
+        if let Ok(data) = mail.get_body_raw() {
+            if !data.is_empty() && data.len() <= MAX_INLINE_IMAGE {
+                use base64::Engine;
+                let mime = if ctype.starts_with("image/") { ctype.as_str() } else { "application/octet-stream" };
+                let encoded = base64::engine::general_purpose::STANDARD.encode(&data);
+                inline.push((cid.to_string(), format!("data:{mime};base64,{encoded}")));
             }
         }
     } else {
         for sub in &mail.subparts {
-            collect_parts(sub, plain, html);
+            collect_parts(sub, plain, html, inline);
         }
     }
 }

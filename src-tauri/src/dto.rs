@@ -11,6 +11,7 @@ pub struct EmailCardDto {
     pub reply_to: String,
     pub bcc: String,
     pub message_id: String,
+    pub references: String,
     pub date_str: String,
     pub date_full: String,
     /// Unix time of the email (0 when unknown); the UI formats it in its language.
@@ -65,6 +66,9 @@ pub struct ProjectDto {
     pub urgency: String,
     pub description: String,
     pub email_count: i32,
+    /// Set when a new project was created but its emails could not be filed (AI error).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -94,13 +98,16 @@ pub struct WeekDayDto {
 }
 
 /// What the briefing line says, as data: "live" (refreshed at hour:minute, `count` need
-/// attention), "cached", "classifying" (`count` new emails), or "up_to_date".
-#[derive(Serialize, Clone, Debug, PartialEq)]
+/// attention), "cached", "classifying" (`count` new emails), "up_to_date",
+/// "ai_missing" (the AI is not set up: `count` emails wait to be sorted) or
+/// "ai_error" (the AI failed on `count` emails; `detail` says why).
+#[derive(Serialize, Clone, Debug, PartialEq, Default)]
 pub struct Briefing {
     pub kind: &'static str,
     pub hour: u32,
     pub minute: u32,
     pub count: usize,
+    pub detail: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -151,6 +158,7 @@ pub struct SettingsDto {
     pub font_scale: f32,
     pub theme: String,
     pub language: String,
+    pub notify_new_mail: bool,
     pub ai: AiSettingsDto,
     pub giphy_key: String,
     pub supabase_url: String,

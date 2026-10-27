@@ -18,12 +18,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 use tracing::info;
 
 mod ai;
 mod ai_assistant;
 mod ai_classifier;
+mod ai_project;
 mod ai_writer;
 mod app_state;
 mod auto_scan;
@@ -52,14 +53,108 @@ use state::AppState;
 
 type SharedState = Arc<Mutex<AppState>>;
 
+#[derive(serde::Serialize)]
+struct UpdateInfo {
+    current_version: String,
+    available: bool,
+    version: String,
+    notes: String,
+    date: String,
+}
+
 // ── Commands ─────────────────────────────────────────────────────────────────
+
+#[tauri::command]
+fn app_version(app: AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
+/// Opens a composer in its own window, so several emails can be written at once.
+/// `args` are the composer's options (mode, email, to, subject…), handed to the new page.
+/// Async: creating a window from a synchronous command can deadlock on Windows.
+#[tauri::command]
+async fn open_compose_window(app: AppHandle, args: serde_json::Value, title: String) -> Result<(), String> {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static NEXT: AtomicU32 = AtomicU32::new(1);
+    let label = format!("compose-{}", NEXT.fetch_add(1, Ordering::Relaxed));
+    let script = format!("window.__COMPOSE__ = {};", args);
+    tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::App("index.html".into()))
+        .title(title)
+        .inner_size(760.0, 640.0)
+        .min_inner_size(420.0, 360.0)
+        .disable_drag_drop_handler()
+        .initialization_script(&script)
+        .build()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn check_for_update(app: AppHandle) -> Result<UpdateInfo, String> {
+    use tauri_plugin_updater::UpdaterExt;
+    let current_version = app.package_info().version.to_string();
+    let update = app
+        .updater()
+        .map_err(|e| e.to_string())?
+        .check()
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(match update {
+        Some(update) => UpdateInfo {
+            current_version,
+            available: true,
+            version: update.version,
+            notes: update.body.unwrap_or_default(),
+            date: update.date.map(|date| date.to_string()).unwrap_or_default(),
+        },
+        None => UpdateInfo {
+            current_version,
+            available: false,
+            version: String::new(),
+            notes: String::new(),
+            date: String::new(),
+        },
+    })
+}
+
+#[tauri::command]
+async fn install_update(app: AppHandle) -> Result<(), String> {
+    use tauri_plugin_updater::UpdaterExt;
+    let update = app
+        .updater()
+        .map_err(|e| e.to_string())?
+        .check()
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or("No update is available")?;
+    let progress_app = app.clone();
+    let finished_app = app.clone();
+    let mut downloaded = 0u64;
+    update
+        .download_and_install(
+            move |chunk, total| {
+                downloaded += chunk as u64;
+                progress_app.emit("update-progress", serde_json::json!({
+                    "downloaded": downloaded,
+                    "total": total,
+                })).ok();
+            },
+            move || {
+                finished_app.emit("update-progress", serde_json::json!({
+                    "finished": true,
+                })).ok();
+            },
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    app.restart()
+}
 
 #[tauri::command]
 async fn app_ready(
     app: AppHandle,
     shared: State<'_, SharedState>,
 ) -> Result<(), String> {
-    use tauri::Emitter;
     let (cfg, startup_error) = {
         let s = shared.lock().unwrap();
         (s.cfg.clone(), s.startup_error.clone())
@@ -78,8 +173,56 @@ async fn app_ready(
     tauri::async_runtime::spawn(async move {
         let cfg = sync_from_database(&app, &shared_clone).await.unwrap_or(cfg);
         // Kick off live refresh in background
-        app_state::refresh(cfg, app, shared_clone).await;
+        app_state::refresh(cfg, app.clone(), shared_clone.clone()).await;
+        start_auto_refresh(app, shared_clone);
     });
+    Ok(())
+}
+
+/// Checks for new mail every 2 minutes, with the current settings. Started once, even if
+/// the page is reloaded and calls app_ready again.
+fn start_auto_refresh(app: AppHandle, shared: SharedState) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static STARTED: AtomicBool = AtomicBool::new(false);
+    if STARTED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    tauri::async_runtime::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(120));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        tick.tick().await;   // the first tick is immediate; the startup refresh just ran
+        loop {
+            tick.tick().await;
+            let cfg = shared.lock().unwrap().cfg.clone();
+            if !cfg.accounts.is_empty() {
+                app_state::refresh(cfg, app.clone(), shared.clone()).await;
+            }
+        }
+    });
+}
+
+/// The number of unread inbox emails, shown on the app icon: a number on Linux and macOS,
+/// a red dot on Windows (it has no number badge), and "(n)" in the window title everywhere.
+#[tauri::command]
+fn set_unread_count(app: AppHandle, count: u32) -> Result<(), String> {
+    use tauri::Manager;
+    let Some(win) = app.get_webview_window("main") else { return Ok(()) };
+    let title = if count > 0 { format!("Le courriel ({count})") } else { "Le courriel".to_string() };
+    win.set_title(&title).map_err(|e| e.to_string())?;
+    #[cfg(target_os = "windows")]
+    {
+        let dot = if count > 0 {
+            Some(tauri::image::Image::from_bytes(include_bytes!("../icons/badge.png")).map_err(|e| e.to_string())?)
+        } else {
+            None
+        };
+        win.set_overlay_icon(dot).map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Not every Linux desktop shows badges; the title still carries the count.
+        let _ = win.set_badge_count(if count > 0 { Some(count as i64) } else { None });
+    }
     Ok(())
 }
 
@@ -135,6 +278,7 @@ fn get_email(uid: u32, shared: State<'_, SharedState>) -> Option<dto::EmailCardD
         reply_to: c.reply_to.clone(),
         bcc: c.bcc.clone(),
         message_id: c.message_id.clone(),
+        references: c.references.clone(),
         date_str: c.date_str.clone(),
         date_full: c.date_full.clone(),
         date_ts: c.date_ts,
@@ -195,10 +339,12 @@ fn save_settings(
     font_scale: f32,
     theme: Option<String>,
     language: Option<String>,
+    notify_new_mail: Option<bool>,
+    app: AppHandle,
     shared: State<'_, SharedState>,
 ) -> Result<(), String> {
     let giphy_key = giphy_key.unwrap_or_default();
-    settings::save_config(display_name.as_deref(), &accounts, &ai, &giphy_key, font_scale, theme.as_deref(), language.as_deref())
+    settings::save_config(display_name.as_deref(), &accounts, &ai, &giphy_key, font_scale, theme.as_deref(), language.as_deref(), notify_new_mail)
         .map_err(|e| e.to_string())?;
     // Reload config into shared state.
     match Config::load() {
@@ -206,8 +352,17 @@ fn save_settings(
             signature::remove_unused(&signature::data_dir(), &new_cfg);
             i18n::set_lang(&new_cfg.user.language);
             cloud::configure(&new_cfg);
-            let mut s = shared.lock().unwrap();
-            s.cfg = Arc::new(new_cfg);
+            let new_cfg = Arc::new(new_cfg);
+            shared.lock().unwrap().cfg = new_cfg.clone();
+            // Apply the new settings straight away: the first account on a new computer
+            // fetches its mail, a newly set up AI sorts the emails waiting for it.
+            if !new_cfg.accounts.is_empty() {
+                let shared = shared.inner().clone();
+                tauri::async_runtime::spawn(async move {
+                    app_state::refresh(new_cfg, app.clone(), shared.clone()).await;
+                    start_auto_refresh(app, shared);
+                });
+            }
         }
         Err(e) => return Err(e.to_string()),
     }
@@ -498,8 +653,9 @@ fn get_qr(shared: State<'_, SharedState>) -> String {
 async fn save_project_description(
     name: String,
     description: String,
+    app: AppHandle,
     shared: State<'_, SharedState>,
-) -> Result<(), String> {
+) -> Result<usize, String> {
     let mut cfg = {
         let s = shared.lock().unwrap();
         (*s.cfg).clone()
@@ -508,21 +664,42 @@ async fn save_project_description(
         p.description = description;
     }
     config::save_config(&cfg).map_err(|e| e.to_string())?;
-    let mut s = shared.lock().unwrap();
-    s.cfg = Arc::new(cfg);
-    Ok(())
+    shared.lock().unwrap().cfg = Arc::new(cfg);
+    // A better description finds more of the emails already there.
+    file_existing_emails(&app, shared.inner(), &name).await
 }
 
 #[tauri::command]
 async fn add_project(
-    name: String,
-    urgency: String,
+    sentence: String,
+    app: AppHandle,
     shared: State<'_, SharedState>,
-) -> Result<(), String> {
-    let name = name.trim().to_string();
-    if name.is_empty() {
-        return Err("Project name cannot be empty".into());
+) -> Result<dto::ProjectDto, String> {
+    let sentence = sentence.split_whitespace().collect::<Vec<_>>().join(" ");
+    if sentence.is_empty() {
+        return Err("Project description cannot be empty".into());
     }
+    if sentence.chars().count() > 500 {
+        return Err("Project description must be 500 characters or fewer".into());
+    }
+
+    // The AI reads the emails the request is about, to make sense of it and find
+    // the people and keywords of the project.
+    let (ai_cfg, me, related) = {
+        let s = shared.lock().unwrap();
+        let mut me = vec![s.cfg.user_name()];
+        for a in &s.cfg.accounts {
+            me.push(a.imap.username.clone());
+            me.push(a.smtp.from_address.clone());
+        }
+        me.retain(|m| !m.trim().is_empty());
+        me.dedup();
+        (s.cfg.ai.clone(), me.join(", "), ai_project::related_emails(&s.search_index, &sentence, 12))
+    };
+    let ai_project::ProjectDraft { name, description, urgency } = ai_project::draft(&ai_cfg, &sentence, &me, &related)
+        .await
+        .map_err(|e| format!("The AI could not prepare the project: {:#}", e))?;
+
     let mut cfg = {
         let s = shared.lock().unwrap();
         (*s.cfg).clone()
@@ -531,13 +708,114 @@ async fn add_project(
         return Err(format!("A project named \"{}\" already exists", name));
     }
     cfg.projects.push(config::ProjectConfig {
-        name,
-        description: String::new(),
-        urgency: if urgency == "high" { "high".into() } else { "normal".into() },
+        name: name.clone(),
+        description: description.clone(),
+        urgency: urgency.clone(),
     });
     config::save_config(&cfg).map_err(|e| e.to_string())?;
+    shared.lock().unwrap().cfg = Arc::new(cfg);
+    // The project is kept even if filing fails; the warning says why it is empty.
+    let (email_count, warning) = match file_existing_emails(&app, shared.inner(), &name).await {
+        Ok(n) => (n as i32, None),
+        Err(e) => (0, Some(e)),
+    };
+    Ok(dto::ProjectDto { name, urgency, description, email_count, warning })
+}
+
+#[tauri::command]
+fn rename_project(
+    name: String,
+    new_name: String,
+    shared: State<'_, SharedState>,
+) -> Result<String, String> {
+    let new_name = new_name.split_whitespace().collect::<Vec<_>>().join(" ");
+    if new_name.is_empty() {
+        return Err("Project name cannot be empty".into());
+    }
+    let mut cfg = {
+        let s = shared.lock().unwrap();
+        (*s.cfg).clone()
+    };
+    let project = cfg.projects.iter().position(|p| p.name == name)
+        .ok_or_else(|| format!("Unknown project: {}", name))?;
+    if cfg.projects.iter().enumerate().any(|(i, p)| {
+        i != project && p.name.eq_ignore_ascii_case(&new_name)
+    }) {
+        return Err(format!("A project named \"{}\" already exists", new_name));
+    }
+    cfg.projects[project].name = new_name.clone();
+    config::save_config(&cfg).map_err(|e| e.to_string())?;
+
+    overrides::Overrides::update(|o| {
+        for project in o.projects.values_mut() {
+            if project == &name {
+                *project = new_name.clone();
+            }
+        }
+    });
+    tasks::Board::update(|b| {
+        for task in &mut b.tasks {
+            if task.project.as_deref() == Some(name.as_str()) {
+                task.project = Some(new_name.clone());
+            }
+        }
+    });
+
     let mut s = shared.lock().unwrap();
     s.cfg = Arc::new(cfg);
+    for email in &mut s.emails {
+        if email.project.as_deref() == Some(name.as_str()) {
+            email.project = Some(new_name.clone());
+        }
+    }
+    for (_, email) in &mut s.search_index {
+        if email.project.as_deref() == Some(name.as_str()) {
+            email.project = Some(new_name.clone());
+        }
+    }
+    Ok(new_name)
+}
+
+#[tauri::command]
+fn delete_project(name: String, shared: State<'_, SharedState>) -> Result<(), String> {
+    let mut cfg = {
+        let s = shared.lock().unwrap();
+        (*s.cfg).clone()
+    };
+    let old_len = cfg.projects.len();
+    cfg.projects.retain(|p| p.name != name);
+    if cfg.projects.len() == old_len {
+        return Err(format!("Unknown project: {}", name));
+    }
+    config::save_config(&cfg).map_err(|e| e.to_string())?;
+
+    overrides::Overrides::update(|o| {
+        for project in o.projects.values_mut() {
+            if project == &name {
+                project.clear();
+            }
+        }
+    });
+    tasks::Board::update(|b| {
+        for task in &mut b.tasks {
+            if task.project.as_deref() == Some(name.as_str()) {
+                task.project = None;
+            }
+        }
+    });
+
+    let mut s = shared.lock().unwrap();
+    s.cfg = Arc::new(cfg);
+    for email in &mut s.emails {
+        if email.project.as_deref() == Some(name.as_str()) {
+            email.project = None;
+        }
+    }
+    for (_, email) in &mut s.search_index {
+        if email.project.as_deref() == Some(name.as_str()) {
+            email.project = None;
+        }
+    }
     Ok(())
 }
 
@@ -634,21 +912,60 @@ fn set_email_project(
         }
     }
     overrides::Overrides::update(|o| o.set_project(uid, project.clone()));
+    set_project_in_memory(shared.inner(), &[uid], project.as_deref());
+    Ok(())
+}
+
+/// Show inbox emails in `project` (None = no project): in memory and on their tasks.
+fn set_project_in_memory(shared: &SharedState, uids: &[u32], project: Option<&str>) {
+    let project = project.map(str::to_string);
     {
         let mut s = shared.lock().unwrap();
-        if let Some(c) = s.emails.iter_mut().find(|e| e.uid == uid) {
+        for c in s.emails.iter_mut().filter(|e| uids.contains(&e.uid)) {
             c.project = project.clone();
         }
-        if let Some((_, c)) = s.search_index.iter_mut().find(|(f, e)| *f == search::Folder::Inbox && e.uid == uid) {
+        for (_, c) in s.search_index.iter_mut().filter(|(f, e)| *f == search::Folder::Inbox && uids.contains(&e.uid)) {
             c.project = project.clone();
         }
     }
     tasks::Board::update(|b| {
-        for t in b.tasks.iter_mut().filter(|t| t.source_uid == Some(uid)) {
+        for t in b.tasks.iter_mut().filter(|t| t.source_uid.map_or(false, |u| uids.contains(&u))) {
             t.project = project.clone();
         }
     });
-    Ok(())
+}
+
+/// File the inbox emails that belong to a project, chosen by the AI from its description.
+/// Emails sorted before the project existed would otherwise never be in it. Emails the
+/// user placed by hand stay where they are. Returns how many emails the project now has.
+async fn file_existing_emails(app: &AppHandle, shared: &SharedState, name: &str) -> Result<usize, String> {
+    let (cfg, inbox) = {
+        let s = shared.lock().unwrap();
+        let inbox: Vec<models::EmailCard> = s.search_index.iter()
+            .filter(|(f, _)| *f == search::Folder::Inbox)
+            .map(|(_, c)| c.clone())
+            .collect();
+        (s.cfg.clone(), inbox)
+    };
+    let Some(project) = cfg.projects.iter().find(|p| p.name == name) else { return Ok(0) };
+    let manual = overrides::Overrides::load().projects;
+    let candidates: Vec<models::EmailCard> = inbox.iter().filter(|c| !manual.contains_key(&c.uid)).cloned().collect();
+    let uids = ai_project::matching_emails(&cfg.ai, &project.name, &project.description, &candidates)
+        .await
+        .map_err(|e| format!("The AI could not file the emails into the project: {:#}", e))?;
+    tracing::info!("Project {}: {} existing email(s) filed", name, uids.len());
+    if !uids.is_empty() {
+        // Kept like a choice made by hand: a refresh rewrites the cache, not the overrides.
+        overrides::Overrides::update(|o| {
+            for &uid in &uids {
+                o.set_project(uid, Some(name.to_string()));
+            }
+        });
+        set_project_in_memory(shared, &uids, Some(name));
+    }
+    app_state::redisplay(&cfg, app, shared);
+    let count = inbox.iter().filter(|c| uids.contains(&c.uid) || c.project.as_deref() == Some(name)).count();
+    Ok(count)
 }
 
 /// Save the original message as an .eml file at `path`.
@@ -706,14 +1023,24 @@ async fn search_gifs(query: String, shared: State<'_, SharedState>) -> Result<Ve
 // Each command returns the whole board so the UI can re-render from it.
 
 #[tauri::command]
-fn create_task(title: String, project: Option<String>) -> Result<Vec<tasks::Task>, String> {
+fn create_task(
+    title: String,
+    project: Option<String>,
+    due_date: Option<String>,
+) -> Result<Vec<tasks::Task>, String> {
     let title = title.trim().to_string();
     if title.is_empty() {
         return Err("Task title cannot be empty".into());
     }
     let project = project.filter(|p| !p.is_empty());
+    let due_date = due_date.filter(|date| !date.is_empty());
+    if due_date.as_deref().is_some_and(|date| {
+        chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").is_err()
+    }) {
+        return Err("Invalid task date".into());
+    }
     Ok(tasks::Board::update(|b| {
-        b.add(title, project);
+        b.add_dated(title, project, due_date);
         b.tasks.clone()
     }))
 }
@@ -771,15 +1098,23 @@ fn main() {
         trash_folder: "Trash".into(),
         spam_folder: "Junk".into(),
         sent_folders: Vec::new(),
+        briefing: None,
         startup_error: config_error,
     }));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(shared.clone())
         .invoke_handler(tauri::generate_handler![
             app_ready,
+            app_version,
+            open_compose_window,
+            set_unread_count,
+            check_for_update,
+            install_update,
             refresh_emails,
             get_email,
             send_email,
@@ -788,6 +1123,8 @@ fn main() {
             get_qr,
             save_project_description,
             add_project,
+            rename_project,
+            delete_project,
             trash_email,
             spam_email,
             not_spam_email,

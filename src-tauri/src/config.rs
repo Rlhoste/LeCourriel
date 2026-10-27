@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::path::Path;
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct Config {
@@ -111,6 +112,9 @@ pub struct UserConfig {
     /// UI language: "en" or "fr".
     #[serde(default = "default_language")]
     pub language: String,
+    /// Desktop notification when new unread emails arrive.
+    #[serde(default = "yes")]
+    pub notify_new_mail: bool,
 }
 
 fn default_font_scale() -> f32 { 1.0 }
@@ -124,6 +128,7 @@ impl Default for UserConfig {
             font_scale: default_font_scale(),
             theme: default_theme(),
             language: default_language(),
+            notify_new_mail: true,
         }
     }
 }
@@ -287,7 +292,13 @@ struct LegacyConfig {
 
 impl Config {
     pub fn load() -> Result<Self> {
-        let content = match fs::read_to_string(crate::paths::file("config.toml")) {
+        Self::load_from(&crate::paths::file("config.toml"))
+    }
+
+    /// Load a configuration from an explicit path. Keeping this independent from the
+    /// process-wide data directory makes startup and migration behavior testable.
+    pub fn load_from(path: &Path) -> Result<Self> {
+        let content = match fs::read_to_string(path) {
             Ok(c) => c,
             // First start: no config yet. The app opens Settings so an account can be added.
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Config::default()),
@@ -357,8 +368,13 @@ pub fn save_config(cfg: &Config) -> Result<()> {
 
 /// Write config.toml only (used when applying preferences pulled from the database).
 pub fn write_local(cfg: &Config) -> Result<()> {
+    write_to(cfg, &crate::paths::file("config.toml"))
+}
+
+/// Write a configuration to an explicit path (used by production and isolated tests).
+pub fn write_to(cfg: &Config, path: &Path) -> Result<()> {
     let serialized = toml::to_string_pretty(cfg).context("Failed to serialize config")?;
-    fs::write(crate::paths::file("config.toml"), serialized).context("Failed to write config.toml")?;
+    fs::write(path, serialized).context("Failed to write config.toml")?;
     Ok(())
 }
 

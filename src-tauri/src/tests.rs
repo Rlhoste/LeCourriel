@@ -157,6 +157,32 @@ api_key = "k" model = "m" max_tokens = 100
         let _ = (settings_save, Arc::new(())); // suppress unused import warning
     }
 
+    // ── Mail charset decoding ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_mail_body_decodes_french_accents() {
+        let decode = |raw: &[u8]| {
+            let mail = mailparse::parse_mail(raw).unwrap();
+            crate::imap_client::decode_text_body(&mail).unwrap()
+        };
+
+        // Modern mail sometimes omits charset even though its body is UTF-8.
+        assert_eq!(
+            decode(b"Content-Type: text/plain\r\n\r\nR\xc3\xa9sum\xc3\xa9 tr\xc3\xa8s clair"),
+            "Résumé très clair"
+        );
+        // Older Outlook mail commonly contains undeclared Windows-1252 bytes.
+        assert_eq!(
+            decode(b"Content-Type: text/plain\r\nContent-Transfer-Encoding: 8bit\r\n\r\nR\xe9mi \x97 th\xe8se"),
+            "Rémi — thèse"
+        );
+        // Declared legacy charsets and transfer encoding must still be honoured.
+        assert_eq!(
+            decode(b"Content-Type: text/html; charset=iso-8859-1\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n<p>R=E9sum=E9 tr=E8s clair</p>"),
+            "<p>Résumé très clair</p>"
+        );
+    }
+
     // ── EmailCard serialization ───────────────────────────────────────────────
 
     #[test]
@@ -166,7 +192,7 @@ api_key = "k" model = "m" max_tokens = 100
             subject: "Hello".to_string(),
             from_name: "Alice".to_string(),
             from_email: "alice@example.com".to_string(),
-            to: String::new(), cc: String::new(), reply_to: String::new(), bcc: String::new(), message_id: String::new(),
+            to: String::new(), cc: String::new(), reply_to: String::new(), bcc: String::new(), message_id: String::new(), references: String::new(),
             date_str: "10:30".to_string(),
             date_full: String::new(),
             date_ts: 0,
@@ -264,7 +290,7 @@ api_key = "k" model = "m" max_tokens = 100
 
     fn make_test_config() -> Config {
         Config {
-            user: UserConfig { display_name: "Test".to_string(), font_scale: 1.0, theme: "midnight".to_string(), language: "en".to_string() },
+            user: UserConfig { display_name: "Test".to_string(), font_scale: 1.0, theme: "midnight".to_string(), language: "en".to_string(), notify_new_mail: true },
             accounts: vec![AccountConfig {
                 name: "Work".to_string(),
                 imap: ImapConfig {
@@ -299,7 +325,7 @@ api_key = "k" model = "m" max_tokens = 100
             subject: format!("Subject {}", uid),
             from_name: "Sender".to_string(),
             from_email: "sender@example.com".to_string(),
-            to: String::new(), cc: String::new(), reply_to: String::new(), bcc: String::new(), message_id: String::new(),
+            to: String::new(), cc: String::new(), reply_to: String::new(), bcc: String::new(), message_id: String::new(), references: String::new(),
             date_str: "Mon".to_string(),
             date_full: String::new(),
             date_ts: 0,
@@ -399,6 +425,36 @@ api_key = "k" model = "m" max_tokens = 100
     }
 
     #[test]
+    fn test_board_tasks_keep_the_date_they_appeared() {
+        use crate::dismissals::Dismissals;
+        use crate::tasks::Board;
+        let mut card = make_test_card(30, Priority::Task);
+        card.task = Some("Send the figures".into());
+        card.date_ts = 1_790_000_000;
+        let mut b = Board::default();
+        assert!(b.needs_sync(&[card.clone()]));
+        b.sync_from_cards(&[card.clone()], &Dismissals::default());
+        assert_eq!(b.tasks[0].created_ts, 1_790_000_000, "an email task appears with its email");
+        assert!(!b.needs_sync(&[card.clone()]));
+
+        // A board saved before dates were kept: email tasks get their email's date.
+        let mut old: Board = serde_json::from_str(r#"{"next_id":2,"tasks":[
+            {"id":1,"title":"Send the figures","status":"todo","source_uid":30},
+            {"id":2,"title":"By hand","status":"todo"}]}"#).unwrap();
+        assert_eq!(old.tasks[0].created_ts, 0);
+        assert!(old.needs_sync(&[card.clone()]));
+        assert!(!old.sync_from_cards(&[card.clone()], &Dismissals::default()));
+        assert_eq!(old.tasks[0].created_ts, 1_790_000_000);
+        assert_eq!(old.tasks[1].created_ts, 0, "unknown for old hand-made tasks");
+
+        // Added by hand: now.
+        let before = chrono::Utc::now().timestamp();
+        let id = old.add("Call Bob".into(), None);
+        let t = old.tasks.iter().find(|t| t.id == id).unwrap();
+        assert!(t.created_ts >= before);
+    }
+
+    #[test]
     fn test_board_delete_email_task_is_not_resynced() {
         use crate::dismissals::Dismissals;
         use crate::tasks::{Board, Status};
@@ -421,8 +477,10 @@ api_key = "k" model = "m" max_tokens = 100
         let mut b = Board::default();
         let a = b.add("Buy paper".into(), None);
         let c = b.add("Book room".into(), Some("Work".into()));
+        let dated = b.add_dated("Submit report".into(), Some("Work".into()), Some("2026-10-30".into()));
         assert_ne!(a, c);
         assert!(b.tasks.iter().all(|t| t.status == Status::Todo && t.source_uid.is_none()));
+        assert_eq!(b.tasks.iter().find(|t| t.id == dated).unwrap().due_date.as_deref(), Some("2026-10-30"));
         assert_eq!(Status::parse("in_progress"), Some(Status::InProgress));
         assert_eq!(Status::parse("nope"), None);
     }
@@ -749,6 +807,51 @@ max_tokens = 10
         assert!(!is_real_result(&failed));
     }
 
+    #[test]
+    fn test_unsorted_emails_are_sorted_again() {
+        use crate::app_state::is_sorted;
+        assert!(is_sorted(&make_test_card(1, Priority::Urgent)));
+        // Never sorted (no AI yet), or a failure placeholder left by older versions.
+        for summary in ["", "  ", "Could not classify email.", "Unable to summarize email."] {
+            let card = EmailCard { summary: summary.into(), ..make_test_card(2, Priority::Information) };
+            assert!(!is_sorted(&card), "{:?} should be sorted again", summary);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_classify_reports_ai_failures() {
+        // A failed AI call is an error, not an "information" email with a placeholder summary.
+        let email = RawEmail {
+            uid: 1, subject: "Server down".into(), from: "a@b.c".into(), to: String::new(), cc: String::new(),
+            reply_to: String::new(), bcc: String::new(), message_id: String::new(), references: String::new(),
+            seen: false, deleted: false, date: None, body_text: "Help".into(), body_html: None,
+        };
+        let err = crate::ai_classifier::classify(&AiConfig::default(), &email, &[]).await.unwrap_err();
+        assert!(format!("{:#}", err).contains("Choose an AI model"), "{:#}", err);
+        let (base, _server) = fake_ai_server(401, r#"{"error":{"message":"Incorrect API key provided"}}"#).await;
+        let ai = ai_cfg("custom", "m", "bad", &base);
+        let err = crate::ai_classifier::classify(&ai, &email, &[]).await.unwrap_err();
+        assert_eq!(format!("{:#}", err), "Incorrect API key provided (401)");
+    }
+
+    #[test]
+    fn test_refresh_briefing_tells_about_the_ai() {
+        use crate::app_state::refresh_briefing;
+        let missing = crate::ai::readiness(&AiConfig::default());
+        assert!(missing.is_err());
+        let b = refresh_briefing(&missing, 0, None, 6, 0, 9, 30);
+        assert_eq!((b.kind, b.count), ("ai_missing", 6));
+        assert!(b.detail.contains("Settings → AI"), "{}", b.detail);
+
+        let ready = crate::ai::readiness(&ai_cfg("custom", "m", "k", "http://127.0.0.1:1/v1"));
+        assert!(ready.is_ok());
+        let b = refresh_briefing(&ready, 4, Some("Incorrect API key provided (401)".into()), 4, 0, 9, 30);
+        assert_eq!((b.kind, b.count, b.detail.as_str()), ("ai_error", 4, "Incorrect API key provided (401)"));
+
+        let b = refresh_briefing(&ready, 0, None, 0, 2, 9, 30);
+        assert_eq!((b.kind, b.count, b.hour, b.minute), ("live", 2, 9, 30));
+    }
+
     #[tokio::test]
     async fn test_cloud_off_without_supabase() {
         crate::cloud::configure(&make_test_config());
@@ -934,6 +1037,77 @@ max_tokens = 10
         ]
     }
 
+    // ── New project ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_project_description_format() {
+        use crate::ai_project::format_description;
+        let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            format_description("Emails about my PhD defense", &s(&["Prof Martin (jury)", " ADUM ", "adum"]), &s(&["soutenance", "manuscrit."])),
+            "Emails about my PhD defense. People: Prof Martin (jury), ADUM. Keywords: soutenance, manuscrit."
+        );
+        // No people or keywords: no empty labels.
+        assert_eq!(format_description("Garden works.", &[], &[]), "Garden works.");
+    }
+
+    #[test]
+    fn test_project_parse_answer() {
+        use crate::ai_project::parse;
+        let d = parse(r#"Here: {"name":" PhD  defense ","summary":"Organising the PhD defense with the jury","people":["Prof Martin"],"keywords":["jury","soutenance"],"importance":"HIGH"}"#).unwrap();
+        assert_eq!(d.name, "PhD defense");
+        assert_eq!(d.description, "Organising the PhD defense with the jury. People: Prof Martin. Keywords: jury, soutenance.");
+        assert_eq!(d.urgency, "high");
+        let d = parse(r#"{"name":"Garden","summary":"Garden works","importance":"maybe"}"#).unwrap();
+        assert_eq!((d.description.as_str(), d.urgency.as_str()), ("Garden works.", "normal"));
+        assert!(parse(r#"{"name":"","summary":"x"}"#).is_none());
+        assert!(parse("not json").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_project_draft_reads_the_related_emails() {
+        use crate::ai_project::{draft, related_emails};
+        let index = search_index();
+        let related = related_emails(&index, "my thesis defense with the jury", 12);
+        let uids: Vec<u32> = related.iter().map(|c| c.uid).collect();
+        // The jury email first, the email filed in "Thesis" too; not the newsletter.
+        assert_eq!(uids, vec![1, 3]);
+
+        let (base, server) = fake_ai_server(200, r#"{"choices":[{"message":{"content":"{\"name\":\"Thesis defense\",\"summary\":\"Organising the thesis defense with the jury\",\"people\":[\"Prof Martin (jury)\"],\"keywords\":[\"soutenance\",\"jury\"],\"importance\":\"high\"}"}}]}"#).await;
+        let d = draft(&ai_cfg("custom", "m", "k", &base), "my thesis defense with the jury", "Remi <remi@univ.fr>", &related).await.unwrap();
+        assert_eq!(d.name, "Thesis defense");
+        assert_eq!(d.description, "Organising the thesis defense with the jury. People: Prof Martin (jury). Keywords: soutenance, jury.");
+        let (_, body) = server.await.unwrap();
+        let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let user = body["messages"][1]["content"].as_str().unwrap();
+        assert!(user.starts_with("REQUEST: my thesis defense with the jury"), "{}", user);
+        assert!(user.contains("THE USER (not one of the people): Remi <remi@univ.fr>"), "{}", user);
+        assert!(user.contains("Subject: Defense date") && user.contains("Prof Martin <prof.martin@univ.fr>"), "{}", user);
+
+        // An AI failure is reported, not hidden behind a copy of the request.
+        let err = draft(&AiConfig::default(), "my thesis", "Remi", &[]).await.unwrap_err();
+        assert!(format!("{:#}", err).contains("Choose an AI model"), "{:#}", err);
+    }
+
+    #[test]
+    fn test_project_matching_emails() {
+        use crate::ai_project::{match_content, parse_ids};
+        let mut filed = search_card(1, "Prof Martin", "Defense date", "The jury agreed on the date.", 1_000);
+        filed.project = Some("Thesis".into());
+        filed.summary = "The jury agreed on the defense date.".into();
+        let fresh = search_card(2, "Newsletter", "Weekly digest", "Some news.", 2_000);
+        let text = match_content("Defense", "My PhD defense. People: Prof Martin.", &[filed, fresh]);
+        assert!(text.starts_with("PROJECT: Defense\nDESCRIPTION: My PhD defense. People: Prof Martin.\n"), "{}", text);
+        // Its id, where it is now, and the AI summary (or the start of the body when unsorted).
+        assert!(text.contains("[1] From: Prof Martin <prof.martin@univ.fr> | Subject: Defense date | project now: Thesis | The jury agreed on the defense date."), "{}", text);
+        assert!(text.contains("[2] From: Newsletter <newsletter@univ.fr> | Subject: Weekly digest | project now: none | Some news."), "{}", text);
+
+        // Only offered emails; numbers or strings; duplicates once.
+        assert_eq!(parse_ids(r#"{"ids":[2,"1",2,99]}"#, &[1, 2]), Some(vec![1, 2]));
+        assert_eq!(parse_ids(r#"Sure: {"ids":[]}"#, &[1]), Some(vec![]));
+        assert_eq!(parse_ids("no", &[1]), None);
+    }
+
     #[test]
     fn test_search_parse_query() {
         use crate::search::{parse_query, Folder};
@@ -1004,6 +1178,50 @@ max_tokens = 10
         assert!(c.contains(&"Jury <jury@univ.fr>".to_string()));   // display name preferred
         assert!(c.contains(&r#""Lhoste, Remi" <remi@example.com>"#.to_string()));   // comma inside quotes
         assert_eq!(c.len(), 3);
+    }
+
+    #[test]
+    fn test_new_mail_notification_texts() {
+        use crate::app_state::notification_texts;
+        use crate::i18n::Lang;
+        let card = |uid: u32, from: &str, subject: &str, read: bool| {
+            let mut c = make_test_card(uid, Priority::Information);
+            c.from_name = from.into();
+            c.subject = subject.into();
+            c.is_read = read;
+            c
+        };
+        assert!(notification_texts(&[], Lang::En).is_empty());
+        assert!(notification_texts(&[card(1, "Ana", "Hi", true)], Lang::En).is_empty());
+
+        let few = [card(1, "Ana", "Hi", false), card(2, "Bob", "Report", false), card(3, "Cyd", "Lunch", false)];
+        assert_eq!(notification_texts(&few, Lang::En), vec![
+            ("Ana".to_string(), "Hi".to_string()),
+            ("Bob".to_string(), "Report".to_string()),
+            ("Cyd".to_string(), "Lunch".to_string()),
+        ]);
+
+        let many: Vec<EmailCard> = (1..=10).map(|i| card(i, &format!("P{}", i % 5), "x", false)).collect();
+        assert_eq!(notification_texts(&many, Lang::Fr),
+                   vec![("10 nouveaux e-mails".to_string(), "P1, P2, P3, …".to_string())]);
+    }
+
+    #[test]
+    fn test_inline_signature_image_is_embedded() {
+        let raw = concat!(
+            "Subject: Hi\r\nMIME-Version: 1.0\r\n",
+            "Content-Type: multipart/related; boundary=\"b\"\r\n\r\n",
+            "--b\r\nContent-Type: text/html; charset=utf-8\r\n\r\n",
+            "<p>Hello</p><img src=\"cid:image001.png@01DA\">\r\n",
+            "--b\r\nContent-Type: image/png; name=\"image001.png\"\r\n",
+            "Content-Transfer-Encoding: base64\r\nContent-ID: <image001.png@01DA>\r\n\r\n",
+            "iVBORw0KGgo=\r\n--b--\r\n",
+        );
+        let parsed = mailparse::parse_mail(raw.as_bytes()).unwrap();
+        let (_, html) = crate::imap_client::extract_bodies(&parsed);
+        let html = html.unwrap();
+        assert!(html.contains("src=\"data:image/png;base64,iVBORw0KGgo=\""), "{html}");
+        assert!(!html.contains("cid:"));
     }
 
     #[test]
@@ -1300,7 +1518,7 @@ max_tokens = 10
         let email = crate::models::RawEmail {
             uid: 1, subject: "Defense date confirmation".into(), from: "Prof Martin <martin@univ.fr>".into(),
             to: String::new(), cc: String::new(), reply_to: String::new(), bcc: String::new(),
-            message_id: String::new(), seen: false, deleted: false, date: None,
+            message_id: String::new(), references: String::new(), seen: false, deleted: false, date: None,
             body_text: "Dear Remi, please confirm by Friday 23 October that the PhD defense can take place on 27 October.".into(),
             body_html: None,
         };
@@ -2243,6 +2461,222 @@ Method=ssl-on-alternate-port
         for a in &found {
             println!("{} | {} | {} | pop3={} oauth={} imap={:?} ({}) smtp={:?} ({})", a.client, a.label, a.email, a.pop3, a.oauth, srv(a.imap.as_ref()), a.imap_issue, srv(a.smtp.as_ref()), a.smtp_issue);
         }
+    }
+
+    // ── Complete configuration lifecycle ────────────────────────────────────
+
+    fn isolated_test_dir(label: &str) -> std::path::PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "courriel-{label}-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed),
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn test_first_launch_from_missing_config_is_empty_and_usable() {
+        let dir = isolated_test_dir("first-launch");
+        let cfg = Config::load_from(&dir.join("config.toml")).unwrap();
+        assert!(cfg.accounts.is_empty());
+        assert!(cfg.projects.is_empty());
+        assert_eq!(cfg.user.theme, "brutalist");
+        assert_eq!(cfg.user.language, "en");
+        assert_eq!(cfg.ai.provider(), "anthropic");
+        assert_eq!(cfg.gifs.key(), DEFAULT_GIPHY_KEY);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_malformed_config_reports_an_error_instead_of_resetting_data() {
+        let dir = isolated_test_dir("bad-config");
+        let path = dir.join("config.toml");
+        std::fs::write(&path, "this = [is not valid TOML").unwrap();
+        let err = Config::load_from(&path).unwrap_err().to_string();
+        assert!(err.contains("Failed to parse config.toml"), "{err}");
+        assert_eq!(std::fs::read_to_string(path).unwrap(), "this = [is not valid TOML");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_empty_app_can_become_fully_configured_and_survive_restart() {
+        use crate::dto::AiSettingsDto;
+        use std::collections::BTreeMap;
+
+        let dir = isolated_test_dir("full-lifecycle");
+        let path = dir.join("config.toml");
+        let empty = Config::load_from(&path).unwrap();
+        let accounts = vec![
+            AccountDto {
+                label: "Work".into(), imap_host: "imap.work.test".into(), imap_port: "993".into(),
+                imap_user: "remi@work.test".into(), imap_pass: "imap-secret".into(), imap_mailbox: "INBOX".into(),
+                imap_fetch: "75".into(), smtp_host: "smtp.work.test".into(), smtp_port: "465".into(),
+                smtp_user: "remi@work.test".into(), smtp_pass: "smtp-secret".into(),
+                smtp_from: "\"Remi Work\" <remi@work.test>".into(), signature_file: "signature-abc123.html".into(),
+                signature_on_new: true, signature_on_reply: false,
+            },
+            AccountDto {
+                label: "Personal".into(), imap_host: "imap.personal.test".into(), imap_port: "".into(),
+                imap_user: "me@personal.test".into(), imap_pass: "shared-secret".into(), imap_mailbox: "".into(),
+                imap_fetch: "".into(), smtp_host: "smtp.personal.test".into(), smtp_port: "".into(),
+                smtp_user: "".into(), smtp_pass: "".into(), smtp_from: "".into(), signature_file: String::new(),
+                signature_on_new: false, signature_on_reply: true,
+            },
+        ];
+        let ai = AiSettingsDto {
+            provider: "openai".into(),
+            model: " test-model ".into(),
+            base_url: " https://ai.example/v1/ ".into(),
+            keys: BTreeMap::from([
+                ("openai".into(), "  secret-key  ".into()),
+                ("unknown".into(), "must-not-persist".into()),
+                ("mistral".into(), "  ".into()),
+            ]),
+        };
+        let mut configured = crate::settings::apply_to_config(
+            empty, None, &accounts, &ai, " custom-giphy ", 1.25, Some("aero"), Some("fr"), None,
+        );
+        configured.projects = vec![
+            ProjectConfig { name: "Research".into(), description: "Paper and experiments".into(), urgency: "high".into() },
+            ProjectConfig { name: "Home".into(), description: "Personal work".into(), urgency: "normal".into() },
+        ];
+        configured.supabase = Some(SupabaseConfig { url: "https://cloud.example".into(), anon_key: "public-key".into() });
+
+        crate::config::write_to(&configured, &path).unwrap();
+        let restarted = Config::load_from(&path).unwrap();
+        assert_eq!(restarted.accounts.len(), 2);
+        assert_eq!(restarted.accounts[0].name, "Work");
+        assert_eq!(restarted.accounts[0].signature.file, "signature-abc123.html");
+        assert_eq!(restarted.accounts[1].imap.port, 993);
+        assert_eq!(restarted.accounts[1].imap.mailbox, "INBOX");
+        assert_eq!(restarted.accounts[1].imap.fetch_count, 50);
+        assert_eq!(restarted.accounts[1].smtp.port, 587);
+        assert_eq!(restarted.user.theme, "aero");
+        assert_eq!(restarted.user.language, "fr");
+        assert!((restarted.user.font_scale - 1.25).abs() < f32::EPSILON);
+        assert_eq!(restarted.ai.provider(), "openai");
+        assert_eq!(restarted.ai.model, "test-model");
+        assert_eq!(restarted.ai.base_url, "https://ai.example/v1/");
+        assert_eq!(restarted.ai.key(), "secret-key");
+        assert!(!restarted.ai.keys.contains_key("unknown"));
+        assert!(!restarted.ai.keys.contains_key("mistral"));
+        assert_eq!(restarted.gifs.giphy_api_key, "custom-giphy");
+        assert_eq!(restarted.projects.len(), 2);
+        assert!(restarted.supabase_settings().is_some());
+
+        let dto = crate::settings::config_to_dto(&restarted);
+        assert_eq!(dto.accounts.len(), 2);
+        assert_eq!(dto.ai.provider, "openai");
+        assert_eq!(dto.supabase_url, "https://cloud.example");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_settings_reject_unknown_language_and_provider() {
+        use crate::dto::AiSettingsDto;
+        let mut original = make_test_config();
+        original.user.language = "ja".into();
+        original.ai.provider = "mistral".into();
+        let ai = AiSettingsDto { provider: "evil-provider".into(), ..Default::default() };
+        let updated = crate::settings::apply_to_config(
+            original, None, &[], &ai, "", 1.0, None, Some("xx"), None,
+        );
+        assert_eq!(updated.user.language, "ja");
+        assert_eq!(updated.ai.provider(), "mistral");
+    }
+
+    #[test]
+    fn test_all_supported_languages_survive_settings_application() {
+        use crate::dto::AiSettingsDto;
+        for (language, _) in crate::i18n::LANGUAGES {
+            let updated = crate::settings::apply_to_config(
+                Config::default(), None, &[], &AiSettingsDto::default(), "", 1.0, None, Some(language), None,
+            );
+            assert_eq!(&updated.user.language, language);
+        }
+    }
+
+    #[test]
+    fn test_account_defaults_are_applied_to_invalid_numeric_input() {
+        let dto = AccountDto {
+            label: "Defaults".into(), imap_port: "not-a-port".into(), imap_fetch: "NaN".into(),
+            smtp_port: "70000".into(), ..Default::default()
+        };
+        let account = crate::settings::account_from_dto(&dto);
+        assert_eq!(account.imap.port, 993);
+        assert_eq!(account.imap.fetch_count, 50);
+        assert_eq!(account.smtp.port, 587);
+        assert_eq!(account.imap.mailbox, "INBOX");
+    }
+
+    #[test]
+    fn test_smtp_fallback_builds_safe_sender_name() {
+        let mut cfg = make_test_config();
+        let account = &mut cfg.accounts[0];
+        account.imap.username = "user@example.com".into();
+        account.smtp.username.clear();
+        account.smtp.password.clear();
+        account.smtp.from_address.clear();
+        let smtp = account.smtp_for_sending("Remi <Admin> \"Quoted\"");
+        assert_eq!(smtp.username, account.imap.username);
+        assert_eq!(smtp.password, account.imap.password);
+        assert_eq!(smtp.from_address, "\"Remi Admin Quoted\" <user@example.com>");
+    }
+
+    #[test]
+    fn test_legacy_single_account_file_migrates_without_losing_projects() {
+        let dir = isolated_test_dir("legacy-config");
+        let path = dir.join("config.toml");
+        std::fs::write(&path, r#"
+[user]
+display_name = "Legacy User"
+
+[imap]
+host = "imap.legacy.test"
+port = 993
+username = "legacy@example.com"
+password = "secret"
+mailbox = "INBOX"
+fetch_count = 20
+
+[smtp]
+host = "smtp.legacy.test"
+port = 587
+username = "legacy@example.com"
+password = "secret"
+from_address = "legacy@example.com"
+
+[claude]
+api_key = "legacy-ai-key"
+model = "legacy-model"
+max_tokens = 222
+
+[[projects]]
+name = "Legacy project"
+description = "Keep me"
+urgency = "high"
+"#).unwrap();
+        let migrated = Config::load_from(&path).unwrap();
+        assert_eq!(migrated.accounts.len(), 1);
+        assert_eq!(migrated.accounts[0].name, "Default");
+        assert_eq!(migrated.projects[0].name, "Legacy project");
+        assert_eq!(migrated.ai.provider(), "anthropic");
+        assert_eq!(migrated.ai.model, "legacy-model");
+        assert_eq!(migrated.ai.key(), "legacy-ai-key");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_config_write_failure_does_not_panic() {
+        let dir = isolated_test_dir("write-failure");
+        let missing_parent = dir.join("missing").join("config.toml");
+        let error = crate::config::write_to(&Config::default(), &missing_parent).unwrap_err();
+        assert!(error.to_string().contains("Failed to write config.toml"));
+        let _ = std::fs::remove_dir_all(dir);
     }
 }
 

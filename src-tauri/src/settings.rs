@@ -11,6 +11,7 @@ pub fn config_to_dto(cfg: &Config) -> SettingsDto {
         font_scale: cfg.user.font_scale,
         theme: cfg.user.theme.clone(),
         language: cfg.user.language.clone(),
+        notify_new_mail: cfg.user.notify_new_mail,
         ai: AiSettingsDto {
             provider: cfg.ai.provider().to_string(),
             model: cfg.ai.model.clone(),
@@ -48,8 +49,27 @@ pub fn save_config(
     font_scale: f32,
     theme: Option<&str>,
     language: Option<&str>,
+    notify_new_mail: Option<bool>,
 ) -> Result<()> {
-    let mut cfg = Config::load()?;
+    let cfg = apply_to_config(
+        Config::load()?, display_name, accounts, ai, giphy_key, font_scale, theme, language, notify_new_mail,
+    );
+    crate::config::save_config(&cfg)
+}
+
+/// Apply Settings values to an existing configuration without reading or writing disk.
+/// This is the complete first-run → configured-app transition used by `save_config`.
+pub fn apply_to_config(
+    mut cfg: Config,
+    display_name: Option<&str>,
+    accounts: &[AccountDto],
+    ai: &AiSettingsDto,
+    giphy_key: &str,
+    font_scale: f32,
+    theme: Option<&str>,
+    language: Option<&str>,
+    notify_new_mail: Option<bool>,
+) -> Config {
 
     cfg.user = UserConfig {
         // Not in Settings any more: keep the stored name (it may come from config.toml or the cloud).
@@ -60,6 +80,7 @@ pub fn save_config(
             .filter(|l| crate::i18n::is_supported(l))
             .map(str::to_string)
             .unwrap_or_else(|| cfg.user.language.clone()),
+        notify_new_mail: notify_new_mail.unwrap_or(cfg.user.notify_new_mail),
     };
 
     cfg.accounts = accounts.iter().map(account_from_dto).collect();
@@ -75,7 +96,7 @@ pub fn save_config(
         .collect();
     cfg.gifs.giphy_api_key = giphy_key.trim().to_string();
 
-    crate::config::save_config(&cfg)
+    cfg
 }
 
 /// An account as typed in Settings. Blank ports and advanced options mean the defaults.

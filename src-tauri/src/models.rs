@@ -79,6 +79,8 @@ pub struct RawEmail {
     pub reply_to: String,
     pub bcc: String,
     pub message_id: String,
+    /// Message-IDs from In-Reply-To and References, space-separated: the discussion it answers.
+    pub references: String,
     /// \Seen flag on the server.
     pub seen: bool,
     /// \Deleted flag: moved away and waiting for a purge, so not shown.
@@ -107,6 +109,9 @@ pub struct EmailCard {
     /// Message-ID header, for reply threading.
     #[serde(default)]
     pub message_id: String,
+    /// Message-IDs this email replies to (In-Reply-To + References), space-separated.
+    #[serde(default)]
+    pub references: String,
     pub date_str: String,
     /// Full local date and time, e.g. "Monday 19 October 2026, 15:29".
     #[serde(default)]
