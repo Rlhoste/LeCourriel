@@ -104,7 +104,7 @@ STRINGS.es = {
     "set.testConn": "🔌 Probar la conexión", "set.testing": "Probando…", "set.imapOk": "Entrante OK ({folder}: {n})", "set.smtpOk": "Saliente OK",
     "set.connErr.auth": "El servidor rechazó el usuario o la contraseña.", "set.connErr.host": "Servidor no encontrado: revisa su nombre.", "set.connErr.refused": "El servidor rechazó la conexión: revisa el puerto.", "set.connErr.reset": "El servidor cortó la conexión. Si ya respondió en este puerto, probablemente te bloquea un tiempo tras inicios de sesión fallidos: inténtalo más tarde o revisa tu cuenta con tu proveedor.", "set.connErr.tls": "Falló la conexión segura: revisa el puerto (993 entrante, 465 o 587 saliente).", "set.connErr.folder": "Esta carpeta no existe en el servidor (Opciones avanzadas).", "set.connErr.timeout": "Sin respuesta del servidor tras 20 s: revisa su nombre y puerto.", "set.connErr.other": "Error de conexión.",
     "set.sigMarker": "✍️ Firma",
-    "set.collapse": "Contraer", "set.expand": "Desplegar", "set.removeAccount": "Quitar esta cuenta",
+    "set.collapse": "Contraer", "set.expand": "Desplegar", "set.removeAccount": "Quitar esta cuenta", "set.removeAccountConfirm": "¿Quitar la cuenta «{name}»? Desaparece para siempre en cuanto pulses Guardar.",
     'set.addAccount': '+ Añadir cuenta', 'set.model': 'Modelo',
     'set.giphyKey': 'Clave API de GIPHY', "set.giphyHint": "(opcional: hay una clave incluida; la tuya gratis en developers.giphy.com)", "set.giphyDefaultPh": "Clave incluida (déjalo vacío para usarla)",
     'set.showQr': 'Mostrar código QR', 'set.save': 'Guardar', 'set.saveFailed': 'Error al guardar: {err}',

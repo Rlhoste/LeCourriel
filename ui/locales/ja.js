@@ -104,7 +104,7 @@ STRINGS.ja = {
     "set.testConn": "🔌 接続をテスト", "set.testing": "テスト中…", "set.imapOk": "受信 OK（{folder}：{n}）", "set.smtpOk": "送信 OK",
     "set.connErr.auth": "サーバーがユーザー名またはパスワードを拒否しました。", "set.connErr.host": "サーバーが見つかりません。名前を確認してください。", "set.connErr.refused": "サーバーが接続を拒否しました。ポートを確認してください。", "set.connErr.reset": "サーバーが接続を切断しました。このポートで以前は応答していた場合、ログイン失敗のためしばらくブロックされている可能性があります。後でもう一度試すか、プロバイダーでアカウントを確認してください。", "set.connErr.tls": "安全な接続に失敗しました。ポートを確認してください（受信 993、送信 465 または 587）。", "set.connErr.folder": "このフォルダーはサーバーにありません（詳細オプション）。", "set.connErr.timeout": "20 秒以内にサーバーから応答がありません。名前とポートを確認してください。", "set.connErr.other": "接続に失敗しました。",
     "set.sigMarker": "✍️ 署名",
-    "set.collapse": "折りたたむ", "set.expand": "展開", "set.removeAccount": "このアカウントを削除",
+    "set.collapse": "折りたたむ", "set.expand": "展開", "set.removeAccount": "このアカウントを削除", "set.removeAccountConfirm": "アカウント「{name}」を削除しますか？保存を押すと元に戻せません。",
     'set.addAccount': '+ アカウントを追加', 'set.model': 'モデル',
     'set.giphyKey': 'GIPHY API キー', "set.giphyHint": "（任意：キーは組み込み済み。自分のキーは developers.giphy.com で無料取得）", "set.giphyDefaultPh": "組み込みキー（空欄で使用）",
     'set.showQr': 'QR コードを表示', 'set.save': '保存', 'set.saveFailed': '保存に失敗しました：{err}',

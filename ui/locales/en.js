@@ -112,7 +112,7 @@ STRINGS.en = {
     "set.testConn": "🔌 Test the connection", "set.testing": "Testing…", "set.imapOk": "Incoming OK ({folder}: {n})", "set.smtpOk": "Outgoing OK",
     "set.connErr.auth": "Username or password refused by the server.", "set.connErr.host": "Server not found: check its name.", "set.connErr.refused": "The server refused the connection: check the port.", "set.connErr.reset": "The server cut the connection. If it already answered on this port, it is probably blocking you for a while after failed logins: try again later, or check your account with your mail provider.", "set.connErr.tls": "Secure connection failed: check the port (993 for incoming, 465 or 587 for outgoing).", "set.connErr.folder": "This folder does not exist on the server (Advanced options).", "set.connErr.timeout": "No answer from the server after 20 s: check its name and port.", "set.connErr.other": "Connection failed.",
     "set.sigMarker": "✍️ Signature",
-    "set.collapse": "Collapse", "set.expand": "Expand", "set.removeAccount": "Remove this account",
+    "set.collapse": "Collapse", "set.expand": "Expand", "set.removeAccount": "Remove this account", "set.removeAccountConfirm": "Remove the account “{name}”? It is gone for good once you press Save.",
     'set.addAccount': '+ Add Account', 'set.model': 'Model',
     'set.giphyKey': 'GIPHY API Key', "set.giphyHint": "(optional: a key is built in; get your own free at developers.giphy.com)", "set.giphyDefaultPh": "Built-in key (leave blank to use it)",
     'set.showQr': 'Show QR Code', 'set.save': 'Save', 'set.saveFailed': 'Save failed: {err}',

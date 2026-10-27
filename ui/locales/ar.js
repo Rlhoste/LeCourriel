@@ -111,7 +111,7 @@ STRINGS.ar = {
     "set.testConn": "🔌 اختبار الاتصال", "set.testing": "جارٍ الاختبار…", "set.imapOk": "البريد الوارد يعمل ({folder}: {n})", "set.smtpOk": "البريد الصادر يعمل",
     "set.connErr.auth": "رفض الخادم اسم المستخدم أو كلمة المرور.", "set.connErr.host": "لم يُعثر على الخادم: تحقّق من اسمه.", "set.connErr.refused": "رفض الخادم الاتصال: تحقّق من المنفذ.", "set.connErr.reset": "قطع الخادم الاتصال. إن كان قد استجاب على هذا المنفذ من قبل، فهو على الأرجح يحظرك مؤقتًا بعد محاولات دخول فاشلة: أعد المحاولة لاحقًا أو تحقّق من حسابك لدى مزوّد البريد.", "set.connErr.tls": "فشل الاتصال الآمن: تحقّق من المنفذ (993 للوارد، 465 أو 587 للصادر).", "set.connErr.folder": "هذا المجلد غير موجود على الخادم (خيارات متقدمة).", "set.connErr.timeout": "لا رد من الخادم بعد 20 ثانية: تحقّق من الاسم والمنفذ.", "set.connErr.other": "فشل الاتصال.",
     "set.sigMarker": "✍️ التوقيع",
-    "set.collapse": "طيّ", "set.expand": "توسيع", "set.removeAccount": "إزالة هذا الحساب",
+    "set.collapse": "طيّ", "set.expand": "توسيع", "set.removeAccount": "إزالة هذا الحساب", "set.removeAccountConfirm": "إزالة الحساب «{name}»؟ سيُحذف نهائيًا بمجرد الضغط على حفظ.",
     'set.addAccount': '+ إضافة حساب', 'set.model': 'النموذج',
     'set.giphyKey': 'مفتاح API لـ GIPHY', "set.giphyHint": "(اختياري: يوجد مفتاح مضمَّن؛ واحصل على مفتاحك مجانًا من developers.giphy.com)", "set.giphyDefaultPh": "مفتاح مضمَّن (اتركه فارغًا لاستخدامه)",
     'set.showQr': 'عرض رمز QR', 'set.save': 'حفظ', 'set.saveFailed': 'تعذّر الحفظ: {err}',

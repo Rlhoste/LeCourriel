@@ -104,7 +104,7 @@ STRINGS.ur = {
     "set.testConn": "🔌 کنکشن جانچیں", "set.testing": "جانچ جاری ہے…", "set.imapOk": "آنے والی میل ٹھیک ({folder}: {n})", "set.smtpOk": "جانے والی میل ٹھیک",
     "set.connErr.auth": "سرور نے صارف نام یا پاس ورڈ مسترد کر دیا۔", "set.connErr.host": "سرور نہیں ملا: اس کا نام جانچیں۔", "set.connErr.refused": "سرور نے کنکشن مسترد کر دیا: پورٹ جانچیں۔", "set.connErr.reset": "سرور نے کنکشن منقطع کر دیا۔ اگر اس نے اس پورٹ پر پہلے جواب دیا تھا تو ناکام لاگ اِن کے بعد شاید کچھ دیر کے لیے آپ کو روک رہا ہے: بعد میں دوبارہ کوشش کریں، یا اپنے فراہم کنندہ سے اکاؤنٹ جانچیں۔", "set.connErr.tls": "محفوظ کنکشن ناکام: پورٹ جانچیں (آنے والی 993، جانے والی 465 یا 587)۔", "set.connErr.folder": "یہ فولڈر سرور پر موجود نہیں (اعلیٰ اختیارات)۔", "set.connErr.timeout": "20 سیکنڈ میں سرور سے کوئی جواب نہیں: نام اور پورٹ جانچیں۔", "set.connErr.other": "کنکشن ناکام۔",
     "set.sigMarker": "✍️ دستخط",
-    "set.collapse": "سمیٹیں", "set.expand": "پھیلائیں", "set.removeAccount": "یہ اکاؤنٹ ہٹائیں",
+    "set.collapse": "سمیٹیں", "set.expand": "پھیلائیں", "set.removeAccount": "یہ اکاؤنٹ ہٹائیں", "set.removeAccountConfirm": "اکاؤنٹ “{name}” ہٹائیں؟ محفوظ کریں دباتے ہی یہ ہمیشہ کے لیے ہٹ جائے گا۔",
     'set.addAccount': '+ اکاؤنٹ شامل کریں', 'set.model': 'ماڈل',
     'set.giphyKey': 'GIPHY API کلید', "set.giphyHint": "(اختیاری: ایک کلید شامل ہے؛ اپنی مفت developers.giphy.com پر)", "set.giphyDefaultPh": "شامل کلید (استعمال کے لیے خالی چھوڑیں)",
     'set.showQr': 'QR کوڈ دکھائیں', 'set.save': 'محفوظ کریں', 'set.saveFailed': 'محفوظ نہیں ہو سکا: {err}',

@@ -104,7 +104,7 @@ STRINGS.de = {
     "set.testConn": "🔌 Verbindung testen", "set.testing": "Wird getestet…", "set.imapOk": "Posteingang OK ({folder}: {n})", "set.smtpOk": "Postausgang OK",
     "set.connErr.auth": "Benutzername oder Passwort vom Server abgelehnt.", "set.connErr.host": "Server nicht gefunden: Namen prüfen.", "set.connErr.refused": "Der Server hat die Verbindung abgelehnt: Port prüfen.", "set.connErr.reset": "Der Server hat die Verbindung getrennt. Hat er auf diesem Port schon geantwortet, sperrt er Sie wahrscheinlich eine Weile nach fehlgeschlagenen Anmeldungen: später erneut versuchen oder das Konto beim Anbieter prüfen.", "set.connErr.tls": "Sichere Verbindung fehlgeschlagen: Port prüfen (993 Eingang, 465 oder 587 Ausgang).", "set.connErr.folder": "Dieser Ordner existiert nicht auf dem Server (Erweiterte Optionen).", "set.connErr.timeout": "Keine Antwort des Servers nach 20 s: Namen und Port prüfen.", "set.connErr.other": "Verbindung fehlgeschlagen.",
     "set.sigMarker": "✍️ Signatur",
-    "set.collapse": "Einklappen", "set.expand": "Ausklappen", "set.removeAccount": "Dieses Konto entfernen",
+    "set.collapse": "Einklappen", "set.expand": "Ausklappen", "set.removeAccount": "Dieses Konto entfernen", "set.removeAccountConfirm": "Das Konto „{name}“ entfernen? Es ist endgültig weg, sobald Sie auf Speichern klicken.",
     'set.addAccount': '+ Konto hinzufügen', 'set.model': 'Modell',
     'set.giphyKey': 'GIPHY-API-Schlüssel', "set.giphyHint": "(optional: ein Schlüssel ist enthalten; Ihr eigener kostenlos auf developers.giphy.com)", "set.giphyDefaultPh": "Enthaltener Schlüssel (leer lassen, um ihn zu nutzen)",
     'set.showQr': 'QR-Code anzeigen', 'set.save': 'Speichern', 'set.saveFailed': 'Speichern fehlgeschlagen: {err}',

@@ -104,7 +104,7 @@ STRINGS.zh = {
     "set.testConn": "🔌 测试连接", "set.testing": "正在测试…", "set.imapOk": "收件正常（{folder}：{n}）", "set.smtpOk": "发件正常",
     "set.connErr.auth": "服务器拒绝了用户名或密码。", "set.connErr.host": "找不到服务器：请检查名称。", "set.connErr.refused": "服务器拒绝连接：请检查端口。", "set.connErr.reset": "服务器断开了连接。如果它之前在此端口有响应，可能是登录失败后暂时封锁了您：请稍后再试，或向邮件服务商核实帐户。", "set.connErr.tls": "安全连接失败：请检查端口（收件 993，发件 465 或 587）。", "set.connErr.folder": "服务器上不存在此文件夹（高级选项）。", "set.connErr.timeout": "服务器 20 秒内无响应：请检查名称和端口。", "set.connErr.other": "连接失败。",
     "set.sigMarker": "✍️ 签名",
-    "set.collapse": "收起", "set.expand": "展开", "set.removeAccount": "移除此帐户",
+    "set.collapse": "收起", "set.expand": "展开", "set.removeAccount": "移除此帐户", "set.removeAccountConfirm": "移除帐户“{name}”？点击保存后将无法恢复。",
     'set.addAccount': '+ 添加帐户', 'set.model': '模型',
     'set.giphyKey': 'GIPHY API 密钥', "set.giphyHint": "（可选：已内置密钥；也可在 developers.giphy.com 免费获取自己的）", "set.giphyDefaultPh": "内置密钥（留空即使用）",
     'set.showQr': '显示二维码', 'set.save': '保存', 'set.saveFailed': '保存失败：{err}',

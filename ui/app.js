@@ -2494,6 +2494,10 @@ function renderAccountBlocks(accounts) {
     block.querySelector('.collapse-account-btn').addEventListener('click', toggle);
     block.querySelector('.account-title').addEventListener('click', toggle);
     block.querySelector('.remove-account-btn').addEventListener('click', () => {
+      // A block with nothing in it goes without asking; one that names an account asks first.
+      const name = block.querySelector('.a-sender-email').value.trim() || loginEmail(block);
+      if (name && !confirm(t('set.removeAccountConfirm', { name }))) return;
+      settingsData.accounts = collectAccounts();   // keep what was typed in the other blocks
       settingsData.accounts.splice(idx, 1);
       renderAccountBlocks(settingsData.accounts);
     });
