@@ -2707,6 +2707,9 @@ function switchSettingsTab(tab) {
 
 // ── Account setup dialog (Auto-setup) ───────────────────────────────────────
 const GMAIL_APP_PASSWORDS_URL = 'https://myaccount.google.com/apppasswords';
+// Google only offers app passwords once 2-Step Verification is on; before that its page
+// says "the setting you are looking for is not available for your account".
+const GMAIL_2SV_URL = 'https://myaccount.google.com/signinoptions/twosv';
 
 let setupFound;   // what Auto-setup returned: undefined = not asked yet, null = nothing found
 let setupNote;    // { key, vars }: one quiet line shown instead of a result
@@ -2732,16 +2735,22 @@ function fillHint(el, key) {
   if (!kind) return;
   el.textContent = t(kind === 'gmail' ? 'setup.hint.gmail' : 'setup.hint.ms');
   if (kind !== 'gmail') return;
-  const link = document.createElement('a');
-  link.className = 'setup-link';
-  link.href = GMAIL_APP_PASSWORDS_URL;
-  link.textContent = t('setup.hint.gmailLink');
-  // Opens in the system browser (Tauri shell plugin), not inside the app window.
-  link.addEventListener('click', e => {
-    e.preventDefault();
-    window.__TAURI__.shell.open(GMAIL_APP_PASSWORDS_URL).catch(err => console.error('open app passwords page', err));
+  // The two steps, in order, each one a link to its Google page.
+  [['setup.hint.gmail2sv', GMAIL_2SV_URL], ['setup.hint.gmailLink', GMAIL_APP_PASSWORDS_URL]].forEach(([k, url]) => {
+    const link = document.createElement('a');
+    link.className = 'setup-link';
+    link.href = url;
+    link.textContent = t(k);
+    // Opens in the system browser (Tauri shell plugin), not inside the app window.
+    link.addEventListener('click', e => {
+      e.preventDefault();
+      window.__TAURI__.shell.open(url).catch(err => console.error('open Google page', err));
+    });
+    const step = document.createElement('span');
+    step.className = 'setup-step';
+    step.append(link);
+    el.append(step);
   });
-  el.append(' ', link);
 }
 
 // What the hint is about: a custom domain hosted by Google or Microsoft only shows who it

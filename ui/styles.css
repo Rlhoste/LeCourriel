@@ -909,6 +909,7 @@ button.row-mark:hover::before { transform: scale(1.2); }
 .setup-line { font-size: 0.9rem; }
 .setup-issues { color: var(--urgent); font-size: 0.8rem; }
 .setup-link { color: var(--link); cursor: pointer; text-decoration: underline; }
+.setup-step { display: block; margin-top: 2px; }
 .setup-result.hidden, .setup-hint.hidden, #setup-use.hidden, #setup-manual.hidden { display: none; }
 
 /* ── Account Setup Dialog, step 1 (Auto-scan) ──────────────────────────────── */
