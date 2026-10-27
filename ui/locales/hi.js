@@ -122,7 +122,7 @@ STRINGS.hi = {
     "set.aiTestOk": "काम कर रहा है — “{answer}”, {seconds} सेकंड में",
     "set.aiModelsLoaded": "मिले मॉडल: {n}",
     "set.aiNoModels": "कोई मॉडल नहीं मिला",
-    "ai.prov.anthropic": "Claude (Anthropic)",
+    "ai.prov.anthropic": "Claude (API)",
     "ai.prov.ollama": "Ollama (लोकल, मुफ़्त)",
     "ai.prov.custom": "अन्य (OpenAI-संगत)",
     "ai.prov.claudeCode": "Claude (सदस्यता)",

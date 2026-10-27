@@ -123,7 +123,7 @@ STRINGS.ur = {
     "set.aiTestOk": "کام کر رہا ہے — “{answer}”، {seconds} سیکنڈ میں",
     "set.aiModelsLoaded": "ملے ماڈلز: {n}",
     "set.aiNoModels": "کوئی ماڈل نہیں ملا",
-    "ai.prov.anthropic": "Claude (Anthropic)",
+    "ai.prov.anthropic": "Claude (API)",
     "ai.prov.ollama": "Ollama (مقامی، مفت)",
     "ai.prov.custom": "دیگر (OpenAI کے موافق)",
     "ai.prov.claudeCode": "Claude (سبسکرپشن)",

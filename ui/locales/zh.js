@@ -122,7 +122,7 @@ STRINGS.zh = {
     "set.aiTestOk": "可用 — “{answer}”，耗时 {seconds} 秒",
     "set.aiModelsLoaded": "找到的模型：{n}",
     "set.aiNoModels": "未找到模型",
-    "ai.prov.anthropic": "Claude（Anthropic）",
+    "ai.prov.anthropic": "Claude（API）",
     "ai.prov.ollama": "Ollama（本地，免费）",
     "ai.prov.custom": "其他（兼容 OpenAI）",
     "ai.prov.claudeCode": "Claude（订阅）",

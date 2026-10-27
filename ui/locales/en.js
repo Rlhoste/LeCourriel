@@ -131,7 +131,7 @@ STRINGS.en = {
     "set.aiTestOk": "Works — “{answer}” in {seconds} s",
     "set.aiModelsLoaded": "Models found: {n}",
     "set.aiNoModels": "No model found",
-    "ai.prov.anthropic": "Claude (Anthropic)",
+    "ai.prov.anthropic": "Claude (API)",
     "ai.prov.ollama": "Ollama (local, free)",
     "ai.prov.custom": "Other (OpenAI-compatible)",
     "ai.prov.claudeCode": "Claude (subscription)",

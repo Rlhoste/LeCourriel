@@ -226,7 +226,7 @@ cargo tauri build --bundles nsis       # on Windows → target/release/bundle/ns
 
 | Provider | What you need | Where your emails go |
 |---|---|---|
-| **Claude** (Anthropic) | API key from <https://console.anthropic.com/> (**Get a key** opens the page) | Anthropic |
+| **Claude** (API) | API key from <https://console.anthropic.com/> (**Get a key** opens the page) | Anthropic |
 | **Claude** (subscription) | [Claude Code](https://claude.com/claude-code) installed, then **Sign in with Claude** with a paid plan (Pro, Max, Team or Enterprise) | Anthropic |
 | **OpenAI** | API key from <https://platform.openai.com/> | OpenAI |
 | **Mistral** | API key from <https://console.mistral.ai/> | Mistral (EU) |

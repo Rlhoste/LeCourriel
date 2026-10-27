@@ -2405,7 +2405,6 @@ const AI_DEFAULT_URL = {
   mistral: 'https://api.mistral.ai/v1', ollama: 'http://localhost:11434/v1', custom: '',
 };
 const CLAUDE_CODE = 'claude_code';   // "Claude (subscription)", through the user's Claude Code
-const AI_DEFAULT_MODEL = { anthropic: 'claude-opus-4-6', [CLAUDE_CODE]: 'sonnet', mistral: 'mistral-small-latest' };
 const ANTHROPIC_KEYS_URL = 'https://console.anthropic.com/settings/keys';
 const ai = { provider: 'anthropic', keys: {}, models: {}, urls: {} };
 const $ai = id => document.getElementById(id);
@@ -2490,7 +2489,7 @@ function stashAiFields() {
 function showAiProvider() {
   const p = ai.provider;
   $ai('s-ai-key').value = ai.keys[p] || '';
-  $ai('s-ai-model').value = ai.models[p] ?? AI_DEFAULT_MODEL[p] ?? '';
+  $ai('s-ai-model').value = ai.models[p] || '';   // empty until the user picks a model
   $ai('s-ai-url').value = ai.urls[p] || '';
   $ai('s-ai-url').placeholder = AI_DEFAULT_URL[p] || 'https://api.example.com/v1';
   $ai('s-ai-key-row').classList.toggle('hidden', ['ollama', CLAUDE_CODE].includes(p));
@@ -2526,7 +2525,6 @@ async function loadAiModels(quiet = false) {
   try {
     const models = await cmd('ai_list_models', { provider: f.provider, baseUrl: f.baseUrl, apiKey: f.apiKey });
     $ai('s-ai-models').innerHTML = models.map(m => `<option value="${esc(m)}"></option>`).join('');
-    if (!$ai('s-ai-model').value && models.length) $ai('s-ai-model').value = models[0];
     setAiStatus(models.length ? t('set.aiModelsLoaded', { n: models.length }) : t('set.aiNoModels'), models.length ? 'ok' : 'error');
   } catch (e) {
     if (!quiet) setAiStatus(String(e), 'error');

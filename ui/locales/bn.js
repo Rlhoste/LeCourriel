@@ -122,7 +122,7 @@ STRINGS.bn = {
     "set.aiTestOk": "কাজ করছে — “{answer}”, {seconds} সেকেন্ডে",
     "set.aiModelsLoaded": "পাওয়া মডেল: {n}",
     "set.aiNoModels": "কোনো মডেল পাওয়া যায়নি",
-    "ai.prov.anthropic": "Claude (Anthropic)",
+    "ai.prov.anthropic": "Claude (API)",
     "ai.prov.ollama": "Ollama (লোকাল, বিনামূল্যে)",
     "ai.prov.custom": "অন্যান্য (OpenAI-সামঞ্জস্যপূর্ণ)",
     "ai.prov.claudeCode": "Claude (সাবস্ক্রিপশন)",

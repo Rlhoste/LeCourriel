@@ -132,7 +132,7 @@ STRINGS.ru = {
     "set.aiTestOk": "Работает — «{answer}» за {seconds} с",
     "set.aiModelsLoaded": "Найдено моделей: {n}",
     "set.aiNoModels": "Модели не найдены",
-    "ai.prov.anthropic": "Claude (Anthropic)",
+    "ai.prov.anthropic": "Claude (API)",
     "ai.prov.ollama": "Ollama (локально, бесплатно)",
     "ai.prov.custom": "Другой (совместимый с OpenAI)",
     "ai.prov.claudeCode": "Claude (подписка)",

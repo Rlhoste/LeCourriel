@@ -122,7 +122,7 @@ STRINGS.es = {
     "set.aiTestOk": "Funciona: «{answer}» en {seconds} s",
     "set.aiModelsLoaded": "Modelos encontrados: {n}",
     "set.aiNoModels": "No se encontró ningún modelo",
-    "ai.prov.anthropic": "Claude (Anthropic)",
+    "ai.prov.anthropic": "Claude (API)",
     "ai.prov.ollama": "Ollama (local, gratis)",
     "ai.prov.custom": "Otro (compatible con OpenAI)",
     "ai.prov.claudeCode": "Claude (suscripción)",

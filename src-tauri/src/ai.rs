@@ -154,7 +154,7 @@ pub fn provider_label(provider: &str) -> &'static str {
         "ollama" => "Ollama",
         "custom" => "AI",
         crate::claude_code::PROVIDER => "Claude (subscription)",
-        _ => "Claude (Anthropic)",
+        _ => "Claude (API)",
     }
 }
 

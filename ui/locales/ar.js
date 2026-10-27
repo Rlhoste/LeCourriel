@@ -138,7 +138,7 @@ STRINGS.ar = {
     "set.aiTestOk": "يعمل — «{answer}» خلال {seconds} ث",
     "set.aiModelsLoaded": "النماذج الموجودة: {n}",
     "set.aiNoModels": "لم يُعثر على أي نموذج",
-    "ai.prov.anthropic": "Claude (Anthropic)",
+    "ai.prov.anthropic": "Claude (API)",
     "ai.prov.ollama": "Ollama (محلي، مجاني)",
     "ai.prov.custom": "آخر (متوافق مع OpenAI)",
     "ai.prov.claudeCode": "Claude (اشتراك)",

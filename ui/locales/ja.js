@@ -122,7 +122,7 @@ STRINGS.ja = {
     "set.aiTestOk": "動作しています —「{answer}」（{seconds} 秒）",
     "set.aiModelsLoaded": "見つかったモデル：{n}",
     "set.aiNoModels": "モデルが見つかりません",
-    "ai.prov.anthropic": "Claude（Anthropic）",
+    "ai.prov.anthropic": "Claude（API）",
     "ai.prov.ollama": "Ollama（ローカル・無料）",
     "ai.prov.custom": "その他（OpenAI 互換）",
     "ai.prov.claudeCode": "Claude（サブスクリプション）",

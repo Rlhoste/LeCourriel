@@ -122,7 +122,7 @@ STRINGS.id = {
     "set.aiTestOk": "Berfungsi — “{answer}” dalam {seconds} dtk",
     "set.aiModelsLoaded": "Model ditemukan: {n}",
     "set.aiNoModels": "Tidak ada model",
-    "ai.prov.anthropic": "Claude (Anthropic)",
+    "ai.prov.anthropic": "Claude (API)",
     "ai.prov.ollama": "Ollama (lokal, gratis)",
     "ai.prov.custom": "Lainnya (kompatibel OpenAI)",
     "ai.prov.claudeCode": "Claude (langganan)",
