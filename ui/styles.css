@@ -1000,6 +1000,8 @@ button.row-mark:hover::before { transform: scale(1.2); }
   padding: 4px 6px; opacity: 0.45;
 }
 .pw-toggle:hover, .pw-toggle.on { opacity: 1; }
+/* Windows' webview adds its own eye while a new password is typed: keep only ours. */
+input::-ms-reveal, input::-ms-clear { display: none; }
 .account-advanced summary { cursor: pointer; font-size: 0.8rem; color: var(--text-dim); padding: 4px 0; }
 .account-title { cursor: pointer; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-actions { display: flex; gap: 6px; flex: none; }
