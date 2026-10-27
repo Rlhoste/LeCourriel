@@ -19,3 +19,13 @@ _Avoid_: Autoconfig (that is one source it uses), autodetect, auto-connection
 **Auto-scan**:
 Looking through the other mail apps on this computer for accounts the user can add with their server settings already filled in.
 _Avoid_: Import, detect, migration
+
+## AI
+
+**AI provider**:
+The service the app sends emails to so they get triaged: Claude, OpenAI, Mistral, Ollama…
+_Avoid_: Model (that is one choice inside a provider), AI connection, backend
+
+**Subscription sign-in**:
+Using an AI provider through the user's existing chat plan (Claude Pro, Max, Team or Enterprise), approved once in the browser, instead of an API key.
+_Avoid_: Anthropic connection, OAuth, login
