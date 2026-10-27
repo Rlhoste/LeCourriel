@@ -199,7 +199,13 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
             .collect();
         // With a Claude subscription, after one email fails (e.g. the usage limit is reached)
         // the rest stay unsorted until the next refresh instead of each failing in turn.
-        let stopped = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        // Only a paid plan is used, never a free plan or an API-key login (which bills the API).
+        let not_paid = retry_unsorted && !crate::claude_code::status().await.paid;
+        if not_paid {
+            app.emit("error", "Claude (subscription): sign in with a paid Claude plan in Settings. \
+                The new emails will be sorted at the next refresh.").ok();
+        }
+        let stopped = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(not_paid));
         let results: Vec<anyhow::Result<(bool, crate::ai_classifier::ClassifiedEmail)>> =
             futures::stream::iter(jobs)
                 .map(|(reused, ai_cfg, email, projects)| {
@@ -222,6 +228,10 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
                 .buffered(concurrency)
                 .collect()
                 .await;
+        if !not_paid && stopped.load(std::sync::atomic::Ordering::Relaxed) {
+            app.emit("error", "Claude (subscription) stopped sorting: usage limit reached or \
+                Claude Code failed (details in the log). The remaining emails will be sorted at the next refresh.").ok();
+        }
         let mut to_store: Vec<(String, crate::ai_classifier::ClassifiedEmail)> = Vec::new();
         let cards: Vec<EmailCard> = new_raw.into_iter().zip(results).map(|(raw, result)| {
             let classified = match result {
