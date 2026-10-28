@@ -342,7 +342,9 @@
   // When a cut would leave nothing, the message is kept whole.
   const QUOTE_FROM = /^\s*(?:De|From)\s*:/i;
   const QUOTE_SUBJECT = /^\s*(?:Objet|Subject)\s*:/i;
-  const QUOTE_INTRO = /^\s*(?:Le|On)\s.*(?:a\s+écrit|wrote)\s*:\s*$/i;   // may wrap onto a 2nd line
+  // May wrap onto a 2nd line. It always carries the date ("Le lun. 26 oct. 2026 à 09:12, … a écrit :"),
+  // which tells it from a sentence like "Le client a écrit :".
+  const QUOTE_INTRO = /^\s*(?:Le|On)\s.*\d.*(?:a\s+écrit|wrote)\s*:\s*$/i;
   const RULE_LINE = /^\s*(?:[-_─=]{3,}|-+\s*(?:Original Message|Message d'origine)\s*-+)?\s*$/i;
   function newText(email, signatures = []) {
     // A link shows as "[text][1]" with its address on a "[1]: url" line at the very end

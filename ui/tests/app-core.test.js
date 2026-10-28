@@ -556,6 +556,13 @@ test('"Le … a écrit :" and "On … wrote:" (even split over two lines) cut al
   ]), ['Oui.\nNon.', 'Great.', 'Parfait.']);
 });
 
+test('a sentence of mine that says someone wrote something, without a date, is not a quote intro', () => {
+  assert.deepEqual(bubbles([
+    mail(1, { subject: 'A', body_text: 'Bonjour,\nLe client a écrit :\n« Je veux être remboursé. »\nJe propose de refuser.' }),
+    mail(2, { subject: 'B', body_text: 'Hi,\nOn Friday the client\nwrote:\nI want a refund.\nI suggest we say no.' }),
+  ]), ['Hi,\nOn Friday the client\nwrote:\nI want a refund.\nI suggest we say no.', 'Bonjour,\nLe client a écrit :\n« Je veux être remboursé. »\nJe propose de refuser.']);
+});
+
 test('a "-- " line and all after it is cut', () => {
   assert.deepEqual(bubbles([
     mail(1, { subject: 'A', body_text: 'À demain.\n-- \nLeo Bianchini\nDirecteur' }),
