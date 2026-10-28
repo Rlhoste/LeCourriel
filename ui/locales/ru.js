@@ -101,6 +101,8 @@ STRINGS.ru = {
 
     'set.title': 'Настройки', 'set.general': 'Общие', 'set.accounts': 'Аккаунты', 'set.ai': 'ИИ',
     'set.notify': 'Уведомлять о новых письмах',
+    'set.discussion': 'Режим переписки: показывать письма как в мессенджере',
+    'nav.discussions': 'Переписки', 'dm.new': 'Новое сообщение', 'dm.today': 'Сегодня', 'dm.you': 'Вы: {text}',
     'set.fontScale': 'Масштаб шрифта', 'set.theme': 'Тема', 'set.language': 'Язык',
     "set.signature": "Подпись", "set.sigChoose": "📄 Выбрать HTML-файл…", "set.sigRemove": "Удалить", "set.sigOnNew": "Добавлять в новые письма", "set.sigOnReply": "Добавлять в ответы и пересылки", "set.sigHint": "Подписи пока нет. Экспортируйте её из почтовой программы (Outlook, Gmail…) как HTML-файл или создайте в любом генераторе подписей.", "set.sigImported": "Подпись импортирована", "set.sigRemoved": "Подпись удалена", "set.sigFileFilter": "HTML-файлы",
     "set.incoming": "📥 Входящая почта (IMAP)", "set.outgoing": "📤 Исходящая почта (SMTP)", "set.server": "Сервер", "set.port": "Порт", "set.username": "Имя пользователя", "set.usernamePh": "vy@primer.ru", "set.password": "Пароль", "set.sameAsIncoming": "Как для входящей", "set.advanced": "Дополнительные параметры", "set.imapMailbox": "Папка для проверки", "set.fetchCount": "Сколько писем загружать",

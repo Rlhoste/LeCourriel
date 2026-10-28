@@ -357,6 +357,7 @@ pub fn prefs_from_config(cfg: &Config) -> Value {
             "font_scale": cfg.user.font_scale,
             "theme": cfg.user.theme,
             "language": cfg.user.language,
+            "discussion_mode": cfg.user.discussion_mode,
         },
         "ai_provider": cfg.ai.provider(),
         "ai_model": cfg.ai.model,
@@ -378,6 +379,9 @@ pub fn merge_prefs(cfg: &mut Config, prefs: &Value) {
     }
     if let Some(v) = user["language"].as_str() {
         cfg.user.language = v.to_string();
+    }
+    if let Some(v) = user["discussion_mode"].as_bool() {
+        cfg.user.discussion_mode = v;
     }
     // The provider and model sync; keys and the server URL stay on each computer.
     if let Some(v) = prefs["ai_provider"].as_str().filter(|p| crate::config::AI_PROVIDERS.contains(p)) {

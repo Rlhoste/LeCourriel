@@ -122,6 +122,9 @@ pub struct UserConfig {
     /// Desktop notification when new unread emails arrive.
     #[serde(default = "yes")]
     pub notify_new_mail: bool,
+    /// Discussion mode: the mailbox shown like a messaging app.
+    #[serde(default)]
+    pub discussion_mode: bool,
 }
 
 fn default_font_scale() -> f32 {
@@ -142,6 +145,7 @@ impl Default for UserConfig {
             theme: default_theme(),
             language: default_language(),
             notify_new_mail: true,
+            discussion_mode: false,
         }
     }
 }

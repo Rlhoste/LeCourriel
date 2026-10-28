@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   normalizedSort,
+  buildDiscussions,
   sortEmails,
   removeEmailFromState,
   autoUpdatesEnabled,
@@ -252,4 +253,93 @@ test('a reply without headers joins the email with the same subject', () => {
     mail(4, { subject: 'Weekly report' }),
   ]));
   assert.deepEqual(groups.map(g => [g.lead.uid, g.replies.map(e => e.uid)]), [[4, []], [3, []], [2, [1]]]);
+});
+
+// Discussion mode. `at(day, hour)` is a local time in October 2026; "now" is Wed 28 Oct, noon.
+const at = (day, hour = 9, minute = 0) => new Date(2026, 9, day, hour, minute).getTime() / 1000;
+const ME = { me: ['me@work.com', 'Me@Home.org'], now: new Date(2026, 9, 28, 12).getTime() };
+const messageUids = d => d.items.filter(i => i.kind === 'message').map(i => i.email.uid);
+
+test('a discussion gathers linked emails of every folder, oldest first', () => {
+  const list = buildDiscussions({
+    inbox: [mail(1, { message_id: '<a@x>', subject: 'Budget' }), mail(5, { references: '<a@x>' })],
+    sent: [mail(3, { from_email: 'me@work.com', subject: 'Re: Budget' })],
+    trash: [mail(4, { references: '<a@x>' })],
+    spam: [mail(2, { subject: 'Win a prize' })],
+  }, ME);
+  assert.equal(list.length, 1);
+  assert.deepEqual(messageUids(list[0]), [1, 3, 4, 5]);
+  assert.equal(list[0].id, '<a@x>', 'kept while new emails arrive');
+});
+
+test('a discussion only in Trash or Spam is not listed; the list is newest first', () => {
+  const list = buildDiscussions({
+    inbox: [mail(1, { subject: 'Old' }), mail(3, { subject: 'New' })],
+    sent: [mail(2, { from_email: 'me@work.com', subject: 'Middle' })],
+    trash: [mail(4, { subject: 'Deleted' })],
+    spam: [mail(5, { subject: 'Junk' })],
+  }, ME);
+  assert.deepEqual(list.map(d => d.subject), ['New', 'Middle', 'Old']);
+});
+
+test('a list line shows the people, the last message, unread count and top unread priority', () => {
+  const [line] = buildDiscussions({
+    inbox: [
+      mail(1, { message_id: '<a@x>', from_name: 'Leo Bianchini', from_email: 'leo@d.com', to: 'Me <me@work.com>, "Damien Delhay" <damien@o.com>', cc: 'ann@x.com, bob@x.com', priority: 'urgent', is_read: true }),
+      mail(2, { references: '<a@x>', from_name: 'Damien Delhay', from_email: 'damien@o.com', priority: 'task', body_text: 'Gain fixed.' }),
+      mail(3, { references: '<a@x>', from_name: 'Leo Bianchini', from_email: 'leo@d.com', priority: 'high_priority', body_text: 'Thanks' }),
+    ],
+    sent: [mail(4, { references: '<a@x>', from_email: 'ME@home.org', body_text: '  Sure,\n\nsee you  Friday.\n' })],
+  }, ME);
+  assert.deepEqual(line.people.map(p => [p.name, p.address, p.initials]), [
+    ['Leo Bianchini', 'leo@d.com', 'LB'], ['Damien Delhay', 'damien@o.com', 'DD'], ['', 'ann@x.com', 'AN'], ['', 'bob@x.com', 'BO'],
+  ]);
+  assert.equal(line.title, 'Leo, Damien +2');
+  assert.deepEqual(line.preview, { mine: true, text: 'Sure, see you Friday.' });
+  assert.equal(line.date_ts, 40);
+  assert.equal(line.unread, 2);
+  assert.equal(line.priority, 'high_priority');
+});
+
+test('a line without unread emails has no priority mark', () => {
+  const [line] = buildDiscussions({ inbox: [mail(1, { priority: 'urgent', is_read: true, from_name: 'Ann' })] }, ME);
+  assert.equal(line.unread, 0);
+  assert.equal(line.priority, null);
+  assert.equal(line.title, 'Ann');
+  assert.deepEqual(line.preview, { mine: false, text: '' });
+});
+
+test('my messages (any of my accounts) and theirs take opposite sides, with the sender and its colour', () => {
+  const [d] = buildDiscussions({
+    inbox: [mail(1, { message_id: '<a@x>', from_name: 'Leo Bianchini', from_email: 'leo@d.com', body_text: ' Hello\nDavid ' })],
+    sent: [mail(2, { references: '<a@x>', from_email: 'me@home.org' })],
+  }, ME);
+  const [theirs, mine] = d.items.filter(i => i.kind === 'message');
+  assert.equal(theirs.mine, false);
+  assert.equal(theirs.sender.name, 'Leo Bianchini');
+  assert.equal(theirs.sender.initials, 'LB');
+  assert.match(theirs.sender.colour, /^#[0-9a-f]{6}$/);
+  assert.equal(theirs.text, 'Hello\nDavid');
+  assert.equal(theirs.date_ts, 10);
+  assert.equal(mine.mine, true);
+});
+
+test('messages in a row from the same person stack; a new day starts with a separator', () => {
+  const leo = { from_name: 'Leo', from_email: 'leo@d.com' };
+  const me = { from_email: 'me@work.com' };
+  const [d] = buildDiscussions({
+    inbox: [
+      mail(1, { ...leo, message_id: '<a@x>', date_ts: at(12, 9) }),
+      mail(2, { ...leo, references: '<a@x>', date_ts: at(26, 9) }),
+      mail(3, { ...leo, references: '<a@x>', date_ts: at(26, 10) }),
+      mail(4, { ...leo, references: '<a@x>', date_ts: at(26, 11) }),
+      mail(6, { ...leo, references: '<a@x>', date_ts: at(28, 8) }),
+      mail(7, { ...leo, references: '<a@x>', date_ts: at(28, 9) }),
+    ],
+    sent: [mail(5, { ...me, references: '<a@x>', date_ts: at(26, 12) })],
+  }, ME);
+  const shape = d.items.map(i => (i.kind === 'day' ? i.day : `${i.email.uid}${i.first ? 'F' : ''}${i.last ? 'L' : ''}`));
+  assert.deepEqual(shape, ['date', '1FL', 'weekday', '2F', '3', '4L', '5FL', 'today', '6F', '7L']);
+  assert.equal(d.items[2].date_ts, at(26, 9));
+  assert.equal(d.items[1].sender.colour, d.items[3].sender.colour);
 });

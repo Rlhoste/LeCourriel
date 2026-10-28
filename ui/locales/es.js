@@ -97,6 +97,8 @@ STRINGS.es = {
 
     'set.title': 'Configuración', 'set.general': 'General', 'set.accounts': 'Cuentas', 'set.ai': 'IA',
     'set.notify': 'Avisarme cuando lleguen correos nuevos',
+    'set.discussion': 'Modo conversación: mostrar mis correos como una app de mensajería',
+    'nav.discussions': 'Conversaciones', 'dm.new': 'Nuevo mensaje', 'dm.today': 'Hoy', 'dm.you': 'Tú: {text}',
     'set.fontScale': 'Tamaño del texto', 'set.theme': 'Tema', 'set.language': 'Idioma',
     "set.signature": "Firma", "set.sigChoose": "📄 Elegir un archivo HTML…", "set.sigRemove": "Quitar", "set.sigOnNew": "Añadir a los mensajes nuevos", "set.sigOnReply": "Añadir a respuestas y reenvíos", "set.sigHint": "Aún no hay firma. Expórtala desde tu cliente de correo (Outlook, Gmail…) como archivo HTML, o crea una con cualquier generador de firmas.", "set.sigImported": "Firma importada", "set.sigRemoved": "Firma eliminada", "set.sigFileFilter": "Archivos HTML",
     "set.incoming": "📥 Correo entrante (IMAP)", "set.outgoing": "📤 Correo saliente (SMTP)", "set.server": "Servidor", "set.port": "Puerto", "set.username": "Usuario", "set.usernamePh": "tu@ejemplo.com", "set.password": "Contraseña", "set.sameAsIncoming": "Igual que el entrante", "set.advanced": "Opciones avanzadas", "set.imapMailbox": "Carpeta que revisar", "set.fetchCount": "Número de correos que descargar",

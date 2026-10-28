@@ -342,6 +342,7 @@ fn save_settings(
     theme: Option<String>,
     language: Option<String>,
     notify_new_mail: Option<bool>,
+    discussion_mode: Option<bool>,
     app: AppHandle,
     shared: State<'_, SharedState>,
 ) -> Result<(), String> {
@@ -356,6 +357,7 @@ fn save_settings(
         theme.as_deref(),
         language.as_deref(),
         notify_new_mail,
+        discussion_mode,
     )
     .map_err(|e| e.to_string())?;
     // Reload config into shared state.

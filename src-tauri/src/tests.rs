@@ -311,6 +311,7 @@ api_key = "k" model = "m" max_tokens = 100
                 theme: "midnight".to_string(),
                 language: "en".to_string(),
                 notify_new_mail: true,
+                discussion_mode: false,
             },
             accounts: vec![AccountConfig {
                 name: "Work".to_string(),
@@ -816,6 +817,7 @@ max_tokens = 10
         let mut remote_cfg = make_test_config();
         remote_cfg.user.theme = "brutalist".into();
         remote_cfg.user.language = "fr".into();
+        remote_cfg.user.discussion_mode = true;
         remote_cfg.projects =
             vec![ProjectConfig { name: "Work".into(), description: "".into(), urgency: "normal".into() }];
         let remote = prefs_from_config(&remote_cfg);
@@ -824,6 +826,7 @@ max_tokens = 10
         merge_prefs(&mut local, &remote);
         assert_eq!(local.user.theme, "brutalist");
         assert_eq!(local.user.language, "fr");
+        assert!(local.user.discussion_mode);
         assert_eq!(local.projects.len(), 1);
         assert_eq!(local.projects[0].name, "Work");
         // Untouched: accounts, keys, database.
@@ -3227,6 +3230,7 @@ Method=ssl-on-alternate-port
             Some("aero"),
             Some("fr"),
             None,
+            None,
         );
         configured.projects = vec![
             ProjectConfig {
@@ -3275,7 +3279,7 @@ Method=ssl-on-alternate-port
         original.user.language = "ja".into();
         original.ai.provider = "mistral".into();
         let ai = AiSettingsDto { provider: "evil-provider".into(), ..Default::default() };
-        let updated = crate::settings::apply_to_config(original, None, &[], &ai, "", 1.0, None, Some("xx"), None);
+        let updated = crate::settings::apply_to_config(original, None, &[], &ai, "", 1.0, None, Some("xx"), None, None);
         assert_eq!(updated.user.language, "ja");
         assert_eq!(updated.ai.provider(), "mistral");
     }
@@ -3293,6 +3297,7 @@ Method=ssl-on-alternate-port
                 1.0,
                 None,
                 Some(language),
+                None,
                 None,
             );
             assert_eq!(&updated.user.language, language);
