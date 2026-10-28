@@ -93,21 +93,26 @@
   }
 
   // Discussion mode: what the discussion list and each opened discussion show.
-  // `folders` holds the cached emails per folder ({ inbox, sent, trash, spam }, every account);
-  // `context` is { me: own addresses of every account, now: ms }.
+  // `folders` holds the cached emails per folder ({ inbox, sent, trash, spam, drafts }, every account);
+  // `context` is { me: own addresses of every account, now: ms, signatures: each account's signature as text }.
   // Returns the listed discussions, newest first. Each one is a list line plus its `items`,
-  // oldest first; an item's `kind` says what it is ('day' separator or 'message').
+  // oldest first; an item's `kind` says what it is: 'earlier' (older messages not on this computer,
+  // at the top), 'day' separator, 'people' (recipients changed), 'message', 'draft' (unsent, at the bottom).
   function buildDiscussions(folders, context = {}) {
     const listed = new Set([...(folders?.inbox || []), ...(folders?.sent || [])]);
-    const all = [...listed, ...(folders?.trash || []), ...(folders?.spam || [])];
-    const texts = newTexts(all, context.signatures || []);
-    return groupThreads(sortEmails(all))
-      .map(({ lead, replies }) => discussion([lead, ...replies].reverse(), context, texts))
-      .filter(d => d.items.some(i => i.kind === 'message' && listed.has(i.email)))
+    // Each folder numbers its UIDs separately: an item keeps its folder so a search hit finds it.
+    const folderOf = new Map();
+    for (const name of ['inbox', 'sent', 'trash', 'spam']) for (const e of folders?.[name] || []) folderOf.set(e, name);
+    const drafts = new Set(folders?.drafts || []);
+    const texts = newTexts([...folderOf.keys()], context.signatures || []);
+    return groupThreads(sortEmails([...folderOf.keys(), ...drafts]))
+      .map(({ lead, replies }) => [lead, ...replies].reverse())
+      .filter(emails => emails.some(e => listed.has(e)))
+      .map(emails => discussion(emails.filter(e => !drafts.has(e)), emails.filter(e => drafts.has(e)), context, folderOf, texts))
       .sort((a, b) => b.date_ts - a.date_ts);
   }
 
-  function discussion(emails, context, texts) {
+  function discussion(emails, drafts, context, folderOf, texts) {
     const own = new Set((context.me || []).map(a => String(a).trim().toLowerCase()));
     const isMine = email => own.has(String(email.from_email || '').trim().toLowerCase());
     const last = emails[emails.length - 1];
@@ -131,28 +136,49 @@
       date_ts: Number(last.date_ts) || 0,
       unread: unread.length,
       priority: unread.reduce((top, e) => (top && PRIORITY_ORDER[top] <= (PRIORITY_ORDER[e.priority] ?? 99) ? top : e.priority), null) ?? null,
-      items: discussionItems(emails, isMine, context.now ?? Date.now(), texts),
+      items: [
+        ...(missesEarlier(emails) ? [{ kind: 'earlier' }] : []),
+        ...discussionItems(emails, isMine, people, context.now ?? Date.now(), folderOf, texts),
+        ...drafts.map(email => ({ kind: 'draft', email, text: String(email.body_text || '').trim(), date_ts: Number(email.date_ts) || 0 })),
+      ],
     };
+  }
+
+  // True when an email refers to one that is not among the discussion's emails (not on this computer).
+  function missesEarlier(emails) {
+    const ids = new Set(emails.map(e => String(e.message_id || '').trim()).filter(Boolean));
+    return emails.some(e => (String(e.references || '').match(/<[^>]+>/g) || []).some(id => !ids.has(id)));
   }
 
   // Oldest first: a 'day' separator whenever the day changes, then each 'message'.
   // Messages in a row from the same person on the same day stack: `first` / `last` of the run.
-  function discussionItems(emails, isMine, now, texts) {
+  // A 'people' note before a message says whom its sender `added` (`cc` when only in Cc) or `removed`.
+  // A message's `text` is only what its sender newly wrote (see newTexts).
+  function discussionItems(emails, isMine, people, now, folderOf, texts) {
     const items = [];
     const today = startOfDay(now);
     let prev = null;
+    let seen = null;
     for (const email of emails) {
       const ts = Number(email.date_ts) || 0;
       const sender = person(email.from_name, String(email.from_email || '').trim());
       const day = startOfDay(ts * 1000);
-      const sameRun = prev && prev.day === day && prev.item.sender.address.toLowerCase() === sender.address.toLowerCase();
       if (!prev || prev.day !== day) {
         const daysAgo = Math.round((today - day) / 86400e3);
         items.push({ kind: 'day', day: daysAgo === 0 ? 'today' : daysAgo > 0 && daysAgo < 7 ? 'weekday' : 'date', date_ts: ts });
       }
+      const here = recipients(email, people);
+      let note = null;
+      if (here && seen) {
+        const added = [...here].filter(([key]) => !seen.has(key) && key !== sender.address.toLowerCase()).map(([, p]) => p);
+        const removed = [...seen].filter(([key]) => !here.has(key)).map(([, p]) => p);
+        if (added.length || removed.length) items.push(note = { kind: 'people', by: sender, mine: isMine(email), added, removed });
+      }
+      if (here) seen = here;
+      const sameRun = prev && !note && prev.day === day && prev.item.sender.address.toLowerCase() === sender.address.toLowerCase();
       if (prev && !sameRun) prev.item.last = true;
       const item = {
-        kind: 'message', email, mine: isMine(email), sender, date_ts: ts,
+        kind: 'message', email, folder: folderOf.get(email), mine: isMine(email), sender, date_ts: ts,
         text: texts.get(email), first: !sameRun, last: false,
       };
       items.push(item);
@@ -235,6 +261,19 @@
       lines.splice(start, end - start);
       return;
     }
+  }
+
+  // Everyone on an email but me (sender, To, Cc), keyed by address; null when it names no recipient at all.
+  // `people` holds the discussion's others as first met, so a name seen once is kept.
+  function recipients(email, people) {
+    const to = splitAddresses(email.to), cc = splitAddresses(email.cc);
+    if (!to.length && !cc.length) return null;
+    const here = new Map();
+    for (const [address, inCc] of [[email.from_email, false], ...to.map(a => [a.address, false]), ...cc.map(a => [a.address, true])]) {
+      const key = String(address || '').trim().toLowerCase();
+      if (people.has(key) && !here.has(key)) here.set(key, { ...people.get(key), cc: inCc });
+    }
+    return here;
   }
 
   const startOfDay = ms => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); };
