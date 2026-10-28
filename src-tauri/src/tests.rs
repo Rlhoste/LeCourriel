@@ -210,6 +210,7 @@ api_key = "k" model = "m" max_tokens = 100
             is_read: false,
             body_text: "Plain body".to_string(),
             body_html: "<p>HTML body</p>".to_string(),
+            attachments: vec![attachment("a.pdf", 9, "application/pdf")],
             project: Some("MyProject".to_string()),
             deadline: None,
             task: Some("Do something".to_string()),
@@ -225,6 +226,13 @@ api_key = "k" model = "m" max_tokens = 100
         assert_eq!(restored.body_html, "<p>HTML body</p>");
         assert_eq!(restored.project, Some("MyProject".to_string()));
         assert_eq!(restored.task, Some("Do something".to_string()));
+        assert_eq!(restored.attachments, vec![attachment("a.pdf", 9, "application/pdf")]);
+
+        // A card cached before attachments were listed still loads, with none.
+        let mut old: serde_json::Value = serde_json::from_str(&json).unwrap();
+        old.as_object_mut().unwrap().remove("attachments");
+        let restored: EmailCard = serde_json::from_value(old).unwrap();
+        assert!(restored.attachments.is_empty());
     }
 
     #[test]
@@ -357,6 +365,7 @@ api_key = "k" model = "m" max_tokens = 100
             is_read: false,
             body_text: "Body".to_string(),
             body_html: String::new(),
+            attachments: vec![],
             project: None,
             deadline: None,
             task: None,
@@ -885,6 +894,7 @@ max_tokens = 10
             date: None,
             body_text: "Help".into(),
             body_html: None,
+            attachments: vec![],
         };
         let err = crate::ai_classifier::classify(&AiConfig::default(), &email, &[]).await.unwrap_err();
         assert!(format!("{:#}", err).contains("Choose an AI model"), "{:#}", err);
@@ -911,6 +921,7 @@ max_tokens = 10
             date: None,
             body_text: "Jury".into(),
             body_html: None,
+            attachments: vec![],
         };
         let projects = vec![ProjectConfig { name: "Thesis".into(), description: "PhD".into(), urgency: "high".into() }];
         let cases: [(&'static str, &[ProjectConfig], bool); 3] = [
@@ -1493,10 +1504,73 @@ max_tokens = 10
             "iVBORw0KGgo=\r\n--b--\r\n",
         );
         let parsed = mailparse::parse_mail(raw.as_bytes()).unwrap();
-        let (_, html) = crate::imap_client::extract_bodies(&parsed);
+        let (_, html, attachments) = crate::imap_client::extract_bodies(&parsed);
         let html = html.unwrap();
         assert!(html.contains("src=\"data:image/png;base64,iVBORw0KGgo=\""), "{html}");
         assert!(!html.contains("cid:"));
+        assert!(attachments.is_empty(), "an image shown in the body is not an attachment");
+    }
+
+    // ── Attachments ───────────────────────────────────────────────────────────
+
+    fn attachments_of(raw: &str) -> Vec<crate::models::Attachment> {
+        crate::imap_client::extract_bodies(&mailparse::parse_mail(raw.as_bytes()).unwrap()).2
+    }
+
+    fn attachment(name: &str, size: u64, mime: &str) -> crate::models::Attachment {
+        crate::models::Attachment { name: name.into(), size, mime: mime.into() }
+    }
+
+    #[test]
+    fn test_email_lists_its_attachment() {
+        let raw = concat!(
+            "Subject: Report\r\nMIME-Version: 1.0\r\n",
+            "Content-Type: multipart/mixed; boundary=\"b\"\r\n\r\n",
+            "--b\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nSee attached.\r\n",
+            "--b\r\nContent-Type: application/pdf; name=\"report.pdf\"\r\n",
+            "Content-Disposition: attachment; filename=\"report.pdf\"\r\n",
+            "Content-Transfer-Encoding: base64\r\n\r\n",
+            "JVBERi0xLjQK\r\n--b--\r\n",
+        );
+        assert_eq!(attachments_of(raw), vec![attachment("report.pdf", 9, "application/pdf")]);
+    }
+
+    #[test]
+    fn test_email_lists_several_attachments_in_order() {
+        // Outlook names files with encoded words; a photo with a Content-ID the HTML
+        // never shows is still a file the user received.
+        let raw = concat!(
+            "Subject: Files\r\nMIME-Version: 1.0\r\n",
+            "Content-Type: multipart/mixed; boundary=\"b\"\r\n\r\n",
+            "--b\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>Two files</p>\r\n",
+            "--b\r\nContent-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document;\r\n",
+            "\tname=\"=?utf-8?Q?R=C3=A9sum=C3=A9.docx?=\"\r\n",
+            "Content-Transfer-Encoding: base64\r\n\r\n",
+            "UEsDBA==\r\n",
+            "--b\r\nContent-Type: IMAGE/JPEG\r\n",
+            "Content-Disposition: attachment; filename=\"photo.jpg\"\r\n",
+            "Content-ID: <photo@x>\r\nContent-Transfer-Encoding: base64\r\n\r\n",
+            "/9j/4AAQ\r\n--b--\r\n",
+        );
+        assert_eq!(
+            attachments_of(raw),
+            vec![
+                attachment("Résumé.docx", 4, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+                attachment("photo.jpg", 6, "image/jpeg"),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_email_without_files_lists_no_attachment() {
+        assert!(attachments_of("Subject: Hi\r\nContent-Type: text/plain\r\n\r\nHello\r\n").is_empty());
+        let alternative = concat!(
+            "Subject: Hi\r\nMIME-Version: 1.0\r\n",
+            "Content-Type: multipart/alternative; boundary=\"b\"\r\n\r\n",
+            "--b\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nHello\r\n",
+            "--b\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>Hello</p>\r\n--b--\r\n",
+        );
+        assert!(attachments_of(alternative).is_empty());
     }
 
     #[test]
@@ -1954,6 +2028,7 @@ max_tokens = 10
                 "Dear Remi, please confirm by Friday 23 October that the PhD defense can take place on 27 October."
                     .into(),
             body_html: None,
+            attachments: vec![],
         };
         let projects = vec![ProjectConfig {
             name: "Thesis".into(),

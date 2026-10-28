@@ -107,6 +107,7 @@ pub fn raw_to_card(raw: crate::models::RawEmail) -> EmailCard {
         is_read: raw.seen,
         body_text: render_body(&raw.body_text, &raw.body_html),
         body_html: raw.body_html.unwrap_or_default(),
+        attachments: raw.attachments,
         project: None,
         deadline: None,
         task: None,
@@ -230,6 +231,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
         if let Some(c) = cached_cards.iter_mut().find(|c| c.uid == raw.uid) {
             c.body_text = render_body(&raw.body_text, &raw.body_html);
             c.body_html = raw.body_html.clone().unwrap_or_default();
+            c.attachments = raw.attachments.clone();
             c.to = raw.to.clone();
             c.cc = raw.cc.clone();
             c.reply_to = raw.reply_to.clone();
@@ -371,6 +373,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
                     is_read: raw.seen,
                     body_text: render_body(&raw.body_text, &raw.body_html),
                     body_html,
+                    attachments: raw.attachments,
                     project: classified.project,
                     deadline: classified.deadline,
                     task: classified.task,
@@ -702,6 +705,7 @@ pub fn to_dto_vec(cards: &[EmailCard]) -> Vec<EmailCardDto> {
             task: c.task.clone().unwrap_or_default(),
             body_text: c.body_text.clone(),
             body_html: c.body_html.clone(),
+            attachments: c.attachments.clone(),
             meeting_link: c.meeting_link.clone().unwrap_or_default(),
         })
         .collect()
