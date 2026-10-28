@@ -108,6 +108,7 @@ pub fn raw_to_card(raw: crate::models::RawEmail) -> EmailCard {
         body_text: render_body(&raw.body_text, &raw.body_html),
         body_html: raw.body_html.unwrap_or_default(),
         attachments: raw.attachments,
+        html_only: raw.html_only,
         project: None,
         deadline: None,
         task: None,
@@ -232,6 +233,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
             c.body_text = render_body(&raw.body_text, &raw.body_html);
             c.body_html = raw.body_html.clone().unwrap_or_default();
             c.attachments = raw.attachments.clone();
+            c.html_only = raw.html_only;
             c.to = raw.to.clone();
             c.cc = raw.cc.clone();
             c.reply_to = raw.reply_to.clone();
@@ -374,6 +376,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
                     body_text: render_body(&raw.body_text, &raw.body_html),
                     body_html,
                     attachments: raw.attachments,
+                    html_only: raw.html_only,
                     project: classified.project,
                     deadline: classified.deadline,
                     task: classified.task,
@@ -706,6 +709,7 @@ pub fn to_dto_vec(cards: &[EmailCard]) -> Vec<EmailCardDto> {
             body_text: c.body_text.clone(),
             body_html: c.body_html.clone(),
             attachments: c.attachments.clone(),
+            html_only: c.html_only,
             meeting_link: c.meeting_link.clone().unwrap_or_default(),
         })
         .collect()

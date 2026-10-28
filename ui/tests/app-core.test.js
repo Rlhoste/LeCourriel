@@ -343,3 +343,75 @@ test('messages in a row from the same person stack; a new day starts with a sepa
   assert.equal(d.items[2].date_ts, at(26, 9));
   assert.equal(d.items[1].sender.colour, d.items[3].sender.colour);
 });
+
+// One item of a discussion, reduced to what shows: kind, content and its place in the run.
+const shown = i => [i.kind, i.text ?? i.src ?? i.name ?? i.email?.uid, `${i.first ? 'F' : ''}${i.last ? 'L' : ''}`];
+
+test('an image in the middle of an email splits it: text before, the images, then the rest', () => {
+  const [d] = buildDiscussions({
+    inbox: [mail(1, {
+      body_text: 'Look at this:\n\nNice, isn\'t it?',
+      body_html: '<html><head><style>p{color:red}</style></head><body><p>Look at <b>this</b>:</p>'
+        + '<img alt="" src="data:image/png;base64,AAA"><IMG SRC=\'data:image/jpeg;base64,BBB\' width="10">'
+        + '<div>Nice,&nbsp;isn&#39;t it?<br>Bye &amp; see you</div></body></html>',
+    })],
+  }, ME);
+  assert.deepEqual(d.items.slice(1).map(shown), [
+    ['message', 'Look at this:', 'F'],
+    ['image', 'data:image/png;base64,AAA', ''],
+    ['image', 'data:image/jpeg;base64,BBB', ''],
+    ['message', 'Nice, isn\'t it?\nBye & see you', 'L'],
+  ]);
+  assert.ok(d.items.slice(1).every(i => i.email.uid === 1 && i.sender.address === 'person1@example.com' && i.date_ts === 10));
+});
+
+test('an email without an image in its HTML keeps its plain text whole', () => {
+  const [d] = buildDiscussions({
+    inbox: [mail(1, { body_text: 'Hello\n\nDavid', body_html: '<p>Hello</p><p>David</p><img src="https://x.com/logo.png">' })],
+  }, ME);
+  assert.deepEqual(d.items.slice(1).map(shown), [['message', 'Hello\n\nDavid', 'FL']]);
+});
+
+test('each attachment shows as its own item after the text, with its name, size and type', () => {
+  const leo = { from_email: 'leo@d.com' };
+  const [d] = buildDiscussions({
+    inbox: [
+      mail(1, { ...leo, message_id: '<a@x>', body_text: 'Both files', attachments: [
+        { name: 'plan.pdf', size: 52300, mime: 'application/pdf' },
+        { name: 'photo.jpg', size: 1200000, mime: 'image/jpeg' },
+      ] }),
+      mail(2, { ...leo, references: '<a@x>', body_text: '', attachments: [{ name: 'notes.txt', size: 12, mime: 'text/plain' }] }),
+    ],
+  }, ME);
+  assert.deepEqual(d.items.slice(1).map(shown), [
+    ['message', 'Both files', 'F'],
+    ['attachment', 'plan.pdf', ''],
+    ['attachment', 'photo.jpg', ''],
+    ['attachment', 'notes.txt', 'L'],
+  ]);
+  assert.deepEqual([d.items[3].size, d.items[3].mime], [1200000, 'image/jpeg']);
+  assert.equal(d.items[4].email.uid, 2);
+});
+
+test('an email laid out as a page (mostly tables, or no plain-text part) shows as one card, not cut', () => {
+  const newsletter = '<p>View online</p><table><tr><td><img src="data:image/png;base64,LOGO"></td></tr>'
+    + '<tr><td><h1>October news</h1><p>Our new shop opens on Monday with a lot of offers.</p></td></tr></table>';
+  const [d] = buildDiscussions({
+    inbox: [
+      mail(1, { from_email: 'shop@x.com', message_id: '<a@x>', body_text: 'View online\nOctober news', body_html: newsletter,
+        attachments: [{ name: 'invoice.pdf', size: 900, mime: 'application/pdf' }] }),
+      mail(2, { from_email: 'shop@x.com', references: '<a@x>', body_text: 'Hi', body_html: '<div>Hi</div>', html_only: true }),
+    ],
+  }, ME);
+  assert.deepEqual(d.items.slice(1).map(shown), [['page', 1, 'F'], ['attachment', 'invoice.pdf', ''], ['page', 2, 'L']]);
+});
+
+test('a message whose signature is a small table is still a message', () => {
+  const [d] = buildDiscussions({
+    inbox: [mail(1, {
+      body_text: 'Sure, the meeting is moved to Friday at ten, in the big room.\nLeo | CEO',
+      body_html: '<p>Sure, the meeting is moved to Friday at ten, in the big room.</p><table><tr><td>Leo</td><td>CEO</td></tr></table>',
+    })],
+  }, ME);
+  assert.deepEqual(d.items.slice(1).map(shown), [['message', 'Sure, the meeting is moved to Friday at ten, in the big room.\nLeo | CEO', 'FL']]);
+});
