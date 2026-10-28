@@ -1147,15 +1147,27 @@ body.task-dragging, body.task-dragging * { cursor: grabbing !important; }
 .kanban-card:hover .kanban-delete { visibility: visible; }
 .kanban-delete:hover { color: var(--urgent); }
 
+/* The email a task came from: a chip, so it reads as clickable without hovering (#13). */
 .kanban-source {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 3px 6px;
   font-size: 0.7rem;
   color: var(--text-dim);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  background: var(--bg);
+  border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
-.kanban-source:hover { color: var(--accent); }
+.kanban-source-icon { color: var(--accent); flex-shrink: 0; }
+.kanban-source-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kanban-source::after { content: '›'; flex-shrink: 0; font-weight: 700; visibility: hidden; }
+.kanban-source:hover { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.kanban-source:hover .kanban-source-icon { color: var(--on-accent); }
+.kanban-source:hover::after { visibility: visible; }
+[dir="rtl"] .kanban-source::after { content: '‹'; }
 .kanban-date { font-size: 0.72rem; color: var(--text-dim); margin-top: 4px; }
 
 .kanban-chips { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -1695,8 +1707,10 @@ body.compose-window .composer-resize { display: none; }
 [data-theme="brutalist"] .today .week-day-num,
 [data-theme="brutalist"] .cal-cell.today .cal-day-num,
 [data-theme="brutalist"] .kanban-source:hover,
+[data-theme="brutalist"] .kanban-source-icon,
 [data-theme="brutalist"] .kanban-chip.ai,
 [data-theme="brutalist"] .email-project { color: #000; }
+[data-theme="brutalist"] .kanban-source:hover { border-color: #000; }
 [data-theme="brutalist"] .kanban-chip.ai,
 [data-theme="brutalist"] .email-project { background: var(--accent); border-color: #000; }
 [data-theme="brutalist"] .row-mark::before,
@@ -2064,7 +2078,7 @@ body.compose-window .composer-resize { display: none; }
    text, so English mail reads correctly inside an Arabic or Urdu interface and vice versa. */
 .email-from, .email-subject, .email-summary, .rp-subject, .rp-person,
 .search-hit-from, .search-hit-subject, .search-hit-snippet, .search-cited-chip,
-.kanban-card-title, .kanban-source, .cal-dl-pill, .week-dl-pill,
+.kanban-card-title, .kanban-source-text, .cal-dl-pill, .week-dl-pill,
 .composer-body, .composer-body *, .search-answer p, .search-answer li {
   unicode-bidi: plaintext;
 }

@@ -1297,7 +1297,7 @@ function kanbanCard(task) {
   if (task.due_date) chips.push(`<span class="kanban-chip">${esc(fmtDayMonth(task.due_date))}</span>`);
   if (task.ai_verdict) chips.push(`<span class="kanban-chip ai" title="${t('kanban.aiMoved')}">${esc(task.ai_verdict === 'done' ? t('kanban.aiDone') : t('kanban.aiObsolete'))}</span>`);
   const source = task.source_uid
-    ? `<div class="kanban-source" title="${t('kanban.openEmail')}">✉ ${esc(task.source_from)} · ${esc(task.source_subject)}</div>`
+    ? `<div class="kanban-source" title="${t('kanban.openEmail')}"><span class="kanban-source-icon">✉</span><span class="kanban-source-text">${esc(task.source_from)} · ${esc(task.source_subject)}</span></div>`
     : '';
   // When the task appeared: its email's date, or the day it was added by hand.
   const appeared = task.created_ts
