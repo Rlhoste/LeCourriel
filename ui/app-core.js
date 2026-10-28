@@ -100,13 +100,14 @@
   function buildDiscussions(folders, context = {}) {
     const listed = new Set([...(folders?.inbox || []), ...(folders?.sent || [])]);
     const all = [...listed, ...(folders?.trash || []), ...(folders?.spam || [])];
+    const texts = newTexts(all, context.signatures || []);
     return groupThreads(sortEmails(all))
-      .map(({ lead, replies }) => discussion([lead, ...replies].reverse(), context))
+      .map(({ lead, replies }) => discussion([lead, ...replies].reverse(), context, texts))
       .filter(d => d.items.some(i => i.kind === 'message' && listed.has(i.email)))
       .sort((a, b) => b.date_ts - a.date_ts);
   }
 
-  function discussion(emails, context) {
+  function discussion(emails, context, texts) {
     const own = new Set((context.me || []).map(a => String(a).trim().toLowerCase()));
     const isMine = email => own.has(String(email.from_email || '').trim().toLowerCase());
     const last = emails[emails.length - 1];
@@ -130,13 +131,13 @@
       date_ts: Number(last.date_ts) || 0,
       unread: unread.length,
       priority: unread.reduce((top, e) => (top && PRIORITY_ORDER[top] <= (PRIORITY_ORDER[e.priority] ?? 99) ? top : e.priority), null) ?? null,
-      items: discussionItems(emails, isMine, context.now ?? Date.now()),
+      items: discussionItems(emails, isMine, context.now ?? Date.now(), texts),
     };
   }
 
   // Oldest first: a 'day' separator whenever the day changes, then each 'message'.
   // Messages in a row from the same person on the same day stack: `first` / `last` of the run.
-  function discussionItems(emails, isMine, now) {
+  function discussionItems(emails, isMine, now, texts) {
     const items = [];
     const today = startOfDay(now);
     let prev = null;
@@ -152,13 +153,88 @@
       if (prev && !sameRun) prev.item.last = true;
       const item = {
         kind: 'message', email, mine: isMine(email), sender, date_ts: ts,
-        text: String(email.body_text || '').trim(), first: !sameRun, last: false,
+        text: texts.get(email), first: !sameRun, last: false,
       };
       items.push(item);
       prev = { day, item };
     }
     if (prev) prev.item.last = true;
     return items;
+  }
+
+  // Only what the person newly wrote, cut by rules (no AI): the quoted history goes.
+  // When a cut would leave nothing, the message is kept whole.
+  const QUOTE_FROM = /^\s*(?:De|From)\s*:/i;
+  const QUOTE_SUBJECT = /^\s*(?:Objet|Subject)\s*:/i;
+  const QUOTE_INTRO = /^\s*(?:Le|On)\s.*(?:a\s+écrit|wrote)\s*:\s*$/i;   // may wrap onto a 2nd line
+  const RULE_LINE = /^\s*(?:[-_─=]{3,}|-+\s*(?:Original Message|Message d'origine)\s*-+)?\s*$/i;
+  function newText(email, signatures = []) {
+    // A link shows as "[text][1]" with its address on a "[1]: url" line at the very end
+    // (after any quote): put the address back beside it, as "[text](url)".
+    const links = new Map();
+    const body = String(email.body_text || '').replace(/\r\n?/g, '\n').split('\n')
+      .filter(line => { const m = /^\[(\d+)\]:\s*(\S+)\s*$/.exec(line); if (m) links.set(m[1], m[2]); return !m; })
+      .join('\n');
+    const whole = body.replace(/\[([^\]\n]*)\]\[(\d+)\]/g, (all, text, n) => (links.has(n) ? `[${text}](${links.get(n)})` : all)).trim();
+    const lines = whole.split('\n');
+    const kept = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (QUOTE_FROM.test(line) && lines.slice(i + 1, i + 6).some(l => QUOTE_SUBJECT.test(l))) break;
+      if (QUOTE_INTRO.test(line) || QUOTE_INTRO.test(`${line} ${lines[i + 1]}`)) break;
+      if (/^--\s?$/.test(line)) break;   // signature delimiter "-- " (the space may be trimmed)
+      if (!line.trimStart().startsWith('>')) kept.push(line);
+    }
+    for (const signature of signatures) cutBlock(kept, signature.split('\n'));
+    while (kept.length && RULE_LINE.test(kept[kept.length - 1])) kept.pop();
+    return kept.join('\n').trim() || whole;
+  }
+
+  // Each email's new text, then the last lines one sender ends 2+ of their emails with
+  // (a signature we were not told about) are cut: the longest such block, up to MAX_TAIL lines.
+  const MAX_TAIL = 15;
+  function newTexts(emails, signatures) {
+    const texts = new Map(emails.map(e => [e, newText(e, signatures)]));
+    const tails = new Map();   // sender + last k lines → distinct emails ending so
+    const tailKeys = email => {
+      const lines = texts.get(email).split('\n').map(plainLine).filter(Boolean);
+      const sender = String(email.from_email || '').trim().toLowerCase();
+      return lines.slice(-MAX_TAIL).map((_, k, last) => `${sender}\n${last.slice(last.length - k - 1).join('\n')}`);
+    };
+    for (const email of emails) {
+      for (const key of tailKeys(email)) {
+        if (!tails.has(key)) tails.set(key, new Set());
+        tails.get(key).add(String(email.message_id || email.uid));
+      }
+    }
+    for (const email of emails) {
+      const k = tailKeys(email).findLastIndex(key => tails.get(key).size >= 2) + 1;
+      if (!k) continue;
+      const lines = texts.get(email).split('\n');
+      let cut = lines.length;
+      for (let n = 0; n < k; cut--) if (plainLine(lines[cut - 1])) n++;
+      texts.set(email, lines.slice(0, cut).join('\n').trim() || texts.get(email));
+    }
+    return texts;
+  }
+
+  // A line's words only: formatting marks (**bold**, *italic*, [link][1] / [link](url)) and spacing ignored.
+  const plainLine = line => String(line)
+    .replace(/\]\[\d+\]|\]\([^)]*\)/g, ']').replace(/[*[\]]/g, '').replace(/\s+/g, ' ').trim();
+
+  // Removes from `lines` the first run whose non-empty lines are exactly `block`'s non-empty lines.
+  function cutBlock(lines, block) {
+    const want = block.map(plainLine).filter(Boolean);
+    if (!want.length) return;
+    const at = lines.map((l, i) => [plainLine(l), i]).filter(([l]) => l);
+    for (let s = 0; s + want.length <= at.length; s++) {
+      if (!want.every((w, k) => at[s + k][0] === w)) continue;
+      let start = at[s][1];
+      let end = at[s + want.length - 1][1] + 1;
+      while (end < lines.length && !lines[end].trim() && (start === 0 || !lines[start - 1].trim())) end++;
+      lines.splice(start, end - start);
+      return;
+    }
   }
 
   const startOfDay = ms => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); };

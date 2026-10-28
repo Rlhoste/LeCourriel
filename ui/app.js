@@ -220,7 +220,7 @@ function renderDiscussions() {
   const list = CourrielCore.buildDiscussions({
     inbox: appState.all_emails, sent: appState.sent_emails,
     trash: appState.trash_emails, spam: appState.spam_emails,
-  }, { me, now: Date.now() });
+  }, { me, now: Date.now(), signatures: composeAccounts.map(a => htmlText(a.signature_html)) });
   const lines = document.getElementById('dm-lines');
   lines.innerHTML = list.map(d => `
     <div class="dm-line${d.id === openDiscussionId ? ' active' : ''}" data-id="${esc(d.id)}">
@@ -255,6 +255,24 @@ function renderDiscussion(d) {
     <div class="dm-scroll">${d.items.map(discussionItem).join('')}</div>`;
   const scroll = conv.querySelector('.dm-scroll');
   scroll.scrollTop = scroll.scrollHeight;
+  scroll.querySelectorAll('a[data-url]').forEach(a => a.addEventListener('click', ev => {
+    ev.preventDefault();
+    window.__TAURI__.shell.open(a.dataset.url).catch(err => console.error('open link', err));
+  }));
+}
+
+// A bubble's text as written: **bold**, *italic* and [links](url); list lines stay as they are.
+function bubbleHtml(text) {
+  return esc(text)
+    .replace(/\[([^\]\n]+)\]\(((?:https?:|mailto:)[^)\s]+)\)/g, '<a href="#" data-url="$2">$1</a>')
+    .replace(/\*\*(?=\S)([^*\n]+?)\*\*/g, '<b>$1</b>')
+    .replace(/(^|[^*\w])\*(?=\S)([^*\n]+?)\*(?![*\w])/gm, '$1<i>$2</i>');
+}
+
+// The text of an HTML snippet (an account's signature), one line per line break or block.
+function htmlText(html) {
+  const doc = new DOMParser().parseFromString(String(html || '').replace(/<br\s*\/?>|<\/(?:p|div|li|tr|h\d)>/gi, '$&\n'), 'text/html');
+  return doc.body.textContent || '';
 }
 
 // One item of a discussion: a day separator or a bubble (name once and avatar once per run).
@@ -273,7 +291,7 @@ function discussionItem(item) {
       <div class="dm-av-slot">${!item.mine && item.last ? avatar(s) : ''}</div>
       <div class="dm-msg">
         ${!item.mine && item.first ? `<div class="dm-name">${esc(s.name || s.address)}</div>` : ''}
-        <div class="dm-bubble">${esc(item.text)}</div>
+        <div class="dm-bubble">${bubbleHtml(item.text)}</div>
         <div class="dm-time">${esc(fmt({ hour: '2-digit', minute: '2-digit' }).format(time(item.date_ts)))}</div>
       </div>
     </div>`;

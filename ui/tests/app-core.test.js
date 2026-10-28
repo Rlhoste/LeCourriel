@@ -343,3 +343,60 @@ test('messages in a row from the same person stack; a new day starts with a sepa
   assert.equal(d.items[2].date_ts, at(26, 9));
   assert.equal(d.items[1].sender.colour, d.items[3].sender.colour);
 });
+
+// Only the new text: each bubble's `text` is cut by rules (quoted history, signatures).
+const bubbles = (inbox, context = ME) => buildDiscussions({ inbox }, context)
+  .flatMap(d => d.items.filter(i => i.kind === 'message').map(i => i.text));
+
+test('an Outlook quoted block (De : / Envoyé : / À : / Objet :, or From: / Sent:) and all after it is cut', () => {
+  assert.deepEqual(bubbles([
+    mail(1, { subject: 'A', body_text: 'Merci, c\'est noté.\n\n________________________________\nDe : Leo Bianchini <leo@d.com>\nEnvoyé : lundi 26 octobre 2026 09:12\nÀ : Me <me@work.com>\nObjet : RE: Budget\n\nVoici le budget.' }),
+    mail(2, { subject: 'B', body_text: 'Thanks, noted.\n\n-----Original Message-----\nFrom: Leo Bianchini <leo@d.com>\nSent: Monday, October 26, 2026 9:12 AM\nTo: Me <me@work.com>\nSubject: RE: Budget\n\nHere is the budget.' }),
+  ]), ['Thanks, noted.', 'Merci, c\'est noté.']);
+});
+
+test('"Le … a écrit :" and "On … wrote:" (even split over two lines) cut all after them; ">" lines go', () => {
+  assert.deepEqual(bubbles([
+    mail(1, { subject: 'A', body_text: 'Parfait.\n\nLe lun. 26 oct. 2026 à 09:12, Leo Bianchini <leo@d.com> a écrit :\n> Voici le budget.\n\nLeo' }),
+    mail(2, { subject: 'B', body_text: 'Great.\n\nOn Mon, Oct 26, 2026 at 9:12 AM Leo Bianchini <\nleo@d.com> wrote:\n\nHere is the budget.' }),
+    mail(3, { subject: 'C', body_text: '> Lundi ?\nOui.\n> Et mardi ?\n>> Plutôt lundi\nNon.' }),
+  ]), ['Oui.\nNon.', 'Great.', 'Parfait.']);
+});
+
+test('a "-- " line and all after it is cut', () => {
+  assert.deepEqual(bubbles([
+    mail(1, { subject: 'A', body_text: 'À demain.\n-- \nLeo Bianchini\nDirecteur' }),
+    mail(2, { subject: 'B', body_text: 'See you.\n--\nLeo Bianchini\nDirector' }),
+    mail(3, { subject: 'C', body_text: 'Score: 3 -- 2\n--- not a signature' }),
+  ]), ['Score: 3 -- 2\n--- not a signature', 'See you.', 'À demain.']);
+});
+
+test('my accounts\' signatures are cut wherever they appear, matched exactly', () => {
+  // A signature is given as its text; in the email its formatting may show as marks.
+  const context = { ...ME, signatures: ['David Fort\n\nO2GAME |  o2game.com', '', 'Best regards,\nDavid'] };
+  assert.deepEqual(bubbles([
+    mail(1, { subject: 'A', from_email: 'me@work.com', body_text: 'Bonjour Leo,\n\nC\'est validé.\n\nDavid Fort\n**O2GAME** | [o2game.com][1]' }),
+    mail(2, { subject: 'B', from_email: 'me@work.com', body_text: 'Hi Leo,\n\nApproved.\n\nBest regards,\nDavid\n\nP.S. Lunch?' }),
+    mail(3, { subject: 'C', from_email: 'me@work.com', body_text: 'Best regards,\nDavid Fort' }),
+  ], context), ['Best regards,\nDavid Fort', 'Hi Leo,\n\nApproved.\n\nP.S. Lunch?', 'Bonjour Leo,\n\nC\'est validé.']);
+});
+
+test('the same last lines at the end of 2+ emails from one sender are cut; a cut leaving nothing keeps all', () => {
+  const leoSignature = '\n\nLeo Bianchini\nDirecteur financier\nTél. 01 23 45 67 89';
+  const bobSignature = '\n\nBob\nSent from my phone';
+  assert.deepEqual(bubbles([
+    mail(1, { subject: 'A', from_email: 'leo@d.com', body_text: `Bonjour,\n\nVoici le budget.${leoSignature}` }),
+    mail(2, { subject: 'B', from_email: 'leo@d.com', body_text: `Merci !\n\nÀ lundi.${leoSignature}` }),
+    mail(3, { subject: 'C', from_email: 'ana@d.com', body_text: 'OK.\n\nTél. 01 23 45 67 89' }),
+    mail(4, { subject: 'D', from_email: 'bob@e.com', body_text: `Sure.${bobSignature}` }),
+    mail(5, { subject: 'E', from_email: 'bob@e.com', body_text: `Done.${bobSignature}` }),
+    mail(6, { subject: 'F', from_email: 'bob@e.com', body_text: 'Bob\nSent from my phone' }),
+  ]), ['Bob\nSent from my phone', 'Done.', 'Sure.', 'OK.\n\nTél. 01 23 45 67 89', 'Merci !\n\nÀ lundi.', 'Bonjour,\n\nVoici le budget.']);
+});
+
+test('bold, italic, lists and links stay; a link\'s address, noted at the very end, comes back beside it', () => {
+  assert.deepEqual(bubbles([
+    mail(1, { subject: 'A', body_text: 'Voir **le budget** et *la note* : [le lien][1]\n\n* point un\n* point deux\n\nLe lun. 26 oct. 2026 à 09:12, Leo <leo@d.com> a écrit :\n> ancien [x][2]\n\n[1]: https://a.com/b\n[2]: https://old.com' }),
+    mail(2, { subject: 'B', body_text: 'See **the budget**: [here][1]\n\n-- \nLeo | [site][2]\n\n[1]: https://a.com/en\n[2]: https://leo.com' }),
+  ]), ['See **the budget**: [here](https://a.com/en)', 'Voir **le budget** et *la note* : [le lien](https://a.com/b)\n\n* point un\n* point deux']);
+});
