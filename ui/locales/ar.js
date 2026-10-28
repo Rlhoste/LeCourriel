@@ -107,6 +107,7 @@ STRINGS.ar = {
     'set.discussion': 'وضع المحادثة: عرض رسائلي مثل تطبيق مراسلة',
     'nav.discussions': 'المحادثات', 'dm.new': 'رسالة جديدة', 'dm.today': 'اليوم', 'dm.you': 'أنت: {text}',
     'dm.reply': 'اكتب ردًا…', 'dm.add': 'إضافة إلى أو نسخة أو نسخة مخفية', 'dm.remove': 'إزالة',
+    'dm.find': "ابحث في هذه المحادثة", 'dm.findCount': "{n} من {total}", 'dm.findNone': "لا توجد نتائج", 'dm.findPrev': "السابق", 'dm.findNext': "التالي",
     'set.fontScale': 'حجم الخط', 'set.theme': 'السمة', 'set.language': 'اللغة',
     "set.signature": "التوقيع", "set.sigChoose": "📄 اختر ملف HTML…", "set.sigRemove": "إزالة", "set.sigOnNew": "إضافة إلى الرسائل الجديدة", "set.sigOnReply": "إضافة إلى الردود وإعادة التوجيه", "set.sigHint": "لا يوجد توقيع بعد. صدّره من برنامج البريد لديك (Outlook وGmail…) كملف HTML، أو أنشئ واحدًا بأي مولّد توقيعات.", "set.sigImported": "تم استيراد التوقيع", "set.sigRemoved": "تمت إزالة التوقيع", "set.sigFileFilter": "ملفات HTML",
     "set.incoming": "📥 البريد الوارد (IMAP)", "set.outgoing": "📤 البريد الصادر (SMTP)", "set.server": "الخادم", "set.port": "المنفذ", "set.username": "اسم المستخدم", "set.usernamePh": "you@example.com", "set.password": "كلمة المرور", "set.sameAsIncoming": "مثل البريد الوارد", "set.advanced": "خيارات متقدمة", "set.imapMailbox": "المجلد الذي يُفحص", "set.fetchCount": "عدد الرسائل التي تُجلب",

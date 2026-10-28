@@ -391,3 +391,15 @@ test('bubble names use the first name and a last-name initial, growing until two
   }, ME);
   assert.deepEqual(d.reply.to.map(p => p.label), ['David F.', 'Leo Bi.', 'Leo Bo.', 'Ann Lee', 'Ann Lee', 'nobody', 'solo', 'Cher']);
 });
+
+test('each message says which folder it is in, so a search result lands on it (UIDs repeat across folders)', () => {
+  const list = buildDiscussions({
+    inbox: [mail(5, { message_id: '<a@x>', subject: 'Budget' }), mail(6, { subject: 'Lunch' })],
+    sent: [mail(5, { from_email: 'me@work.com', references: '<a@x>', date_ts: 70 })],
+    trash: [mail(8, { references: '<a@x>' })],
+  }, ME);
+  const hit = { folder: 'sent', uid: 5 };
+  const landing = list.filter(d => d.items.some(i => i.kind === 'message' && i.folder === hit.folder && i.email.uid === hit.uid));
+  assert.deepEqual(landing.map(d => d.subject), ['Budget']);
+  assert.deepEqual(landing[0].items.filter(i => i.kind === 'message').map(i => i.folder), ['inbox', 'sent', 'trash']);
+});

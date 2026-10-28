@@ -100,6 +100,7 @@ STRINGS.fr = {
     'set.discussion': 'Mode discussion : afficher mes e-mails comme une messagerie instantanée',
     'nav.discussions': 'Discussions', 'dm.new': 'Nouveau message', 'dm.today': "Aujourd'hui", 'dm.you': 'Vous : {text}',
     'dm.reply': 'Écrire une réponse…', 'dm.add': 'Ajouter en À, Cc ou Cci', 'dm.remove': 'Retirer',
+    'dm.find': "Rechercher dans cette discussion", 'dm.findCount': "{n} sur {total}", 'dm.findNone': "Aucun résultat", 'dm.findPrev': "Précédent", 'dm.findNext': "Suivant",
     'set.fontScale': 'Taille du texte', 'set.theme': 'Thème', 'set.language': 'Langue',
     "set.signature": "Signature", "set.sigChoose": "📄 Choisir un fichier HTML…", "set.sigRemove": "Supprimer", "set.sigOnNew": "Ajouter aux nouveaux messages", "set.sigOnReply": "Ajouter aux réponses et transferts", "set.sigHint": "Pas encore de signature. Exportez-la depuis votre messagerie (Outlook, Gmail…) en fichier HTML, ou créez-en une avec un générateur de signature.", "set.sigImported": "Signature importée", "set.sigRemoved": "Signature supprimée", "set.sigFileFilter": "Fichiers HTML",
     "set.incoming": "📥 Réception (IMAP)", "set.outgoing": "📤 Envoi (SMTP)", "set.server": "Serveur", "set.port": "Port", "set.username": "Identifiant", "set.usernamePh": "vous@exemple.fr", "set.password": "Mot de passe", "set.sameAsIncoming": "Comme pour la réception", "set.advanced": "Options avancées", "set.imapMailbox": "Dossier à relever", "set.fetchCount": "Nombre d'e-mails récupérés",
