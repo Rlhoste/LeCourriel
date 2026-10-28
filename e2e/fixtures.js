@@ -63,6 +63,17 @@ function seedInbox(imap) {
     body: 'Please sign the contract today, the offer expires tonight.', hoursAgo: 6 }), ['\\Seen']);
 }
 
+// A second account. Its UIDs start at 100 too, like on two real servers.
+const SECOND = { task: 'Budget review for Q4', lunch: 'Team lunch on Friday' };
+const SECOND_TASK = 'Review the Q4 budget';
+
+function seedSecondInbox(imap) {
+  imap.append('INBOX', eml({ from: 'Frank CFO <frank@other.test>', subject: SECOND.task,
+    body: 'Could you review the Q4 budget this week?', hoursAgo: 1 }));
+  imap.append('INBOX', eml({ from: 'Gina HR <gina@other.test>', subject: SECOND.lunch,
+    body: 'Team lunch on Friday at noon.', hoursAgo: 2 }));
+}
+
 /** The email delivered while the app is open. */
 function lateEmail() {
   return eml({ from: 'Eve Sales <eve@example.test>', subject: SUBJECTS.late,
@@ -81,6 +92,10 @@ const AI_RULES = [
   { match: /Verify your account/, answer: answer('threat', 'Phishing attempt asking for a login.') },
   { match: /Contract must be signed/, answer: answer('urgent', 'Dan needs the contract signed today.') },
   { match: /Client escalation/, answer: answer('urgent', 'A client refund is blocked; decision needed now.') },
+  { match: /Budget review/, answer: answer('task', 'Frank asks for a Q4 budget review.', { task: SECOND_TASK }) },
+  { match: /Team lunch/, answer: answer('information', 'Team lunch on Friday.') },
 ];
 
-module.exports = { seedInbox, lateEmail, AI_RULES, SUBJECTS, TASK_TEXT, DEADLINE, MEETING_LINK };
+module.exports = {
+  seedInbox, seedSecondInbox, lateEmail, AI_RULES, SUBJECTS, SECOND, SECOND_TASK, TASK_TEXT, DEADLINE, MEETING_LINK,
+};
