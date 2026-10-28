@@ -173,6 +173,61 @@ test('wrong API key: the error is shown, and fixing the key sorts the emails', a
   });
 });
 
+test('two accounts: actions reach the right server (#17), removing one removes its emails and tasks (#16)', async () => {
+  const second = new FakeImap({ cert: cert.cert, key: cert.key, user: 'second@other.test', pass: 'second-pass' });
+  fx.seedSecondInbox(second);
+  const secondPort = await second.listen();
+  const subjectOf = m => /^Subject: (.*)$/m.exec(m.raw.toString())[1];
+  const find = (server, box, subject) => server.mailboxes[box].find(m => subjectOf(m) === subject);
+  try {
+    await withFreshApp(async (browser, app) => {
+      await h.fillAccount(browser, account());
+      await h.fillAi(browser, { url: aiUrl, key: AI_KEY, model: 'fake-model' });
+      await h.save(browser);
+      await assertTriaged(browser);
+      await h.openSettingsTab(browser, 'accounts');
+      await h.addAccount(browser, { host: 'localhost', port: secondPort, user: 'second@other.test', pass: 'second-pass' });
+      await h.save(browser);
+
+      // Both mailboxes in one inbox; the second account's task on the board.
+      await h.showPanel(browser, 'tasks');
+      await h.waitText(browser, '.kanban-col[data-status="todo"] .kanban-cards', fx.SECOND_TASK);
+      await h.showPanel(browser, 'inbox');
+      await h.waitText(browser, '#panel-inbox .email-list', fx.SECOND.lunch);
+
+      // #17: the lunch email has UID 101 on the second server, like "Quarterly figures" on the
+      // first. Opening and deleting it must reach the second server only.
+      const row = await browser.$(`//section[@id="panel-inbox"]//*[contains(concat(" ", @class, " "), " email-row ")][contains(., "${fx.SECOND.lunch}")]`);
+      await row.click();
+      await browser.waitUntil(() => find(second, 'INBOX', fx.SECOND.lunch).flags.includes('\\Seen'),
+        { timeout: 15000, timeoutMsg: 'Opening the email did not mark it read on its own server' });
+      assert.ok(!find(imap, 'INBOX', fx.SUBJECTS.task).flags.includes('\\Seen'), 'the first account\'s email was marked read');
+      await (await h.waitVisible(browser, '#panel-inbox .rp-btn[data-act="delete"]')).click();
+      await browser.waitUntil(() => find(second, 'Trash', fx.SECOND.lunch),
+        { timeout: 15000, timeoutMsg: 'Delete did not move the email to its own server\'s Trash' });
+      assert.equal(imap.mailboxes.Trash.length, 0, 'an email of the first account went to the Trash');
+      assert.equal(imap.mailboxes.INBOX.length, 6);
+
+      // #16: removing the second account takes its emails and tasks with it.
+      await h.openSettingsTab(browser, 'accounts');
+      await (await browser.$('#s-accounts-container > .account-block:nth-child(2) .remove-account-btn')).click();
+      await (await h.waitVisible(browser, '#confirm-ok')).click();
+      await h.save(browser);
+      await browser.waitUntil(async () => !(await h.textOf(browser, '#panel-inbox .email-list')).includes(fx.SECOND.task),
+        { timeout: 15000, timeoutMsg: 'The removed account\'s email is still in the inbox' });
+      await h.waitText(browser, '#panel-inbox .email-list', fx.SUBJECTS.urgent);
+      await h.showPanel(browser, 'tasks');
+      await h.waitText(browser, '.kanban-col[data-status="todo"] .kanban-cards', fx.TASK_TEXT);
+      assert.ok(!(await h.textOf(browser, '#panel-tasks')).includes(fx.SECOND_TASK), 'the removed account\'s task stayed');
+      const cache = path.join(app.dataDir, 'cache-v2.json');
+      await browser.waitUntil(() => !fs.readFileSync(cache, 'utf8').includes(fx.SECOND.task),
+        { timeout: 15000, timeoutMsg: 'The removed account\'s email is still in the cache' });
+    });
+  } finally {
+    await second.close();
+  }
+});
+
 // Opt-in, against a real mailbox and a real AI:
 //   E2E_LIVE=1 E2E_IMAP_HOST=… E2E_IMAP_USER=… E2E_IMAP_PASS=… [E2E_IMAP_PORT=993]
 //   E2E_AI_URL=https://api.openai.com/v1 E2E_AI_KEY=… E2E_AI_MODEL=… scripts/e2e.sh
