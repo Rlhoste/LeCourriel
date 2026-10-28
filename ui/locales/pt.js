@@ -99,6 +99,7 @@ STRINGS.pt = {
     'set.notify': 'Avisar-me quando chegarem novos e-mails',
     'set.discussion': 'Modo conversa: mostrar os meus e-mails como uma app de mensagens',
     'nav.discussions': 'Conversas', 'dm.new': 'Nova mensagem', 'dm.today': 'Hoje', 'dm.you': 'Você: {text}',
+    'dm.reply': 'Escreva uma resposta…', 'dm.add': 'Adicionar em Para, Cc ou Cco', 'dm.remove': 'Remover',
     'dm.find': "Procurar nesta conversa", 'dm.findCount': "{n} de {total}", 'dm.findNone': "Nenhum resultado", 'dm.findPrev': "Anterior", 'dm.findNext': "Seguinte",
     'dm.earlier': 'As mensagens anteriores não estão carregadas', 'dm.draft': 'Rascunho', 'dm.cc': '{name} (Cc)',
     'dm.added': '{who} adicionou {names}', 'dm.removed': '{who} removeu {names}', 'dm.youAdded': 'Você adicionou {names}', 'dm.youRemoved': 'Você removeu {names}',

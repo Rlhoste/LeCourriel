@@ -99,6 +99,7 @@ STRINGS.hi = {
     'set.notify': 'नए ईमेल आने पर मुझे सूचित करें',
     'set.discussion': 'बातचीत मोड: मेरे ईमेल को मैसेजिंग ऐप की तरह दिखाएँ',
     'nav.discussions': 'बातचीत', 'dm.new': 'नया संदेश', 'dm.today': 'आज', 'dm.you': 'आप: {text}',
+    'dm.reply': 'जवाब लिखें…', 'dm.add': 'प्रति, Cc या Bcc जोड़ें', 'dm.remove': 'हटाएँ',
     'dm.find': "इस बातचीत में खोजें", 'dm.findCount': "{total} में से {n}", 'dm.findNone': "कोई मिलान नहीं", 'dm.findPrev': "पिछला", 'dm.findNext': "अगला",
     'dm.earlier': 'पिछले संदेश लोड नहीं हुए हैं', 'dm.draft': 'ड्राफ़्ट', 'dm.cc': '{name} (Cc)',
     'dm.added': '{who} ने {names} को जोड़ा', 'dm.removed': '{who} ने {names} को हटाया', 'dm.youAdded': 'आपने {names} को जोड़ा', 'dm.youRemoved': 'आपने {names} को हटाया',

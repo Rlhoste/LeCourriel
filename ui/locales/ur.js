@@ -99,6 +99,7 @@ STRINGS.ur = {
     'set.notify': 'نئی ای میلز آنے پر مجھے مطلع کریں',
     'set.discussion': 'گفتگو موڈ: میری ای میلز کو میسجنگ ایپ کی طرح دکھائیں',
     'nav.discussions': 'گفتگو', 'dm.new': 'نیا پیغام', 'dm.today': 'آج', 'dm.you': 'آپ: {text}',
+    'dm.reply': 'جواب لکھیں…', 'dm.add': 'بنام، Cc یا Bcc میں شامل کریں', 'dm.remove': 'ہٹائیں',
     'dm.find': "اس گفتگو میں تلاش کریں", 'dm.findCount': "{total} میں سے {n}", 'dm.findNone': "کوئی نتیجہ نہیں", 'dm.findPrev': "پچھلا", 'dm.findNext': "اگلا",
     'dm.earlier': 'پچھلے پیغامات لوڈ نہیں ہوئے', 'dm.draft': 'مسودہ', 'dm.cc': '{name} (Cc)',
     'dm.added': '{who} نے {names} کو شامل کیا', 'dm.removed': '{who} نے {names} کو ہٹایا', 'dm.youAdded': 'آپ نے {names} کو شامل کیا', 'dm.youRemoved': 'آپ نے {names} کو ہٹایا',

@@ -99,6 +99,7 @@ STRINGS.id = {
     'set.notify': 'Beri tahu saya saat email baru masuk',
     'set.discussion': 'Mode percakapan: tampilkan email saya seperti aplikasi pesan',
     'nav.discussions': 'Percakapan', 'dm.new': 'Pesan baru', 'dm.today': 'Hari ini', 'dm.you': 'Anda: {text}',
+    'dm.reply': 'Tulis balasan…', 'dm.add': 'Tambahkan ke Kepada, Cc, atau Bcc', 'dm.remove': 'Hapus',
     'dm.find': "Cari di percakapan ini", 'dm.findCount': "{n} dari {total}", 'dm.findNone': "Tidak ada hasil", 'dm.findPrev': "Sebelumnya", 'dm.findNext': "Berikutnya",
     'dm.earlier': 'Pesan sebelumnya belum dimuat', 'dm.draft': 'Draf', 'dm.cc': '{name} (Cc)',
     'dm.added': '{who} menambahkan {names}', 'dm.removed': '{who} menghapus {names}', 'dm.youAdded': 'Anda menambahkan {names}', 'dm.youRemoved': 'Anda menghapus {names}',

@@ -207,6 +207,8 @@ function renderPanel(panel) {
 // The mailbox like a messaging app: the folders give way to one list of discussions.
 const DISCUSSION_HIDDEN_PANELS = ['inbox', 'sent', 'drafts', 'trash', 'spam'];
 let openDiscussionId = null;
+let replyDraft = null;   // the reply bar: { id, email, subject, from, to, cc, bcc, text, more, adding }
+const REPLY_PILLS = 4;   // bubbles shown before "+X" (a fixed count, not measured to the bar width)
 const dmFind = { open: false, query: '', at: -1 };   // the Ctrl+F bar of the open discussion
 
 function applyDiscussionMode(on) {
@@ -216,7 +218,7 @@ function applyDiscussionMode(on) {
 }
 
 function discussionList() {
-  const me = composeAccounts.map(a => splitSender(a.from).email).filter(Boolean);
+  const me = composeAccounts.map(a => splitSender(a.from).email);   // index = account
   return CourrielCore.buildDiscussions({
     inbox: appState.all_emails, sent: appState.sent_emails,
     trash: appState.trash_emails, spam: appState.spam_emails, drafts: appState.drafts_emails,
@@ -262,9 +264,11 @@ function renderDiscussions() {
 
 function renderDiscussion(d) {
   const conv = document.getElementById('dm-conv');
-  if (!d) { conv.innerHTML = ''; return; }
+  // A reply being written survives refreshes of the same discussion.
+  const reply = d && replyDraft?.id === d.id && replyDraft.text ? conv.querySelector('.dm-reply') : null;
+  if (!d) { conv.innerHTML = ''; replyDraft = null; return; }
   const finding = document.activeElement?.classList.contains('dm-find-input');
-  conv.innerHTML = `
+  const html = `
     <div class="dm-head">
       ${avatarStack(d.people)}
       <div class="dm-titles">
@@ -280,6 +284,13 @@ function renderDiscussion(d) {
       <button class="dm-find-close" title="${esc(t('cmp.close'))}">✕</button>
     </div>
     <div class="dm-scroll">${d.items.map(discussionItem).join('')}</div>`;
+  if (reply) {   // kept in place, so the field keeps the focus
+    conv.querySelectorAll('.dm-head, .dm-find, .dm-scroll').forEach(el => el.remove());
+    reply.insertAdjacentHTML('beforebegin', html);
+  } else {
+    conv.innerHTML = html;
+    conv.appendChild(replyBar(d));
+  }
   const scroll = conv.querySelector('.dm-scroll');
   scroll.scrollTop = scroll.scrollHeight;
   setupDiscussionFind(conv);
@@ -337,6 +348,120 @@ function runDiscussionFind(move, scrollTo = true) {
   marks[dmFind.at].classList.add('current');
   if (scrollTo) marks[dmFind.at].scrollIntoView({ block: 'center' });
   count.textContent = t('dm.findCount', { n: fmtNumber(dmFind.at + 1), total: fmtNumber(marks.length) });
+}
+
+// ── Discussion mode: the reply bar ──
+// Reply-all to the latest message. The From/To/Cc bubbles appear once something is typed;
+// Send goes through the usual send path, ⤢ moves the reply to the full editor.
+function replyBar(d) {
+  replyDraft = {
+    id: d.id, email: d.reply.email, subject: d.reply.subject, from: d.reply.from,
+    to: [...d.reply.to], cc: [...d.reply.cc], bcc: [], text: '', more: false, adding: false,
+  };
+  const bar = document.createElement('footer');
+  bar.className = 'dm-reply';
+  bar.innerHTML = `
+    <div class="dm-recips hidden"></div>
+    <div class="dm-compose">
+      <textarea class="dm-text" rows="1" placeholder="${esc(t('dm.reply'))}"></textarea>
+      <button class="dm-expand" title="${esc(t('cmp.expand'))}">⤢</button>
+      <button class="dm-send" title="${esc(t('cmp.sendTitle'))}">${esc(t('cmp.send'))}</button>
+    </div>`;
+  const text = bar.querySelector('.dm-text');
+  text.addEventListener('input', () => {
+    replyDraft.text = text.value;
+    if (text.value.trim()) bar.querySelector('.dm-recips').classList.remove('hidden');
+  });
+  text.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendReply(bar); } });
+  bar.querySelector('.dm-send').addEventListener('click', () => sendReply(bar));
+  bar.querySelector('.dm-expand').addEventListener('click', () => {
+    const r = replyDraft;
+    openCompose({
+      mode: 'reply', email: r.email, subject: r.subject, account: r.from, html: replyHtml(r.text),
+      to: addressList(r.to), cc: addressList(r.cc), bcc: addressList(r.bcc),
+    });
+    text.value = r.text = '';
+  });
+  bar.querySelector('.dm-recips').addEventListener('click', e => replyRecipientClick(bar, e));
+  bar.querySelector('.dm-recips').addEventListener('change', e => {
+    if (e.target.matches('.dm-from select')) replyDraft.from = Number(e.target.value) || 0;
+  });
+  renderReplyRecipients(bar);
+  return bar;
+}
+
+function renderReplyRecipients(bar) {
+  const r = replyDraft;
+  const all = ['to', 'cc', 'bcc'].flatMap(kind => r[kind].map(p => ({ kind, p })));
+  const shown = r.more ? all : all.slice(0, REPLY_PILLS);
+  const pill = ({ kind, p }) => `
+    <span class="dm-pill" title="${esc(p.address)}">${esc(p.label)}<button class="dm-x" data-kind="${kind}" data-address="${esc(p.address)}" title="${esc(t('dm.remove'))}">✕</button></span>`;
+  bar.querySelector('.dm-recips').innerHTML = `
+    <button class="dm-add" title="${esc(t('dm.add'))}">+</button>
+    <label class="dm-pill dm-from">${esc(t('meta.from'))}
+      <select>${composeAccounts.map((a, i) => `<option value="${i}"${i === r.from ? ' selected' : ''}>${esc(a.from)}</option>`).join('')}</select>
+    </label>
+    ${['to', 'cc', 'bcc'].map(kind => {
+      const pills = shown.filter(x => x.kind === kind);
+      return pills.length ? `<span class="dm-grp"><span class="dm-lbl">${esc(t(`cmp.${kind}`))}</span>${pills.map(pill).join('')}</span>` : '';
+    }).join('')}
+    ${all.length > shown.length ? `<button class="dm-pill dm-more" title="${esc(all.slice(shown.length).map(x => x.p.address).join(', '))}">+${all.length - shown.length}</button>` : ''}
+    ${r.adding ? `<span class="dm-adding">
+      <select class="dm-kind">${['to', 'cc', 'bcc'].map(k => `<option value="${k}">${esc(t(`cmp.${k}`))}</option>`).join('')}</select>
+      <input class="dm-address" type="text" autocomplete="off" spellcheck="false">
+    </span>` : ''}`;
+  const input = bar.querySelector('.dm-address');
+  if (!input) return;
+  input.focus();
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { r.adding = false; renderReplyRecipients(bar); }
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const kind = bar.querySelector('.dm-kind').value;
+    const known = new Set(all.map(x => x.p.address.toLowerCase()));
+    for (const a of CourrielCore.splitAddresses(input.value)) {
+      if (!known.has(a.address.toLowerCase())) { r[kind].push(a); known.add(a.address.toLowerCase()); }
+    }
+    r.adding = false;
+    CourrielCore.bubbleLabels([...r.to, ...r.cc, ...r.bcc]);
+    renderReplyRecipients(bar);
+  });
+}
+
+function replyRecipientClick(bar, e) {
+  const r = replyDraft;
+  const x = e.target.closest('.dm-x');
+  if (x) {
+    r[x.dataset.kind] = r[x.dataset.kind].filter(p => p.address !== x.dataset.address);
+    CourrielCore.bubbleLabels([...r.to, ...r.cc, ...r.bcc]);
+  } else if (e.target.closest('.dm-more')) r.more = true;
+  else if (e.target.closest('.dm-add')) r.adding = !r.adding;
+  else return;
+  renderReplyRecipients(bar);
+}
+
+const replyHtml = text => `<div>${esc(text.trim()).replace(/\n/g, '<br>') || '<br>'}</div><div><br></div>`;
+const addressList = people => people
+  .map(p => (p.name ? `"${p.name.replace(/["\\]/g, '')}" <${p.address}>` : p.address)).join(', ');
+
+async function sendReply(bar) {
+  const r = replyDraft;
+  if (!r.text.trim()) return;
+  if (!r.to.length && !r.cc.length && !r.bcc.length) { showToast(t('cmp.needRecipient')); return; }
+  const btn = bar.querySelector('.dm-send');
+  btn.disabled = true;
+  try {
+    await cmd('send_email', {
+      to: addressList(r.to), cc: addressList(r.cc), bcc: addressList(r.bcc), subject: r.subject,
+      html: replyHtml(r.text) + signatureBlock(r.from, 'reply') + replyQuote(r.email),
+      inReplyTo: r.email.message_id || null, account: r.from,
+    });
+    showToast(t('cmp.sent'));
+    bar.querySelector('.dm-text').value = r.text = '';
+  } catch (e) {
+    showToast(t('cmp.sendFailed', { err: e }));
+  }
+  btn.disabled = false;
 }
 
 // One item of a discussion: a note, a day separator or a bubble (name once and avatar once per run).
@@ -2338,20 +2463,28 @@ async function startComposeWindow(options) {
 }
 let composeClosing = false;   // the composer window is closing on purpose (sent or discarded)
 
-function fillCompose({ mode = 'new', email = null, to: presetTo = '', subject: presetSubject = '',
-                       cc: presetCc = '', html: presetHtml = '', inReplyTo: presetInReplyTo = null } = {}) {
-  let to = presetTo, subject = presetSubject, html = presetHtml || '<div><br></div>';
-  composeInReplyTo = presetInReplyTo;
-
-  if (email && mode === 'reply') {
-    to = email.reply_to || email.from_email || email.from_name;
-    subject = /^re:/i.test(email.subject) ? email.subject : `Re: ${email.subject}`;
-    composeInReplyTo = email.message_id || null;
-    html = `<div><br></div><div><br></div>
+// The original below a reply: "On …, … wrote:" and the quoted message.
+function replyQuote(email) {
+  return `
       <div class="compose-quoted">
       <div class="quote-intro">${quoteIntro(email)}</div>
       <blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">${quotedOriginal(email)}</blockquote>
       </div>`;
+}
+
+// A reply can come prefilled (the Discussion mode reply bar expanding into the full editor):
+// `to`, `cc`, `bcc`, `subject`, `account` and the typed `html` replace the defaults.
+function fillCompose({ mode = 'new', email = null, to: presetTo = '', subject: presetSubject = '',
+                       cc: presetCc = '', bcc: presetBcc = '', html: presetHtml = '',
+                       inReplyTo: presetInReplyTo = null, account: presetAccount = null } = {}) {
+  let to = presetTo, subject = presetSubject, html = presetHtml || '<div><br></div>';
+  composeInReplyTo = presetInReplyTo;
+
+  if (email && mode === 'reply') {
+    to = presetTo || email.reply_to || email.from_email || email.from_name;
+    subject = presetSubject || (/^re:/i.test(email.subject) ? email.subject : `Re: ${email.subject}`);
+    composeInReplyTo = email.message_id || null;
+    html = (presetHtml || '<div><br></div><div><br></div>') + replyQuote(email);
   } else if (email && mode === 'forward') {
     subject = /^(fwd?|tr):/i.test(email.subject) ? email.subject : `Fwd: ${email.subject}`;
     const rows = [
@@ -2370,7 +2503,7 @@ function fillCompose({ mode = 'new', email = null, to: presetTo = '', subject: p
 
   // Sending account: the one the original was sent to, else the first. Its signature goes
   // above the quoted original in replies/forwards, at the end of new messages.
-  const accountIndex = email ? accountForEmail(email) : 0;
+  const accountIndex = presetAccount ?? (email ? accountForEmail(email) : 0);
   $c('compose-from').value = String(accountIndex);
   const sigHtml = signatureBlock(accountIndex, email ? 'reply' : 'new');
   if (sigHtml) {
@@ -2391,11 +2524,11 @@ function fillCompose({ mode = 'new', email = null, to: presetTo = '', subject: p
     $c(`compose-${k}-row`).classList.add('hidden');
     $c(`compose-show-${k}`).classList.remove('hidden');
   });
-  if (presetCc) {
-    $c('compose-cc').value = presetCc;
-    $c('compose-cc-row').classList.remove('hidden');
-    $c('compose-show-cc').classList.add('hidden');
-  }
+  Object.entries({ cc: presetCc, bcc: presetBcc }).filter(([, v]) => v).forEach(([k, v]) => {
+    $c(`compose-${k}`).value = v;
+    $c(`compose-${k}-row`).classList.remove('hidden');
+    $c(`compose-show-${k}`).classList.add('hidden');
+  });
   $c('compose-subject').value = subject;
   $c('compose-body').innerHTML = html;
   $c('composer-title').textContent =

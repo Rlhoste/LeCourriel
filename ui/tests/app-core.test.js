@@ -344,6 +344,54 @@ test('messages in a row from the same person stack; a new day starts with a sepa
   assert.equal(d.items[1].sender.colour, d.items[3].sender.colour);
 });
 
+const addresses = list => list.map(p => p.address);
+
+test('the reply bar answers everyone on the latest message, never myself', () => {
+  const [d] = buildDiscussions({
+    inbox: [
+      mail(1, { message_id: '<a@x>', subject: 'Budget', from_email: 'old@x.com' }),
+      mail(2, {
+        references: '<a@x>', subject: 'Re: Budget', from_name: 'Leo Bianchini', from_email: 'leo@d.com',
+        to: 'Me <ME@work.com>, "Damien Delhay" <damien@o.com>, leo@d.com', cc: 'me@home.org, ann@x.com, Damien <damien@o.com>',
+      }),
+    ],
+  }, ME);
+  assert.equal(d.reply.email.uid, 2);
+  assert.deepEqual(addresses(d.reply.to), ['leo@d.com', 'damien@o.com']);
+  assert.deepEqual(addresses(d.reply.cc), ['ann@x.com']);
+  assert.equal(d.reply.subject, 'Re: Budget');
+  assert.equal(d.reply.from, 0, 'the account that received it');
+});
+
+test('the reply goes to Reply-To when set, and From follows the account that received it', () => {
+  const [d] = buildDiscussions({
+    inbox: [mail(1, { subject: 'Offer', from_email: 'news@shop.com', reply_to: 'Sales <sales@shop.com>', to: 'me@home.org' })],
+  }, ME);
+  assert.deepEqual(addresses(d.reply.to), ['sales@shop.com']);
+  assert.equal(d.reply.from, 1);
+});
+
+test('replying after my own message goes to its recipients, from the account that sent it', () => {
+  const [d] = buildDiscussions({
+    inbox: [mail(1, { message_id: '<a@x>', subject: 'Plan', from_email: 'leo@d.com', to: 'me@work.com' })],
+    sent: [mail(2, { references: '<a@x>', subject: 'RE: Plan', from_email: 'me@home.org', to: 'leo@d.com', cc: 'ann@x.com' })],
+  }, ME);
+  assert.deepEqual(addresses(d.reply.to), ['leo@d.com']);
+  assert.deepEqual(addresses(d.reply.cc), ['ann@x.com']);
+  assert.equal(d.reply.subject, 'RE: Plan');
+  assert.equal(d.reply.from, 1);
+});
+
+test('bubble names use the first name and a last-name initial, growing until two differ', () => {
+  const [d] = buildDiscussions({
+    inbox: [mail(1, {
+      from_name: 'David Fort', from_email: 'david@x.com',
+      to: 'Leo Bianchini <lbi@x.com>, Leo Bonnet <lbo@x.com>, Ann Lee <ann@x.com>, Ann Lee <ann2@y.com>, "nobody@z.com" <nobody@z.com>, solo@z.com, Cher <cher@z.com>',
+    })],
+  }, ME);
+  assert.deepEqual(d.reply.to.map(p => p.label), ['David F.', 'Leo Bi.', 'Leo Bo.', 'Ann Lee', 'Ann Lee', 'nobody', 'solo', 'Cher']);
+});
+
 test('each message says which folder it is in, so a search result lands on it (UIDs repeat across folders)', () => {
   const list = buildDiscussions({
     inbox: [mail(5, { message_id: '<a@x>', subject: 'Budget' }), mail(6, { subject: 'Lunch' })],

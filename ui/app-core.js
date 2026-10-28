@@ -94,7 +94,7 @@
 
   // Discussion mode: what the discussion list and each opened discussion show.
   // `folders` holds the cached emails per folder ({ inbox, sent, trash, spam, drafts }, every account);
-  // `context` is { me: own addresses of every account, now: ms }.
+  // `context` is { me: own address of each account, in account order, now: ms }.
   // Returns the listed discussions, newest first. Each one is a list line plus its `items`,
   // oldest first; an item's `kind` says what it is: 'earlier' (older messages not on this computer,
   // at the top), 'day' separator, 'people' (recipients changed), 'message', 'draft' (unsent, at the bottom).
@@ -112,7 +112,7 @@
   }
 
   function discussion(emails, drafts, context, folderOf) {
-    const own = new Set((context.me || []).map(a => String(a).trim().toLowerCase()));
+    const own = new Set((context.me || []).map(a => String(a || '').trim().toLowerCase()).filter(Boolean));
     const isMine = email => own.has(String(email.from_email || '').trim().toLowerCase());
     const last = emails[emails.length - 1];
     const unread = emails.filter(e => !e.is_read && !isMine(e));
@@ -140,6 +140,7 @@
         ...discussionItems(emails, isMine, people, context.now ?? Date.now(), folderOf),
         ...drafts.map(email => ({ kind: 'draft', email, text: String(email.body_text || '').trim(), date_ts: Number(email.date_ts) || 0 })),
       ],
+      reply: replyAll(last, context.me || []),
     };
   }
 
@@ -147,6 +148,57 @@
   function missesEarlier(emails) {
     const ids = new Set(emails.map(e => String(e.message_id || '').trim()).filter(Boolean));
     return emails.some(e => (String(e.references || '').match(/<[^>]+>/g) || []).some(id => !ids.has(id)));
+  }
+
+  // The reply bar answers everyone on the latest message (`email`): its sender (or Reply-To)
+  // and its To in `to`, its Cc in `cc`, never any of my own addresses. `from` is the index in
+  // `me` of the account that received it (or sent it, when the latest message is mine).
+  function replyAll(email, me) {
+    const mine = me.map(a => String(a || '').trim().toLowerCase());
+    const seen = new Set(mine.filter(Boolean));
+    const pick = list => list.filter(a => {
+      const key = a.address.toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).map(a => person(a.name, a.address));
+    const account = address => (address ? mine.indexOf(address.trim().toLowerCase()) : -1);
+    const fromMe = account(email.from_email);
+    const sender = email.reply_to ? splitAddresses(email.reply_to) : [{ name: email.from_name || '', address: String(email.from_email || '').trim() }];
+    const received = [...splitAddresses(email.to), ...splitAddresses(email.cc)].map(a => account(a.address)).find(i => i >= 0);
+    const subject = String(email.subject || '');
+    const to = pick(fromMe >= 0 ? splitAddresses(email.to) : [...sender, ...splitAddresses(email.to)]);
+    const cc = pick(splitAddresses(email.cc));
+    bubbleLabels([...to, ...cc]);
+    return {
+      email,
+      from: fromMe >= 0 ? fromMe : received ?? 0,
+      to,
+      cc,
+      subject: /^re\s*:/i.test(subject) ? subject : `Re: ${subject}`,
+    };
+  }
+
+  // Sets each person's bubble `label`: first name and last-name initial ("David F."), the last
+  // name growing until two labels differ ("Leo Bi.", "Leo Bo."); no name -> the part before @.
+  function bubbleLabels(people) {
+    const parts = people.map(p => {
+      const words = /@/.test(p.name) ? [] : String(p.name || '').split(/\s+/).filter(Boolean);
+      return { p, first: words[0], last: words.length > 1 ? words[words.length - 1] : '', n: 1 };
+    });
+    const label = x => (!x.first ? x.p.address.split('@')[0]
+      : !x.last ? x.first
+        : x.n >= x.last.length ? `${x.first} ${x.last}` : `${x.first} ${x.last.slice(0, x.n)}.`);
+    for (let grew = true; grew;) {
+      grew = false;
+      const count = new Map();
+      for (const x of parts) count.set(label(x), (count.get(label(x)) || 0) + 1);
+      for (const x of parts) {
+        if (count.get(label(x)) > 1 && x.last && x.n < x.last.length) { x.n++; grew = true; }
+      }
+    }
+    for (const x of parts) x.p.label = label(x);
+    return people;
   }
 
   // Oldest first: a 'day' separator whenever the day changes, then each 'message'.
@@ -298,6 +350,8 @@
     threadSubject,
     groupThreads,
     buildDiscussions,
+    bubbleLabels,
+    splitAddresses,
     removeEmailFromState,
     autoUpdatesEnabled,
     saveAutoUpdates,

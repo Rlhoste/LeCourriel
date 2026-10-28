@@ -99,6 +99,7 @@ STRINGS.es = {
     'set.notify': 'Avisarme cuando lleguen correos nuevos',
     'set.discussion': 'Modo conversación: mostrar mis correos como una app de mensajería',
     'nav.discussions': 'Conversaciones', 'dm.new': 'Nuevo mensaje', 'dm.today': 'Hoy', 'dm.you': 'Tú: {text}',
+    'dm.reply': 'Escribe una respuesta…', 'dm.add': 'Añadir en Para, Cc o Cco', 'dm.remove': 'Quitar',
     'dm.find': "Buscar en esta conversación", 'dm.findCount': "{n} de {total}", 'dm.findNone': "Sin resultados", 'dm.findPrev': "Anterior", 'dm.findNext': "Siguiente",
     'dm.earlier': 'Los mensajes anteriores no están cargados', 'dm.draft': 'Borrador', 'dm.cc': '{name} (CC)',
     'dm.added': '{who} añadió a {names}', 'dm.removed': '{who} quitó a {names}', 'dm.youAdded': 'Añadiste a {names}', 'dm.youRemoved': 'Quitaste a {names}',

@@ -99,6 +99,7 @@ STRINGS.bn = {
     'set.notify': 'নতুন ইমেল এলে আমাকে জানান',
     'set.discussion': 'কথোপকথন মোড: আমার ইমেল মেসেজিং অ্যাপের মতো দেখান',
     'nav.discussions': 'কথোপকথন', 'dm.new': 'নতুন বার্তা', 'dm.today': 'আজ', 'dm.you': 'আপনি: {text}',
+    'dm.reply': 'উত্তর লিখুন…', 'dm.add': 'প্রাপক, Cc বা Bcc যোগ করুন', 'dm.remove': 'সরান',
     'dm.find': "এই কথোপকথনে খুঁজুন", 'dm.findCount': "{total}-এর মধ্যে {n}", 'dm.findNone': "কোনো মিল নেই", 'dm.findPrev': "আগের", 'dm.findNext': "পরের",
     'dm.earlier': 'আগের বার্তাগুলো লোড হয়নি', 'dm.draft': 'খসড়া', 'dm.cc': '{name} (Cc)',
     'dm.added': '{who} {names}-কে যোগ করেছেন', 'dm.removed': '{who} {names}-কে সরিয়েছেন', 'dm.youAdded': 'আপনি {names}-কে যোগ করেছেন', 'dm.youRemoved': 'আপনি {names}-কে সরিয়েছেন',
