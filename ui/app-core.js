@@ -92,6 +92,109 @@
     }));
   }
 
+  // Discussion mode: what the discussion list and each opened discussion show.
+  // `folders` holds the cached emails per folder ({ inbox, sent, trash, spam }, every account);
+  // `context` is { me: own addresses of every account, now: ms }.
+  // Returns the listed discussions, newest first. Each one is a list line plus its `items`,
+  // oldest first; an item's `kind` says what it is ('day' separator or 'message').
+  function buildDiscussions(folders, context = {}) {
+    const listed = new Set([...(folders?.inbox || []), ...(folders?.sent || [])]);
+    const all = [...listed, ...(folders?.trash || []), ...(folders?.spam || [])];
+    return groupThreads(sortEmails(all))
+      .map(({ lead, replies }) => discussion([lead, ...replies].reverse(), context))
+      .filter(d => d.items.some(i => i.kind === 'message' && listed.has(i.email)))
+      .sort((a, b) => b.date_ts - a.date_ts);
+  }
+
+  function discussion(emails, context) {
+    const own = new Set((context.me || []).map(a => String(a).trim().toLowerCase()));
+    const isMine = email => own.has(String(email.from_email || '').trim().toLowerCase());
+    const last = emails[emails.length - 1];
+    const unread = emails.filter(e => !e.is_read && !isMine(e));
+    const people = new Map();
+    const meet = (name, address) => {
+      const key = String(address || '').trim().toLowerCase();
+      if (key && !own.has(key) && !people.has(key)) people.set(key, person(name, address.trim()));
+    };
+    for (const e of emails) {
+      meet(e.from_name, e.from_email);
+      for (const a of [...splitAddresses(e.to), ...splitAddresses(e.cc)]) meet(a.name, a.address);
+    }
+    const others = [...people.values()];
+    return {
+      id: String(emails[0].message_id || emails[0].uid),
+      people: others,
+      title: others.slice(0, 2).map(p => p.short).join(', ') + (others.length > 2 ? ` +${others.length - 2}` : ''),
+      subject: emails[0].subject || '',
+      preview: { mine: isMine(last), text: String(last.body_text || '').replace(/\s+/g, ' ').trim().slice(0, 200) },
+      date_ts: Number(last.date_ts) || 0,
+      unread: unread.length,
+      priority: unread.reduce((top, e) => (top && PRIORITY_ORDER[top] <= (PRIORITY_ORDER[e.priority] ?? 99) ? top : e.priority), null) ?? null,
+      items: discussionItems(emails, isMine, context.now ?? Date.now()),
+    };
+  }
+
+  // Oldest first: a 'day' separator whenever the day changes, then each 'message'.
+  // Messages in a row from the same person on the same day stack: `first` / `last` of the run.
+  function discussionItems(emails, isMine, now) {
+    const items = [];
+    const today = startOfDay(now);
+    let prev = null;
+    for (const email of emails) {
+      const ts = Number(email.date_ts) || 0;
+      const sender = person(email.from_name, String(email.from_email || '').trim());
+      const day = startOfDay(ts * 1000);
+      const sameRun = prev && prev.day === day && prev.item.sender.address.toLowerCase() === sender.address.toLowerCase();
+      if (!prev || prev.day !== day) {
+        const daysAgo = Math.round((today - day) / 86400e3);
+        items.push({ kind: 'day', day: daysAgo === 0 ? 'today' : daysAgo > 0 && daysAgo < 7 ? 'weekday' : 'date', date_ts: ts });
+      }
+      if (prev && !sameRun) prev.item.last = true;
+      const item = {
+        kind: 'message', email, mine: isMine(email), sender, date_ts: ts,
+        text: String(email.body_text || '').trim(), first: !sameRun, last: false,
+      };
+      items.push(item);
+      prev = { day, item };
+    }
+    if (prev) prev.item.last = true;
+    return items;
+  }
+
+  const startOfDay = ms => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); };
+
+  // A person seen in a discussion: names, initials and colour for the avatar.
+  const PERSON_COLOURS = ['#d9534f', '#3c9d5d', '#a05cd6', '#d68a1c', '#2a9fb8', '#c2577f', '#6d7f2a', '#5b6ee1'];
+  function person(name, address) {
+    const words = String(name || '').trim().split(/\s+/).filter(Boolean);
+    const local = address.split('@')[0];
+    const initials = words.length > 1 ? words[0][0] + words[1][0] : (words[0] || local).slice(0, 2);
+    let hash = 0;
+    for (const ch of address.toLowerCase()) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+    return {
+      name: words.join(' '), address, short: words[0] || local, initials: initials.toUpperCase(),
+      colour: PERSON_COLOURS[hash % PERSON_COLOURS.length],
+    };
+  }
+
+  // "Ann <ann@x.com>, bob@x.com" -> [{ name: 'Ann', address: 'ann@x.com' }, { name: '', address: 'bob@x.com' }].
+  // Commas inside quotes or <…> do not split.
+  function splitAddresses(value) {
+    const parts = [];
+    let cur = '', inQuote = false, inAngle = false;
+    for (const ch of String(value || '')) {
+      if (ch === '"') inQuote = !inQuote;
+      else if (ch === '<' && !inQuote) inAngle = true;
+      else if (ch === '>' && !inQuote) inAngle = false;
+      if (ch === ',' && !inQuote && !inAngle) { parts.push(cur); cur = ''; } else cur += ch;
+    }
+    parts.push(cur);
+    return parts.map(s => s.trim()).filter(Boolean).map(s => {
+      const m = s.match(/^(.*?)\s*<([^>]+)>$/);
+      return m ? { name: m[1].trim().replace(/^"|"$/g, ''), address: m[2].trim() } : { name: '', address: s };
+    });
+  }
+
   function removeEmailFromState(state, uid, kind = null) {
     if (!state || typeof state !== 'object') return state;
     const drop = key => {
@@ -156,6 +259,7 @@
     sortEmails,
     threadSubject,
     groupThreads,
+    buildDiscussions,
     removeEmailFromState,
     autoUpdatesEnabled,
     saveAutoUpdates,
