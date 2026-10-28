@@ -222,7 +222,7 @@ function discussionList() {
   return CourrielCore.buildDiscussions({
     inbox: appState.all_emails, sent: appState.sent_emails,
     trash: appState.trash_emails, spam: appState.spam_emails, drafts: appState.drafts_emails,
-  }, { me, now: Date.now(), signatures: composeAccounts.map(a => htmlText(a.signature_html)) });
+  }, { me, now: Date.now(), signatures: composeAccounts.map(a => htmlText(a.signature_html)), tasks: appState.tasks });
 }
 
 // Opening a discussion reads it: every unread email, on the server too.
@@ -267,14 +267,22 @@ function renderDiscussion(d) {
   const conv = document.getElementById('dm-conv');
   // A reply being written survives refreshes of the same discussion.
   const reply = d && replyDraft?.id === d.id && replyDraft.text ? conv.querySelector('.dm-reply') : null;
+  renderDiscussionInfo(d);
   if (!d) { conv.innerHTML = ''; replyDraft = null; return; }
   const finding = document.activeElement?.classList.contains('dm-find-input');
+  const inbox = dmEmails(d, ['inbox']);
   const html = `
     <div class="dm-head">
       ${avatarStack(d.people)}
       <div class="dm-titles">
         <div class="dm-people">${esc(d.people.map(p => p.name || p.address).join(', '))}</div>
         <div class="dm-subject">${esc(d.subject)}</div>
+      </div>
+      <div class="dm-acts">
+        ${inbox.length ? `<button class="dm-act" data-dm="read" title="${esc(t(d.unread ? 'rp.markRead' : 'rp.markUnread'))}">${d.unread ? '✓' : '●'}</button>` : ''}
+        <button class="dm-act" data-dm="archive" title="${esc(t('dm.archive'))}">🗄</button>
+        <button class="dm-act" data-dm="delete" title="${esc(t('rp.delete'))}">🗑</button>
+        <button class="dm-act${dmInfoOpen ? ' on' : ''}" data-dm="info" title="${esc(t('dm.details'))}">ⓘ</button>
       </div>
     </div>
     <div class="dm-find${dmFind.open ? '' : ' hidden'}">
@@ -296,11 +304,20 @@ function renderDiscussion(d) {
   scroll.scrollTop = scroll.scrollHeight;
   conv.querySelectorAll('.dm-page').forEach(frame => showPage(frame, d.items[frame.dataset.item].email, scroll));
   scroll.addEventListener('click', ev => {   // on the scroll: the find bar rebuilds the bubbles
+    const chip = ev.target.closest('.dm-task');
+    if (chip) { openTask(Number(chip.dataset.task)); return; }
     const a = ev.target.closest('a[data-url]');
     if (!a) return;
     ev.preventDefault();
     window.__TAURI__.shell.open(a.dataset.url).catch(err => console.error('open link', err));
   });
+  scroll.addEventListener('contextmenu', ev => {
+    const item = dmItemOf(d, ev.target.closest('.dm-row[data-uid]'));
+    if (!item) return;
+    ev.preventDefault();
+    messageMenu(d, item, ev.clientX, ev.clientY);
+  });
+  conv.querySelectorAll('.dm-act').forEach(btn => btn.addEventListener('click', () => discussionAction(d, btn.dataset.dm)));
   setupDiscussionFind(conv);
   if (dmFind.open) runDiscussionFind(0, !dmLandOn);
   if (finding) conv.querySelector('.dm-find-input').focus();
@@ -547,6 +564,7 @@ function discussionItem(item, index) {
       <div class="dm-msg">
         <div class="dm-name">${esc(s.name || s.address)}</div>
         ${content}
+        ${item.task ? `<button class="dm-task" data-task="${esc(item.task.id)}" title="${esc(t('dm.openTask'))}">✓ ${esc(item.task.title)}</button>` : ''}
         <div class="dm-time">${esc(fmt({ hour: '2-digit', minute: '2-digit' }).format(time(item.date_ts)))}</div>
       </div>
     </div>`;
@@ -571,6 +589,156 @@ function showPage(frame, email, scroll) {
 
 const avatar = p => `<span class="dm-av" style="--pc:${p.colour}" title="${esc(p.name || p.address)}">${esc(p.initials)}</span>`;
 const avatarStack = people => `<span class="dm-av-stack">${people.slice(0, 3).map(avatar).join('')}</span>`;
+
+// ── Discussion details (ⓘ sheet), whole-discussion actions and the message menu ──
+let dmInfoOpen = false;
+
+// The emails of a discussion (each once, with its folder) that sit in one of these folders.
+function dmEmails(d, folders) {
+  const seen = new Map();
+  for (const i of d.items) if (i.email && folders.includes(i.folder)) seen.set(i.email, i.folder);
+  return [...seen].map(([email, folder]) => ({ email, folder }));
+}
+
+// The item a .dm-row shows (null for drafts and notes).
+function dmItemOf(d, row) {
+  if (!row) return null;
+  return d.items.find(i => i.email && i.kind !== 'draft' && i.folder === row.dataset.folder && String(i.email.uid) === row.dataset.uid) || null;
+}
+
+// An email leaves its folder in the app state (the server move is already done).
+function dropFromFolder(email, folder) {
+  if (folder === 'inbox') CourrielCore.removeEmailFromState(appState, email.uid, null);
+  else appState[`${folder}_emails`] = appState[`${folder}_emails`].filter(e => e !== email);
+}
+
+// Moves emails to the trash or the archive, one by one; stops at the first failure.
+async function moveEmails(list, command) {
+  try {
+    for (const { email, folder } of list) {
+      await cmd(command, { uid: email.uid, folder });
+      dropFromFolder(email, folder);
+    }
+  } catch (e) {
+    showToast(String(e));
+  }
+  renderAll();
+}
+
+// Header buttons: mark read/unread, archive, delete, details.
+// Archive and delete take the inbox and sent copies too: a discussion is listed while either remains.
+async function discussionAction(d, act) {
+  if (act === 'info') { dmInfoOpen = !dmInfoOpen; renderDiscussion(d); return; }
+  if (act === 'read') {
+    const inbox = dmEmails(d, ['inbox']).map(x => x.email);
+    if (d.unread) inbox.forEach(e => setRead(e, true));
+    else {   // like a messaging app: the latest message from someone else comes back as new
+      const last = inbox.filter(e => !d.items.some(i => i.email === e && i.mine)).at(-1) || inbox.at(-1);
+      setRead(last, false);
+    }
+    renderDiscussions();
+    return;
+  }
+  if (act === 'archive') await moveEmails(dmEmails(d, ['inbox', 'sent']), 'archive_email');
+  if (act === 'delete') {
+    const list = dmEmails(d, ['inbox', 'sent', 'spam']);
+    if (!await askInApp(t('dm.deleteAsk', { n: list.length }), t('rp.delete'))) return;
+    await moveEmails(list, 'trash_email');
+  }
+}
+
+function renderDiscussionInfo(d) {
+  const sheet = document.getElementById('dm-info');
+  const open = !!d && dmInfoOpen;
+  sheet.classList.toggle('hidden', !open);
+  if (!open) { sheet.innerHTML = ''; return; }
+  const info = d.info;
+  const account = n => composeAccounts[n] ? splitSender(composeAccounts[n].from).email : '';
+  const where = w => [account(w.account), w.folders.map(f => `${t(`nav.${f.folder}`)} (${fmtNumber(f.count)})`).join(', ')]
+    .filter(Boolean).join(' · ');
+  const tile = f => `<button class="dm-tile" data-folder="${esc(f.folder)}" data-uid="${esc(f.email.uid)}" title="${esc(f.name || f.email.subject || '')}">`
+    + (f.kind === 'image' ? `<img src="${esc(f.src)}" alt="" />`
+      : `<span class="dm-tile-icon">📎</span><span class="dm-tile-name">${esc(f.name || t('dm.file'))}</span>`)
+    + '</button>';
+  sheet.innerHTML = `
+    <div class="dm-info-top"><b>${esc(t('dm.details'))}</b><button class="dm-info-close" title="${esc(t('cmp.close'))}">✕</button></div>
+    <h3>${esc(t('dm.people'))}</h3>
+    ${info.people.map(p => `<div class="dm-info-person">${avatar(p)}<div class="dm-info-who">
+      <div class="dm-info-name">${esc(p.mine ? t('dm.me') : p.name || p.address)}</div>
+      <div class="dm-info-addr">${esc(p.address)}</div></div></div>`).join('')}
+    <h3>${esc(t('dm.subjects'))}</h3>
+    ${info.subjects.map(s => `<div class="dm-info-line">${esc(s)}</div>`).join('')}
+    <h3>${esc(t('dm.where'))}</h3>
+    ${info.where.map(w => `<div class="dm-info-line">${esc(where(w))}</div>`).join('')}
+    ${info.summary ? `<h3>${esc(t('dm.summary'))}</h3><p class="dm-info-summary">${esc(info.summary)}</p>` : ''}
+    ${info.files.length ? `<h3>${esc(t('dm.files'))}</h3><div class="dm-info-files">${info.files.map(tile).join('')}</div>` : ''}`;
+  sheet.querySelector('.dm-info-close').addEventListener('click', () => { dmInfoOpen = false; renderDiscussion(d); });
+  sheet.querySelectorAll('.dm-tile').forEach(btn => btn.addEventListener('click', () => {
+    const row = document.querySelector(`#dm-conv .dm-row[data-folder="${btn.dataset.folder}"][data-uid="${btn.dataset.uid}"]`);
+    if (!row) return;
+    row.classList.remove('dm-landed');
+    void row.offsetWidth;   // restart the highlight
+    row.classList.add('dm-landed');
+    row.scrollIntoView({ block: 'center' });
+  }));
+}
+
+// Right-click on a message: reply to this one, forward, delete, add as task, show original.
+function messageMenu(d, item, x, y) {
+  document.querySelectorAll('.dm-menu').forEach(m => m.remove());
+  const { email, folder } = item;
+  const hasTask = d.items.some(i => i.email === email && i.task);
+  const acts = [
+    ['reply', t('rp.reply'), () => openCompose({ mode: 'reply', email })],
+    ['forward', t('rp.forward'), () => openCompose({ mode: 'forward', email })],
+    folder !== 'trash' && ['delete', t('rp.delete'), () => moveEmails([{ email, folder }], 'trash_email')],
+    folder === 'inbox' && !hasTask && ['task', t('dm.addTask'), async () => {
+      try {
+        setTasks(await cmd('create_task', {
+          title: email.task || email.subject || email.summary || t('cal.newTask'), project: email.project || null, dueDate: null, sourceUid: email.uid,
+        }));
+        showToast(t('dm.taskAdded'));
+      } catch (e) { showToast(String(e)); }
+    }],
+    ['original', t('dm.original'), () => showOriginal(email, folder)],
+  ].filter(Boolean);
+  const menu = document.createElement('div');
+  menu.className = 'rp-menu dm-menu';
+  menu.innerHTML = acts.map(([act, label]) => `<button data-act="${act}">${esc(label)}</button>`).join('');
+  document.body.appendChild(menu);
+  menu.style.left = `${Math.max(0, Math.min(x, innerWidth - menu.offsetWidth - 4))}px`;
+  menu.style.top = `${Math.max(0, Math.min(y, innerHeight - menu.offsetHeight - 4))}px`;
+  menu.querySelectorAll('button').forEach((btn, i) => btn.addEventListener('click', () => { menu.remove(); acts[i][2](); }));
+}
+
+// The complete email: every header as received, the full layout and the quoted history.
+async function showOriginal(email, folder) {
+  const overlay = document.getElementById('original-overlay');
+  document.getElementById('original-subject').textContent = email.subject || '';
+  document.getElementById('original-meta').innerHTML = metaHtml(email);
+  const headers = document.getElementById('original-headers');
+  headers.textContent = '…';
+  setIframeContent(document.getElementById('original-body'), email);
+  overlay.classList.remove('hidden');
+  try { headers.textContent = await cmd('email_headers', { uid: email.uid, folder }); }
+  catch (e) { headers.textContent = String(e); }
+}
+document.getElementById('original-close').addEventListener('click', () => document.getElementById('original-overlay').classList.add('hidden'));
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('original-overlay').classList.add('hidden');
+});
+
+// The task chip under a message: the task on its board.
+function openTask(id) {
+  const task = appState.tasks.find(x => x.id === id);
+  if (!task) return;
+  activeBoard = task.project || null;
+  switchPanel('tasks');
+  const card = document.querySelector(`.kanban-card[data-id="${id}"]`);
+  if (!card) return;
+  card.classList.add('kanban-landed');
+  card.scrollIntoView({ block: 'center' });
+}
 
 // ── Overview ────────────────────────────────────────────────────────────────
 function renderOverview() {
@@ -1665,6 +1833,7 @@ function renderKanban() {
 function kanbanCard(task) {
   const card = document.createElement('div');
   card.className = 'kanban-card';
+  card.dataset.id = task.id;
 
   const chips = [];
   if (activeBoard === null && task.project) chips.push(`<span class="kanban-chip">${esc(task.project)}</span>`);

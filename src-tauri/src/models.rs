@@ -49,6 +49,12 @@ pub fn split_mail_id(id: u64) -> (usize, u32) {
     ((id >> 32) as usize, id as u32)
 }
 
+/// The header lines of a raw message, as written (up to the first blank line), with `\n` breaks.
+pub fn header_block(raw: &[u8]) -> String {
+    let text = String::from_utf8_lossy(raw).replace("\r\n", "\n");
+    text.split("\n\n").next().unwrap_or_default().trim_end().to_string()
+}
+
 /// Raw email as fetched from IMAP before AI processing.
 #[derive(Debug, Clone)]
 pub struct RawEmail {

@@ -1719,6 +1719,18 @@ max_tokens = 10
     }
 
     #[test]
+    fn test_choose_folders_archive() {
+        use crate::app_state::choose_folders;
+        // The \Archive role wins; otherwise the usual names; none at all: created when needed.
+        let f = choose_folders(&[("Archives".into(), vec![]), ("[Gmail]/All Mail".into(), vec!["archive"])]);
+        assert_eq!(f.archive.as_deref(), Some("[Gmail]/All Mail"));
+        let f = choose_folders(&[("INBOX.Archives".into(), vec![]), ("Sent".into(), vec![])]);
+        assert_eq!(f.archive.as_deref(), Some("INBOX.Archives"));
+        let f = choose_folders(&[("Sent".into(), vec![])]);
+        assert_eq!(f.archive, None);
+    }
+
+    #[test]
     fn test_ai_language_for_all_ui_languages() {
         use crate::i18n::{ai_language, is_supported, set_lang, LANGUAGES};
         assert_eq!(LANGUAGES.len(), 13);
@@ -1781,6 +1793,18 @@ max_tokens = 10
         assert_eq!(split_mail_id(mail_id(3, u32::MAX)), (3, u32::MAX));
         // JavaScript numbers hold the id exactly for any realistic account count.
         assert!(mail_id(1000, u32::MAX) < 1u64 << 53);
+    }
+
+    #[test]
+    fn test_header_block_is_everything_before_the_body() {
+        use crate::models::header_block;
+        let raw = b"From: Leo <leo@d.com>\r\nSubject: =?utf-8?q?Cam=C3=A9ra?=\r\nReceived: from a\r\n by b\r\n\r\nHello\r\n\r\nBye";
+        assert_eq!(
+            header_block(raw),
+            "From: Leo <leo@d.com>\nSubject: =?utf-8?q?Cam=C3=A9ra?=\nReceived: from a\n by b"
+        );
+        assert_eq!(header_block(b"Subject: only\n\nbody"), "Subject: only");
+        assert_eq!(header_block(b"Subject: no body"), "Subject: no body");
     }
 
     #[test]
