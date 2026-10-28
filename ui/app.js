@@ -222,7 +222,7 @@ function discussionList() {
   return CourrielCore.buildDiscussions({
     inbox: appState.all_emails, sent: appState.sent_emails,
     trash: appState.trash_emails, spam: appState.spam_emails, drafts: appState.drafts_emails,
-  }, { me, now: Date.now() });
+  }, { me, now: Date.now(), signatures: composeAccounts.map(a => htmlText(a.signature_html)) });
 }
 
 // Opening a discussion reads it: every unread email, on the server too.
@@ -293,6 +293,12 @@ function renderDiscussion(d) {
   }
   const scroll = conv.querySelector('.dm-scroll');
   scroll.scrollTop = scroll.scrollHeight;
+  scroll.addEventListener('click', ev => {   // on the scroll: the find bar rebuilds the bubbles
+    const a = ev.target.closest('a[data-url]');
+    if (!a) return;
+    ev.preventDefault();
+    window.__TAURI__.shell.open(a.dataset.url).catch(err => console.error('open link', err));
+  });
   setupDiscussionFind(conv);
   if (dmFind.open) runDiscussionFind(0, !dmLandOn);
   if (finding) conv.querySelector('.dm-find-input').focus();
@@ -302,6 +308,20 @@ function renderDiscussion(d) {
     landed.classList.add('dm-landed');
     landed.scrollIntoView({ block: 'center' });
   }
+}
+
+// A bubble's text as written: **bold**, *italic* and [links](url); list lines stay as they are.
+function bubbleHtml(text) {
+  return esc(text)
+    .replace(/\[([^\]\n]+)\]\(((?:https?:|mailto:)[^)\s]+)\)/g, '<a href="#" data-url="$2">$1</a>')
+    .replace(/\*\*(?=\S)([^*\n]+?)\*\*/g, '<b>$1</b>')
+    .replace(/(^|[^*\w])\*(?=\S)([^*\n]+?)\*(?![*\w])/gm, '$1<i>$2</i>');
+}
+
+// The text of an HTML snippet (an account's signature), one line per line break or block.
+function htmlText(html) {
+  const doc = new DOMParser().parseFromString(String(html || '').replace(/<br\s*\/?>|<\/(?:p|div|li|tr|h\d)>/gi, '$&\n'), 'text/html');
+  return doc.body.textContent || '';
 }
 
 // Ctrl+F: find in the open discussion, jumping between matches (Enter / Shift+Enter, ↓ / ↑).
@@ -336,10 +356,26 @@ function closeDiscussionFind() {
 }
 
 // Marks every match in the bubbles; the current one starts at the newest and is scrolled to.
+// Marks go inside the bubble's text pieces, so its bold, italic and links stay.
+const dmBubbleHtml = new WeakMap();   // bubble → its HTML before any mark
 function runDiscussionFind(move, scrollTo = true) {
   const conv = document.getElementById('dm-conv');
   const q = dmFind.open ? dmFind.query.trim() : '';
-  conv.querySelectorAll('.dm-bubble').forEach(b => { b.innerHTML = highlight(b.textContent, q ? [q] : []); });
+  conv.querySelectorAll('.dm-bubble').forEach(b => {
+    if (!dmBubbleHtml.has(b)) dmBubbleHtml.set(b, b.innerHTML);
+    b.innerHTML = dmBubbleHtml.get(b);
+    if (!q) return;
+    const walker = document.createTreeWalker(b, NodeFilter.SHOW_TEXT);
+    const pieces = [];
+    while (walker.nextNode()) pieces.push(walker.currentNode);
+    for (const piece of pieces) {
+      const html = highlight(piece.textContent, [q]);
+      if (!html.includes('<mark')) continue;
+      const marked = document.createElement('template');
+      marked.innerHTML = html;
+      piece.replaceWith(marked.content);
+    }
+  });
   const count = conv.querySelector('.dm-find-count');
   const marks = [...conv.querySelectorAll('.dm-bubble mark')];
   if (!marks.length) { if (count) count.textContent = q ? t('dm.findNone') : ''; return; }
@@ -501,7 +537,7 @@ function discussionItem(item) {
       <div class="dm-av-slot">${!item.mine && item.last ? avatar(s) : ''}</div>
       <div class="dm-msg">
         <div class="dm-name">${esc(s.name || s.address)}</div>
-        <div class="dm-bubble">${esc(item.text)}</div>
+        <div class="dm-bubble">${bubbleHtml(item.text)}</div>
         <div class="dm-time">${esc(fmt({ hour: '2-digit', minute: '2-digit' }).format(time(item.date_ts)))}</div>
       </div>
     </div>`;

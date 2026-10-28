@@ -94,7 +94,7 @@
 
   // Discussion mode: what the discussion list and each opened discussion show.
   // `folders` holds the cached emails per folder ({ inbox, sent, trash, spam, drafts }, every account);
-  // `context` is { me: own address of each account, in account order, now: ms }.
+  // `context` is { me: own address of each account, in account order, now: ms, signatures: each account's signature as text }.
   // Returns the listed discussions, newest first. Each one is a list line plus its `items`,
   // oldest first; an item's `kind` says what it is: 'earlier' (older messages not on this computer,
   // at the top), 'day' separator, 'people' (recipients changed), 'message', 'draft' (unsent, at the bottom).
@@ -104,14 +104,15 @@
     const folderOf = new Map();
     for (const name of ['inbox', 'sent', 'trash', 'spam']) for (const e of folders?.[name] || []) folderOf.set(e, name);
     const drafts = new Set(folders?.drafts || []);
+    const texts = newTexts([...folderOf.keys()], context.signatures || []);
     return groupThreads(sortEmails([...folderOf.keys(), ...drafts]))
       .map(({ lead, replies }) => [lead, ...replies].reverse())
       .filter(emails => emails.some(e => listed.has(e)))
-      .map(emails => discussion(emails.filter(e => !drafts.has(e)), emails.filter(e => drafts.has(e)), context, folderOf))
+      .map(emails => discussion(emails.filter(e => !drafts.has(e)), emails.filter(e => drafts.has(e)), context, folderOf, texts))
       .sort((a, b) => b.date_ts - a.date_ts);
   }
 
-  function discussion(emails, drafts, context, folderOf) {
+  function discussion(emails, drafts, context, folderOf, texts) {
     const own = new Set((context.me || []).map(a => String(a || '').trim().toLowerCase()).filter(Boolean));
     const isMine = email => own.has(String(email.from_email || '').trim().toLowerCase());
     const last = emails[emails.length - 1];
@@ -137,7 +138,7 @@
       priority: unread.reduce((top, e) => (top && PRIORITY_ORDER[top] <= (PRIORITY_ORDER[e.priority] ?? 99) ? top : e.priority), null) ?? null,
       items: [
         ...(missesEarlier(emails) ? [{ kind: 'earlier' }] : []),
-        ...discussionItems(emails, isMine, people, context.now ?? Date.now(), folderOf),
+        ...discussionItems(emails, isMine, people, context.now ?? Date.now(), folderOf, texts),
         ...drafts.map(email => ({ kind: 'draft', email, text: String(email.body_text || '').trim(), date_ts: Number(email.date_ts) || 0 })),
       ],
       reply: replyAll(last, context.me || []),
@@ -204,7 +205,8 @@
   // Oldest first: a 'day' separator whenever the day changes, then each 'message'.
   // Messages in a row from the same person on the same day stack: `first` / `last` of the run.
   // A 'people' note before a message says whom its sender `added` (`cc` when only in Cc) or `removed`.
-  function discussionItems(emails, isMine, people, now, folderOf) {
+  // A message's `text` is only what its sender newly wrote (see newTexts).
+  function discussionItems(emails, isMine, people, now, folderOf, texts) {
     const items = [];
     const today = startOfDay(now);
     let prev = null;
@@ -229,13 +231,88 @@
       if (prev && !sameRun) prev.item.last = true;
       const item = {
         kind: 'message', email, folder: folderOf.get(email), mine: isMine(email), sender, date_ts: ts,
-        text: String(email.body_text || '').trim(), first: !sameRun, last: false,
+        text: texts.get(email), first: !sameRun, last: false,
       };
       items.push(item);
       prev = { day, item };
     }
     if (prev) prev.item.last = true;
     return items;
+  }
+
+  // Only what the person newly wrote, cut by rules (no AI): the quoted history goes.
+  // When a cut would leave nothing, the message is kept whole.
+  const QUOTE_FROM = /^\s*(?:De|From)\s*:/i;
+  const QUOTE_SUBJECT = /^\s*(?:Objet|Subject)\s*:/i;
+  const QUOTE_INTRO = /^\s*(?:Le|On)\s.*(?:a\s+écrit|wrote)\s*:\s*$/i;   // may wrap onto a 2nd line
+  const RULE_LINE = /^\s*(?:[-_─=]{3,}|-+\s*(?:Original Message|Message d'origine)\s*-+)?\s*$/i;
+  function newText(email, signatures = []) {
+    // A link shows as "[text][1]" with its address on a "[1]: url" line at the very end
+    // (after any quote): put the address back beside it, as "[text](url)".
+    const links = new Map();
+    const body = String(email.body_text || '').replace(/\r\n?/g, '\n').split('\n')
+      .filter(line => { const m = /^\[(\d+)\]:\s*(\S+)\s*$/.exec(line); if (m) links.set(m[1], m[2]); return !m; })
+      .join('\n');
+    const whole = body.replace(/\[([^\]\n]*)\]\[(\d+)\]/g, (all, text, n) => (links.has(n) ? `[${text}](${links.get(n)})` : all)).trim();
+    const lines = whole.split('\n');
+    const kept = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (QUOTE_FROM.test(line) && lines.slice(i + 1, i + 6).some(l => QUOTE_SUBJECT.test(l))) break;
+      if (QUOTE_INTRO.test(line) || QUOTE_INTRO.test(`${line} ${lines[i + 1]}`)) break;
+      if (/^--\s?$/.test(line)) break;   // signature delimiter "-- " (the space may be trimmed)
+      if (!line.trimStart().startsWith('>')) kept.push(line);
+    }
+    for (const signature of signatures) cutBlock(kept, signature.split('\n'));
+    while (kept.length && RULE_LINE.test(kept[kept.length - 1])) kept.pop();
+    return kept.join('\n').trim() || whole;
+  }
+
+  // Each email's new text, then the last lines one sender ends 2+ of their emails with
+  // (a signature we were not told about) are cut: the longest such block, up to MAX_TAIL lines.
+  const MAX_TAIL = 15;
+  function newTexts(emails, signatures) {
+    const texts = new Map(emails.map(e => [e, newText(e, signatures)]));
+    const tails = new Map();   // sender + last k lines → distinct emails ending so
+    const tailKeys = email => {
+      const lines = texts.get(email).split('\n').map(plainLine).filter(Boolean);
+      const sender = String(email.from_email || '').trim().toLowerCase();
+      return lines.slice(-MAX_TAIL).map((_, k, last) => `${sender}\n${last.slice(last.length - k - 1).join('\n')}`);
+    };
+    for (const email of emails) {
+      for (const key of tailKeys(email)) {
+        if (!tails.has(key)) tails.set(key, new Set());
+        tails.get(key).add(String(email.message_id || email.uid));
+      }
+    }
+    for (const email of emails) {
+      const k = tailKeys(email).findLastIndex(key => tails.get(key).size >= 2) + 1;
+      if (!k) continue;
+      const lines = texts.get(email).split('\n');
+      let cut = lines.length;
+      for (let n = 0; n < k; cut--) if (plainLine(lines[cut - 1])) n++;
+      texts.set(email, lines.slice(0, cut).join('\n').trim() || texts.get(email));
+    }
+    return texts;
+  }
+
+  // A line's words only: formatting marks (**bold**, *italic*, [link][1] / [link](url)) and spacing ignored.
+  const plainLine = line => String(line)
+    .replace(/\]\[\d+\]|\]\([^)]*\)/g, ']').replace(/[*[\]]/g, '').replace(/\s+/g, ' ').trim();
+
+  // Removes from `lines` the first run whose non-empty lines are exactly `block`'s non-empty lines.
+  function cutBlock(lines, block) {
+    const want = block.map(plainLine).filter(Boolean);
+    if (!want.length) return;
+    const at = lines.map((l, i) => [plainLine(l), i]).filter(([l]) => l);
+    for (let s = 0; s + want.length <= at.length; s++) {
+      if (!want.every((w, k) => at[s + k][0] === w)) continue;
+      let start = at[s][1];
+      let end = at[s + want.length - 1][1] + 1;
+      while (end < lines.length && !lines[end].trim() && (start === 0 || !lines[start - 1].trim())) end++;
+      lines.splice(start, end - start);
+      return;
+    }
   }
 
   // Everyone on an email but me (sender, To, Cc), keyed by address; null when it names no recipient at all.
