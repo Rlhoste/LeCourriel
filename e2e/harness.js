@@ -122,18 +122,23 @@ async function type(browser, selector, value) {
 }
 
 /** Fill the account the app shows on first start, as a user would. */
-async function fillAccount(browser, { host, port, user, pass }) {
-  // First start puts the Account Setup Dialog on top; go straight to an empty block, as
-  // "Enter manually" does, without sending the test domain to the autoconfig servers.
+async function fillAccount(browser, account) {
   await waitVisible(browser, '#setup-overlay');
+  await addAccount(browser, account);
+}
+
+/** Add an empty account block in Settings → Accounts and fill it, as "Enter manually" does,
+ *  without sending the test domain to the autoconfig servers. */
+async function addAccount(browser, { host, port, user, pass }) {
   await browser.execute(() => setupAddAccount(false));
-  await waitVisible(browser, '#settings-overlay .account-block');
-  await type(browser, '.account-block .a-sender-email', user);
-  await type(browser, '.account-block .a-imap-host', host);
-  await type(browser, '.account-block .a-imap-port', String(port));
-  await type(browser, '.account-block .a-imap-user', user);
-  await type(browser, '.account-block .a-imap-pass', pass);
-  await type(browser, '.account-block .a-smtp-host', host);
+  const block = '#s-accounts-container > .account-block:last-child';
+  await waitVisible(browser, block);
+  await type(browser, `${block} .a-sender-email`, user);
+  await type(browser, `${block} .a-imap-host`, host);
+  await type(browser, `${block} .a-imap-port`, String(port));
+  await type(browser, `${block} .a-imap-user`, user);
+  await type(browser, `${block} .a-imap-pass`, pass);
+  await type(browser, `${block} .a-smtp-host`, host);
 }
 
 async function openSettingsTab(browser, tab) {
@@ -186,6 +191,6 @@ async function waitText(browser, selector, needle, timeout = 30000) {
 }
 
 module.exports = {
-  makeCert, launchFreshApp, fillAccount, fillAi, openSettingsTab, save, showPanel,
+  makeCert, launchFreshApp, fillAccount, addAccount, fillAi, openSettingsTab, save, showPanel,
   textOf, waitText, waitVisible,
 };

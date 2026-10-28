@@ -69,6 +69,17 @@ pub struct RawEmail {
     pub date: Option<DateTime<Utc>>,
     pub body_text: String,
     pub body_html: Option<String>,
+    pub attachments: Vec<Attachment>,
+}
+
+/// A file attached to an email (images shown in the body are not counted).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Attachment {
+    pub name: String,
+    /// Decoded size in bytes.
+    pub size: u64,
+    /// MIME type, lowercase ("application/pdf").
+    pub mime: String,
 }
 
 /// Processed email card ready for display.
@@ -107,6 +118,9 @@ pub struct EmailCard {
     pub body_text: String,
     /// Raw HTML body for WebView rendering.
     pub body_html: String,
+    /// Older caches have no list: none.
+    #[serde(default)]
+    pub attachments: Vec<Attachment>,
     /// Project this email was assigned to, if any.
     pub project: Option<String>,
     /// Deadline extracted from email content.
