@@ -78,7 +78,7 @@ jobs:
     # Mutation testing of the Rust lines this push changed. Informational: a missed mutant
     # marks the job, never the run. --in-place because a copy breaks frontendDist "../ui".
     if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04 # the prebuilt cargo-mutants needs glibc 2.39
     continue-on-error: true
     timeout-minutes: 60
     steps:
