@@ -2169,6 +2169,20 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 }
 .dm-row.me .dm-bubble { background: var(--accent); color: var(--on-accent); }
 .dm-time { font-size: 0.72rem; color: var(--text-dim); margin: 2px 10px 0; }
+/* Ctrl+F bar, and the message a search result lands on. */
+.dm-find {
+  display: flex; align-items: center; gap: 6px; padding: 6px 16px;
+  border-bottom: var(--border-w) solid var(--border); background: var(--bg2);
+}
+.dm-find.hidden { display: none; }
+.dm-find-input { flex: 1; min-width: 0; }
+.dm-find-count { font-size: 0.8rem; color: var(--text-dim); white-space: nowrap; }
+.dm-find button { background: none; border: none; color: var(--text); cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+.dm-find button:hover { background: var(--bg3); }
+.dm-bubble mark { background: #ffe36e; color: #000; border-radius: 2px; }
+.dm-bubble mark.current { background: #ff9632; }
+.dm-row.dm-landed .dm-bubble { animation: dm-landed 2.5s ease-out; }
+@keyframes dm-landed { 0%, 40% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: 0 0 0 3px transparent; } }
 
 /* Rows with an importance bar keep it when selected (instead of the accent bar). Last in the
    file so it wins over the theme and right-to-left rules for .email-row.active. */

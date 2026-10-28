@@ -99,6 +99,7 @@ STRINGS.ur = {
     'set.notify': 'نئی ای میلز آنے پر مجھے مطلع کریں',
     'set.discussion': 'گفتگو موڈ: میری ای میلز کو میسجنگ ایپ کی طرح دکھائیں',
     'nav.discussions': 'گفتگو', 'dm.new': 'نیا پیغام', 'dm.today': 'آج', 'dm.you': 'آپ: {text}',
+    'dm.find': "اس گفتگو میں تلاش کریں", 'dm.findCount': "{total} میں سے {n}", 'dm.findNone': "کوئی نتیجہ نہیں", 'dm.findPrev': "پچھلا", 'dm.findNext': "اگلا",
     'set.fontScale': 'فونٹ کا پیمانہ', 'set.theme': 'تھیم', 'set.language': 'زبان',
     "set.signature": "دستخط", "set.sigChoose": "📄 HTML فائل منتخب کریں…", "set.sigRemove": "ہٹائیں", "set.sigOnNew": "نئے پیغامات میں شامل کریں", "set.sigOnReply": "جوابات اور فارورڈ میں شامل کریں", "set.sigHint": "ابھی کوئی دستخط نہیں۔ اسے اپنے میل کلائنٹ (Outlook، Gmail…) سے HTML فائل کے طور پر برآمد کریں، یا کسی دستخط جنریٹر سے بنائیں۔", "set.sigImported": "دستخط درآمد ہو گیا", "set.sigRemoved": "دستخط ہٹا دیا گیا", "set.sigFileFilter": "HTML فائلیں",
     "set.incoming": "📥 آنے والی میل (IMAP)", "set.outgoing": "📤 جانے والی میل (SMTP)", "set.server": "سرور", "set.port": "پورٹ", "set.username": "صارف نام", "set.usernamePh": "you@example.com", "set.password": "پاس ورڈ", "set.sameAsIncoming": "آنے والی میل جیسا", "set.advanced": "اعلیٰ اختیارات", "set.imapMailbox": "جانچنے والا فولڈر", "set.fetchCount": "حاصل کی جانے والی ای میلز کی تعداد",

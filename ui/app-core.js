@@ -99,14 +99,16 @@
   // oldest first; an item's `kind` says what it is ('day' separator or 'message').
   function buildDiscussions(folders, context = {}) {
     const listed = new Set([...(folders?.inbox || []), ...(folders?.sent || [])]);
-    const all = [...listed, ...(folders?.trash || []), ...(folders?.spam || [])];
-    return groupThreads(sortEmails(all))
-      .map(({ lead, replies }) => discussion([lead, ...replies].reverse(), context))
+    // Each folder numbers its UIDs separately: an item keeps its folder so a search hit finds it.
+    const folderOf = new Map();
+    for (const name of ['inbox', 'sent', 'trash', 'spam']) for (const e of folders?.[name] || []) folderOf.set(e, name);
+    return groupThreads(sortEmails([...folderOf.keys()]))
+      .map(({ lead, replies }) => discussion([lead, ...replies].reverse(), context, folderOf))
       .filter(d => d.items.some(i => i.kind === 'message' && listed.has(i.email)))
       .sort((a, b) => b.date_ts - a.date_ts);
   }
 
-  function discussion(emails, context) {
+  function discussion(emails, context, folderOf) {
     const own = new Set((context.me || []).map(a => String(a).trim().toLowerCase()));
     const isMine = email => own.has(String(email.from_email || '').trim().toLowerCase());
     const last = emails[emails.length - 1];
@@ -130,13 +132,13 @@
       date_ts: Number(last.date_ts) || 0,
       unread: unread.length,
       priority: unread.reduce((top, e) => (top && PRIORITY_ORDER[top] <= (PRIORITY_ORDER[e.priority] ?? 99) ? top : e.priority), null) ?? null,
-      items: discussionItems(emails, isMine, context.now ?? Date.now()),
+      items: discussionItems(emails, isMine, context.now ?? Date.now(), folderOf),
     };
   }
 
   // Oldest first: a 'day' separator whenever the day changes, then each 'message'.
   // Messages in a row from the same person on the same day stack: `first` / `last` of the run.
-  function discussionItems(emails, isMine, now) {
+  function discussionItems(emails, isMine, now, folderOf) {
     const items = [];
     const today = startOfDay(now);
     let prev = null;
@@ -151,7 +153,7 @@
       }
       if (prev && !sameRun) prev.item.last = true;
       const item = {
-        kind: 'message', email, mine: isMine(email), sender, date_ts: ts,
+        kind: 'message', email, folder: folderOf.get(email), mine: isMine(email), sender, date_ts: ts,
         text: String(email.body_text || '').trim(), first: !sameRun, last: false,
       };
       items.push(item);

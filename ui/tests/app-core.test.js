@@ -343,3 +343,15 @@ test('messages in a row from the same person stack; a new day starts with a sepa
   assert.equal(d.items[2].date_ts, at(26, 9));
   assert.equal(d.items[1].sender.colour, d.items[3].sender.colour);
 });
+
+test('each message says which folder it is in, so a search result lands on it (UIDs repeat across folders)', () => {
+  const list = buildDiscussions({
+    inbox: [mail(5, { message_id: '<a@x>', subject: 'Budget' }), mail(6, { subject: 'Lunch' })],
+    sent: [mail(5, { from_email: 'me@work.com', references: '<a@x>', date_ts: 70 })],
+    trash: [mail(8, { references: '<a@x>' })],
+  }, ME);
+  const hit = { folder: 'sent', uid: 5 };
+  const landing = list.filter(d => d.items.some(i => i.kind === 'message' && i.folder === hit.folder && i.email.uid === hit.uid));
+  assert.deepEqual(landing.map(d => d.subject), ['Budget']);
+  assert.deepEqual(landing[0].items.filter(i => i.kind === 'message').map(i => i.folder), ['inbox', 'sent', 'trash']);
+});
