@@ -344,7 +344,6 @@ enable it, the Supabase sync (never your passwords or keys).
 ```
 src-tauri/   Rust backend (Tauri app): IMAP, SMTP, AI, storage
 ui/          Front end: index.html, app.js, styles.css
-src/, ui/*.slint, Cargo.toml (root)   Earlier Slint prototype, not used by the Tauri app
 ```
 
 ## Support the project
