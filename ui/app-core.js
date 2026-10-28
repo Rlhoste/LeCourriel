@@ -431,8 +431,19 @@
     for (const ch of address.toLowerCase()) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
     return {
       name: words.join(' '), address, short: words[0] || local, initials: initials.toUpperCase(),
-      colour: PERSON_COLOURS[hash % PERSON_COLOURS.length],
+      colour: PERSON_COLOURS[hash % PERSON_COLOURS.length], org: orgOf(address),
     };
+  }
+
+  // The organisation in an address: "ann@mail.studio-k.fr" -> "studio-k", "bob@ox.ac.uk" -> "ox".
+  const SECOND_LEVEL = new Set(['co', 'com', 'org', 'net', 'ac', 'gov', 'edu', 'ne', 'or', 'go']);
+  function orgOf(address) {
+    const at = address.lastIndexOf('@');
+    if (at < 0) return '';
+    const labels = address.slice(at + 1).toLowerCase().split('.').filter(Boolean);
+    if (labels.length > 1) labels.pop();
+    if (labels.length > 1 && SECOND_LEVEL.has(labels[labels.length - 1])) labels.pop();
+    return labels.pop() || '';
   }
 
   // "Ann <ann@x.com>, bob@x.com" -> [{ name: 'Ann', address: 'ann@x.com' }, { name: '', address: 'bob@x.com' }].
