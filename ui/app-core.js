@@ -118,8 +118,10 @@
   function discussion(emails, drafts, context, folderOf, texts, taskOf) {
     const own = new Set((context.me || []).map(a => String(a || '').trim().toLowerCase()).filter(Boolean));
     const isMine = email => own.has(String(email.from_email || '').trim().toLowerCase());
-    const last = emails[emails.length - 1];
-    const unread = emails.filter(e => !e.is_read && !isMine(e));
+    // What lists the discussion (Inbox and Sent) leads its line; Trash and Spam only show inside.
+    const listed = emails.filter(e => ['inbox', 'sent'].includes(folderOf.get(e)));
+    const last = listed[listed.length - 1];
+    const unread = listed.filter(e => !e.is_read && !isMine(e));
     const people = new Map();
     const everyone = new Map();   // the details sheet: me too
     const meet = (name, address) => {

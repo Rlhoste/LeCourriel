@@ -301,6 +301,28 @@ test('a list line shows the people, the last message, unread count and top unrea
   assert.equal(line.priority, 'high_priority');
 });
 
+test('unread emails in Trash or Spam count neither as unread nor for the priority mark', () => {
+  const [line] = buildDiscussions({
+    inbox: [mail(1, { message_id: '<a@x>', subject: 'Budget', is_read: true })],
+    trash: [mail(2, { references: '<a@x>', priority: 'urgent' })],
+    spam: [mail(3, { subject: 'Re: Budget', priority: 'threat' })],
+  }, ME);
+  assert.equal(line.unread, 0);
+  assert.equal(line.priority, null);
+});
+
+test('a newer email in Trash or Spam is neither the last message of the line nor the one the reply bar answers', () => {
+  const [line] = buildDiscussions({
+    inbox: [mail(1, { message_id: '<a@x>', subject: 'Budget', from_email: 'leo@d.com', body_text: 'Here it is' })],
+    spam: [mail(3, { subject: 'Re: Budget', from_email: 'scam@bad.com', body_text: 'Click here' })],
+    trash: [mail(2, { references: '<a@x>', from_email: 'ann@x.com', body_text: 'Old' })],
+  }, ME);
+  assert.deepEqual(line.preview, { mine: false, text: 'Here it is' });
+  assert.equal(line.date_ts, 10);
+  assert.equal(line.reply.email.uid, 1);
+  assert.deepEqual(addresses(line.reply.to), ['leo@d.com']);
+});
+
 test('a line without unread emails has no priority mark', () => {
   const [line] = buildDiscussions({ inbox: [mail(1, { priority: 'urgent', is_read: true, from_name: 'Ann' })] }, ME);
   assert.equal(line.unread, 0);
