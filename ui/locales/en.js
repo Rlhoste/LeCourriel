@@ -107,6 +107,7 @@ STRINGS.en = {
     'set.notify': 'Notify me when new emails arrive',
     'set.discussion': 'Discussion mode: show my emails like a messaging app',
     'nav.discussions': 'Discussions', 'dm.new': 'New message', 'dm.today': 'Today', 'dm.you': 'You: {text}',
+    'dm.reply': 'Write a reply…', 'dm.add': 'Add To, Cc or Bcc', 'dm.remove': 'Remove',
     'dm.find': "Find in this discussion", 'dm.findCount': "{n} of {total}", 'dm.findNone': "No match", 'dm.findPrev': "Previous", 'dm.findNext': "Next",
     'dm.earlier': 'Earlier messages aren’t loaded', 'dm.draft': 'Draft', 'dm.file': 'Attached file', 'dm.cc': '{name} (Cc)',
     'dm.added': '{who} added {names}', 'dm.removed': '{who} removed {names}', 'dm.youAdded': 'You added {names}', 'dm.youRemoved': 'You removed {names}',

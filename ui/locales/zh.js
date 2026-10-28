@@ -99,6 +99,7 @@ STRINGS.zh = {
     'set.notify': '收到新邮件时通知我',
     'set.discussion': '对话模式：像聊天应用一样显示我的邮件',
     'nav.discussions': '对话', 'dm.new': '新消息', 'dm.today': '今天', 'dm.you': '我：{text}',
+    'dm.reply': '写回复…', 'dm.add': '添加收件人、抄送或密送', 'dm.remove': '移除',
     'dm.find': "在此对话中查找", 'dm.findCount': "第 {n} 个，共 {total} 个", 'dm.findNone': "无匹配", 'dm.findPrev': "上一个", 'dm.findNext': "下一个",
     'dm.earlier': '更早的消息未加载', 'dm.draft': '草稿', 'dm.file': '附件', 'dm.cc': '{name}（抄送）',
     'dm.added': '{who} 添加了 {names}', 'dm.removed': '{who} 移除了 {names}', 'dm.youAdded': '你添加了 {names}', 'dm.youRemoved': '你移除了 {names}',

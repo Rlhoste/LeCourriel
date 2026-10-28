@@ -99,6 +99,7 @@ STRINGS.ja = {
     'set.notify': '新しいメールが届いたら通知する',
     'set.discussion': '会話モード：メールをメッセージアプリのように表示する',
     'nav.discussions': '会話', 'dm.new': '新しいメッセージ', 'dm.today': '今日', 'dm.you': 'あなた：{text}',
+    'dm.reply': '返信を入力…', 'dm.add': '宛先・CC・BCCに追加', 'dm.remove': '削除',
     'dm.find': "この会話を検索", 'dm.findCount': "{n} / {total}", 'dm.findNone': "一致なし", 'dm.findPrev': "前へ", 'dm.findNext': "次へ",
     'dm.earlier': '以前のメッセージは読み込まれていません', 'dm.draft': '下書き', 'dm.file': '添付ファイル', 'dm.cc': '{name}（Cc）',
     'dm.added': '{who}が{names}を追加しました', 'dm.removed': '{who}が{names}を外しました', 'dm.youAdded': '{names}を追加しました', 'dm.youRemoved': '{names}を外しました',

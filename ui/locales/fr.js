@@ -99,6 +99,7 @@ STRINGS.fr = {
     'set.notify': 'Me prévenir quand de nouveaux e-mails arrivent',
     'set.discussion': 'Mode discussion : afficher mes e-mails comme une messagerie instantanée',
     'nav.discussions': 'Discussions', 'dm.new': 'Nouveau message', 'dm.today': "Aujourd'hui", 'dm.you': 'Vous : {text}',
+    'dm.reply': 'Écrire une réponse…', 'dm.add': 'Ajouter en À, Cc ou Cci', 'dm.remove': 'Retirer',
     'dm.find': "Rechercher dans cette discussion", 'dm.findCount': "{n} sur {total}", 'dm.findNone': "Aucun résultat", 'dm.findPrev': "Précédent", 'dm.findNext': "Suivant",
     'dm.earlier': 'Les messages précédents ne sont pas chargés', 'dm.draft': 'Brouillon', 'dm.file': 'Fichier joint', 'dm.cc': '{name} (Cc)',
     'dm.added': '{who} a ajouté {names}', 'dm.removed': '{who} a retiré {names}', 'dm.youAdded': 'Vous avez ajouté {names}', 'dm.youRemoved': 'Vous avez retiré {names}',

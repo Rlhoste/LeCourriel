@@ -106,6 +106,7 @@ STRINGS.ar = {
     'set.notify': 'أعلمني عند وصول رسائل جديدة',
     'set.discussion': 'وضع المحادثة: عرض رسائلي مثل تطبيق مراسلة',
     'nav.discussions': 'المحادثات', 'dm.new': 'رسالة جديدة', 'dm.today': 'اليوم', 'dm.you': 'أنت: {text}',
+    'dm.reply': 'اكتب ردًا…', 'dm.add': 'إضافة إلى أو نسخة أو نسخة مخفية', 'dm.remove': 'إزالة',
     'dm.find': "ابحث في هذه المحادثة", 'dm.findCount': "{n} من {total}", 'dm.findNone': "لا توجد نتائج", 'dm.findPrev': "السابق", 'dm.findNext': "التالي",
     'dm.earlier': 'الرسائل السابقة غير محمّلة', 'dm.draft': 'مسودة', 'dm.file': 'ملف مرفق', 'dm.cc': '{name} (نسخة)',
     'dm.added': 'أضاف {who} {names}', 'dm.removed': 'أزال {who} {names}', 'dm.youAdded': 'أضفت {names}', 'dm.youRemoved': 'أزلت {names}',

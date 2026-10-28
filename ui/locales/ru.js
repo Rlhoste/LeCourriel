@@ -103,6 +103,7 @@ STRINGS.ru = {
     'set.notify': 'Уведомлять о новых письмах',
     'set.discussion': 'Режим переписки: показывать письма как в мессенджере',
     'nav.discussions': 'Переписки', 'dm.new': 'Новое сообщение', 'dm.today': 'Сегодня', 'dm.you': 'Вы: {text}',
+    'dm.reply': 'Напишите ответ…', 'dm.add': 'Добавить в Кому, Копия или Скрытая копия', 'dm.remove': 'Убрать',
     'dm.find': "Найти в этой переписке", 'dm.findCount': "{n} из {total}", 'dm.findNone': "Нет совпадений", 'dm.findPrev': "Предыдущее", 'dm.findNext': "Следующее",
     'dm.earlier': 'Более ранние сообщения не загружены', 'dm.draft': 'Черновик', 'dm.file': 'Вложенный файл', 'dm.cc': '{name} (копия)',
     'dm.added': '{who} добавляет: {names}', 'dm.removed': '{who} убирает: {names}', 'dm.youAdded': 'Вы добавили: {names}', 'dm.youRemoved': 'Вы убрали: {names}',
