@@ -938,6 +938,8 @@ pub struct SpecialFolders {
     pub drafts: String,
     pub trash: String,
     pub spam: Option<String>,
+    /// Where "Archive" moves emails; None: created on first use.
+    pub archive: Option<String>,
 }
 
 /// Pick the special folders from a LIST result: the role the server declares
@@ -984,6 +986,7 @@ pub fn choose_folders(list: &[(String, Vec<&'static str>)]) -> SpecialFolders {
                 "Pourriels",
             ])
         }),
+        archive: by_role("archive").or_else(|| by_name(&["Archive", "Archives", "Archived"])),
     }
 }
 
@@ -991,7 +994,13 @@ async fn guess_folder_names(cfg: &ImapConfig) -> SpecialFolders {
     use async_imap::types::NameAttribute;
     use futures::StreamExt;
 
-    let fallback = SpecialFolders { sent: "Sent".into(), drafts: "Drafts".into(), trash: "Trash".into(), spam: None };
+    let fallback = SpecialFolders {
+        sent: "Sent".into(),
+        drafts: "Drafts".into(),
+        trash: "Trash".into(),
+        spam: None,
+        archive: None,
+    };
     let mut session = match connect(cfg).await {
         Ok(s) => s,
         Err(_) => return fallback,
@@ -1009,6 +1018,7 @@ async fn guess_folder_names(cfg: &ImapConfig) -> SpecialFolders {
                         NameAttribute::Drafts => Some("drafts"),
                         NameAttribute::Trash => Some("trash"),
                         NameAttribute::Junk => Some("junk"),
+                        NameAttribute::Archive => Some("archive"),
                         _ => None,
                     })
                     .collect();

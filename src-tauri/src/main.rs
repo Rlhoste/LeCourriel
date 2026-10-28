@@ -907,6 +907,7 @@ fn account_of(
                     drafts: "Drafts".into(),
                     trash: "Trash".into(),
                     spam: None,
+                    archive: None,
                 },
             )
         }),
@@ -921,25 +922,53 @@ fn spam_name(folders: &app_state::SpecialFolders) -> String {
     folders.spam.clone().unwrap_or_else(|| "Junk".into())
 }
 
-/// Move an inbox email to another folder, then forget it locally.
-async fn move_email(shared: &SharedState, uid: u64, folder: String) -> Result<(), String> {
-    let (account, _, imap_uid) = account_of(shared, uid)?;
-    imap_client::move_message(&account.imap, imap_uid, &folder).await.map_err(|e| format!("{:#}", e))?;
+/// The IMAP mailbox behind one of the app's folders ("inbox", "sent", "drafts", "trash" or
+/// "spam"; anything else is the inbox). Each folder numbers its UIDs apart.
+fn mailbox_of(account: &config::AccountConfig, folders: &app_state::SpecialFolders, folder: &str) -> String {
+    match folder {
+        "sent" => folders.sent.clone(),
+        "drafts" => folders.drafts.clone(),
+        "trash" => folders.trash.clone(),
+        "spam" => spam_name(folders),
+        _ => account.imap.mailbox.clone(),
+    }
+}
+
+/// Move an email of one of the app's folders (`from`, as in `mailbox_of`) to the mailbox
+/// `to`, then forget it locally.
+async fn move_email(shared: &SharedState, uid: u64, from: &str, to: String) -> Result<(), String> {
+    let (account, folders, imap_uid) = account_of(shared, uid)?;
+    let source = config::ImapConfig { mailbox: mailbox_of(&account, &folders, from), ..account.imap.clone() };
+    imap_client::move_message(&source, imap_uid, &to).await.map_err(|e| format!("{:#}", e))?;
+    let folder = search::Folder::parse(from).unwrap_or(search::Folder::Inbox);
     {
         let mut s = shared.lock().unwrap();
-        s.emails.retain(|e| e.uid != uid);
-        s.search_index.retain(|(f, e)| !(*f == search::Folder::Inbox && e.uid == uid));
+        s.search_index.retain(|(f, e)| !(*f == folder && e.uid == uid));
+        if folder == search::Folder::Inbox {
+            s.emails.retain(|e| e.uid != uid);
+        }
     }
-    app_state::remove_from_cache(uid);
+    if folder == search::Folder::Inbox {
+        app_state::remove_from_cache(uid);
+    }
     Ok(())
 }
 
-/// Move an inbox email to the Trash folder on the server.
+/// Move an email to the Trash folder on the server: from the inbox, or from `folder`.
 #[tauri::command]
-async fn trash_email(uid: u64, shared: State<'_, SharedState>) -> Result<(), String> {
+async fn trash_email(uid: u64, folder: Option<String>, shared: State<'_, SharedState>) -> Result<(), String> {
     let (_, folders, _) = account_of(shared.inner(), uid)?;
-    let folder = folders.trash;
-    move_email(shared.inner(), uid, folder).await
+    move_email(shared.inner(), uid, folder.as_deref().unwrap_or("inbox"), folders.trash).await
+}
+
+/// Move an email to the Archive folder (created the first time if the server has none):
+/// from the inbox, or from `folder`.
+#[tauri::command]
+async fn archive_email(uid: u64, folder: Option<String>, shared: State<'_, SharedState>) -> Result<(), String> {
+    let (account, folders, _) = account_of(shared.inner(), uid)?;
+    let archive = folders.archive.unwrap_or_else(|| "Archive".into());
+    imap_client::ensure_folder(&account.imap, &archive).await.map_err(|e| format!("{:#}", e))?;
+    move_email(shared.inner(), uid, folder.as_deref().unwrap_or("inbox"), archive).await
 }
 
 /// "Not spam": move an email from the Spam/Junk folder back to the inbox.
@@ -963,7 +992,7 @@ async fn spam_email(uid: u64, shared: State<'_, SharedState>) -> Result<(), Stri
     let folder = spam_name(&folders);
     // Many mailboxes have no spam folder: create it the first time, like other mail clients.
     imap_client::ensure_folder(&account.imap, &folder).await.map_err(|e| format!("{:#}", e))?;
-    move_email(shared.inner(), uid, folder).await
+    move_email(shared.inner(), uid, "inbox", folder).await
 }
 
 /// Mark an inbox email read or unread, on the server and locally.
@@ -1052,17 +1081,22 @@ async fn file_existing_emails(app: &AppHandle, shared: &SharedState, name: &str)
 /// from ("inbox", "sent", "drafts", "trash" or "spam"): each folder numbers its UIDs apart.
 #[tauri::command]
 async fn save_email(uid: u64, folder: String, path: String, shared: State<'_, SharedState>) -> Result<(), String> {
-    let (account, folders, imap_uid) = account_of(shared.inner(), uid)?;
-    let mailbox = match folder.as_str() {
-        "sent" => folders.sent.clone(),
-        "drafts" => folders.drafts.clone(),
-        "trash" => folders.trash.clone(),
-        "spam" => spam_name(&folders),
-        _ => account.imap.mailbox.clone(),
-    };
-    let from = config::ImapConfig { mailbox, ..account.imap.clone() };
-    let raw = imap_client::fetch_raw(&from, imap_uid).await.map_err(|e| format!("{:#}", e))?;
+    let raw = fetch_raw(shared.inner(), uid, &folder).await?;
     std::fs::write(&path, raw).map_err(|e| format!("Could not write {}: {}", path, e))
+}
+
+/// The whole message as the server keeps it. `folder` as in `mailbox_of`.
+async fn fetch_raw(shared: &SharedState, uid: u64, folder: &str) -> Result<Vec<u8>, String> {
+    let (account, folders, imap_uid) = account_of(shared, uid)?;
+    let from = config::ImapConfig { mailbox: mailbox_of(&account, &folders, folder), ..account.imap.clone() };
+    imap_client::fetch_raw(&from, imap_uid).await.map_err(|e| format!("{:#}", e))
+}
+
+/// Every header of the original message, as written ("Show original").
+#[tauri::command]
+async fn email_headers(uid: u64, folder: String, shared: State<'_, SharedState>) -> Result<String, String> {
+    let raw = fetch_raw(shared.inner(), uid, &folder).await?;
+    Ok(models::header_block(&raw))
 }
 
 /// Hide a task, deadline or meeting item without touching the email.
@@ -1107,7 +1141,13 @@ async fn search_gifs(query: String, shared: State<'_, SharedState>) -> Result<Ve
 // Each command returns the whole board so the UI can re-render from it.
 
 #[tauri::command]
-fn create_task(title: String, project: Option<String>, due_date: Option<String>) -> Result<Vec<tasks::Task>, String> {
+fn create_task(
+    title: String,
+    project: Option<String>,
+    due_date: Option<String>,
+    source_uid: Option<u64>,
+    shared: State<'_, SharedState>,
+) -> Result<Vec<tasks::Task>, String> {
     let title = title.trim().to_string();
     if title.is_empty() {
         return Err("Task title cannot be empty".into());
@@ -1117,8 +1157,15 @@ fn create_task(title: String, project: Option<String>, due_date: Option<String>)
     if due_date.as_deref().is_some_and(|date| chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").is_err()) {
         return Err("Invalid task date".into());
     }
+    // Made from an inbox email ("Add as task"): the task links back to it.
+    let source = source_uid.and_then(|uid| shared.lock().unwrap().emails.iter().find(|e| e.uid == uid).cloned());
     Ok(tasks::Board::update(|b| {
-        b.add_dated(title, project, due_date);
+        let id = b.add_dated(title, project, due_date);
+        if let (Some(c), Some(t)) = (source, b.tasks.iter_mut().find(|t| t.id == id)) {
+            t.source_uid = Some(c.uid);
+            t.source_from = c.from_name.clone();
+            t.source_subject = c.subject.clone();
+        }
         b.tasks.clone()
     }))
 }
@@ -1202,6 +1249,8 @@ fn main() {
             rename_project,
             delete_project,
             trash_email,
+            archive_email,
+            email_headers,
             spam_email,
             not_spam_email,
             set_read,
