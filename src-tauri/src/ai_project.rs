@@ -160,15 +160,14 @@ pub fn match_content(name: &str, description: &str, emails: &[EmailCard]) -> Str
 }
 
 /// The ids in the AI's answer, keeping only emails that were offered.
-pub fn parse_ids(text: &str, offered: &[u32]) -> Option<Vec<u32>> {
+pub fn parse_ids(text: &str, offered: &[u64]) -> Option<Vec<u64>> {
     #[derive(Deserialize)]
     struct Ids {
         ids: Vec<serde_json::Value>,
     }
     let ids: Ids = serde_json::from_str(crate::ai::extract_json(text)).ok()?;
-    let mut out: Vec<u32> = ids.ids.iter()
+    let mut out: Vec<u64> = ids.ids.iter()
         .filter_map(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().trim_matches(['[', ']']).parse().ok())))
-        .filter_map(|n| u32::try_from(n).ok())
         .filter(|n| offered.contains(n))
         .collect();
     out.sort_unstable();
@@ -177,7 +176,7 @@ pub fn parse_ids(text: &str, offered: &[u32]) -> Option<Vec<u32>> {
 }
 
 /// Which of these (inbox) emails belong to the project, by uid.
-pub async fn matching_emails(ai: &AiConfig, name: &str, description: &str, emails: &[EmailCard]) -> Result<Vec<u32>> {
+pub async fn matching_emails(ai: &AiConfig, name: &str, description: &str, emails: &[EmailCard]) -> Result<Vec<u64>> {
     if emails.is_empty() {
         return Ok(Vec::new());
     }
@@ -188,7 +187,7 @@ pub async fn matching_emails(ai: &AiConfig, name: &str, description: &str, email
         json: true,
     })
     .await?;
-    let offered: Vec<u32> = emails.iter().map(|c| c.uid).collect();
+    let offered: Vec<u64> = emails.iter().map(|c| c.uid).collect();
     parse_ids(&text, &offered)
         .ok_or_else(|| anyhow!("The AI's answer could not be used: {}", text.chars().take(200).collect::<String>()))
 }

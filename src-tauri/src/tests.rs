@@ -273,12 +273,12 @@ api_key = "k" model = "m" max_tokens = 100
             make_test_card(102, Priority::Task),
         ];
 
-        let cached_uids: std::collections::HashSet<u32> =
+        let cached_uids: std::collections::HashSet<u64> =
             cached.iter().map(|c| c.uid).collect();
 
         // Simulate raw emails from server: 101 and 102 already known, 103 is new
-        let server_uids = vec![101u32, 102, 103];
-        let (known, new): (Vec<&u32>, Vec<&u32>) = server_uids.iter()
+        let server_uids = vec![101u64, 102, 103];
+        let (known, new): (Vec<&u64>, Vec<&u64>) = server_uids.iter()
             .partition(|uid| cached_uids.contains(uid));
 
         assert_eq!(known.len(), 2);
@@ -319,7 +319,7 @@ api_key = "k" model = "m" max_tokens = 100
         .migrated()
     }
 
-    fn make_test_card(uid: u32, priority: Priority) -> EmailCard {
+    fn make_test_card(uid: u64, priority: Priority) -> EmailCard {
         EmailCard {
             uid,
             subject: format!("Subject {}", uid),
@@ -415,10 +415,14 @@ api_key = "k" model = "m" max_tokens = 100
         let cards = vec![with_task, task_prio, plain, swiped];
         assert!(b.sync_from_cards(&cards, &dismissed));
         assert_eq!(b.tasks.len(), 3);
+        assert_eq!(b.tasks.iter().map(|t| t.id).collect::<Vec<_>>(), vec![1, 2, 3], "each task gets its own id");
         assert_eq!(b.tasks[0].title, "Send the manuscript");
         assert_eq!(b.tasks[0].project.as_deref(), Some("Thesis"));
         assert_eq!(b.tasks[0].status, Status::Todo);
+        assert_eq!(b.tasks[1].title, "Subject 11", "a \"task\" email without action text is titled by its subject");
         assert_eq!(b.tasks[2].status, Status::GivenUp);
+        assert!(Board::default().needs_sync(&[make_test_card(11, Priority::Task)]));
+        assert!(!Board::default().needs_sync(&[make_test_card(12, Priority::Information)]));
         // Second sync adds nothing.
         assert!(!b.sync_from_cards(&cards, &dismissed));
         assert_eq!(b.tasks.len(), 3);
@@ -446,6 +450,7 @@ api_key = "k" model = "m" max_tokens = 100
         assert!(!old.sync_from_cards(&[card.clone()], &Dismissals::default()));
         assert_eq!(old.tasks[0].created_ts, 1_790_000_000);
         assert_eq!(old.tasks[1].created_ts, 0, "unknown for old hand-made tasks");
+        assert!(!old.needs_sync(&[card.clone()]), "an undated hand-made task needs no sync");
 
         // Added by hand: now.
         let before = chrono::Utc::now().timestamp();
@@ -497,7 +502,7 @@ api_key = "k" model = "m" max_tokens = 100
         let mut high_unread = make_test_card(3, Priority::HighPriority);
         high_unread.is_read = false;
         let out = important_unread(&[read, unread], &[high_unread]);
-        let uids: Vec<u32> = out.iter().map(|c| c.uid).collect();
+        let uids: Vec<u64> = out.iter().map(|c| c.uid).collect();
         assert_eq!(uids, vec![2, 3]);
     }
 
@@ -836,6 +841,47 @@ max_tokens = 10
         assert_eq!(format!("{:#}", err), "Incorrect API key provided (401)");
     }
 
+    #[tokio::test]
+    async fn test_classify_drops_null_fields_and_lists_projects() {
+        let email = RawEmail {
+            uid: 1, subject: "Defense".into(), from: "a@b.c".into(), to: String::new(), cc: String::new(),
+            reply_to: String::new(), bcc: String::new(), message_id: String::new(), references: String::new(),
+            seen: false, deleted: false, date: None, body_text: "Jury".into(), body_html: None,
+        };
+        let projects = vec![ProjectConfig { name: "Thesis".into(), description: "PhD".into(), urgency: "high".into() }];
+        let cases: [(&'static str, &[ProjectConfig], bool); 3] = [
+            // The AI writes "null" or "" for "none": neither is a real project, task or link.
+            (r#"{"choices":[{"message":{"content":"{\"priority\":\"task\",\"summary\":\"S\",\"project\":\"null\",\"task\":\"null\",\"meeting_link\":\"null\"}"}}]}"#, &[], false),
+            (r#"{"choices":[{"message":{"content":"{\"priority\":\"task\",\"summary\":\"S\",\"project\":\"\",\"task\":\"\",\"meeting_link\":\"\"}"}}]}"#, &[], false),
+            (r#"{"choices":[{"message":{"content":"{\"priority\":\"task\",\"summary\":\"S\",\"project\":\"Thesis\",\"task\":\"Book the room\",\"meeting_link\":\"https://meet.google.com/x\"}"}}]}"#, &projects, true),
+        ];
+        for (reply, projects, kept) in cases {
+            let (base, server) = fake_ai_server(200, reply).await;
+            let c = crate::ai_classifier::classify(&ai_cfg("custom", "m", "k", &format!("{}/v1", base)), &email, projects).await.unwrap();
+            assert_eq!(c.project.is_some() && c.task.is_some() && c.meeting_link.is_some(), kept, "{:?}", c);
+            assert_eq!(c.project.is_none() && c.task.is_none() && c.meeting_link.is_none(), !kept, "{:?}", c);
+            let (_, body) = server.await.unwrap();
+            // The system prompt names the user's projects only when there are some.
+            assert_eq!(body.contains(r#"\"Thesis\": PhD (urgency: high)"#), kept, "{}", body);
+            assert_eq!(body.contains("no projects configured"), !kept);
+        }
+    }
+
+    #[test]
+    fn test_task_status_parse_and_open() {
+        use crate::tasks::Status;
+        for (s, status, open) in [
+            ("todo", Status::Todo, true),
+            ("in_progress", Status::InProgress, true),
+            ("done", Status::Done, false),
+            ("given_up", Status::GivenUp, false),
+        ] {
+            assert_eq!(Status::parse(s), Some(status));
+            assert_eq!(status.is_open(), open, "{}", s);
+        }
+        assert_eq!(Status::parse("later"), None);
+    }
+
     #[test]
     fn test_refresh_briefing_tells_about_the_ai() {
         use crate::app_state::refresh_briefing;
@@ -1014,7 +1060,7 @@ max_tokens = 10
 
     // ── Search ────────────────────────────────────────────────────────────────
 
-    fn search_card(uid: u32, from: &str, subject: &str, body: &str, ts: i64) -> EmailCard {
+    fn search_card(uid: u64, from: &str, subject: &str, body: &str, ts: i64) -> EmailCard {
         let mut c = make_test_card(uid, Priority::Information);
         c.from_name = from.into();
         c.from_email = format!("{}@univ.fr", from.to_lowercase().replace(' ', "."));
@@ -1071,7 +1117,7 @@ max_tokens = 10
         use crate::ai_project::{draft, related_emails};
         let index = search_index();
         let related = related_emails(&index, "my thesis defense with the jury", 12);
-        let uids: Vec<u32> = related.iter().map(|c| c.uid).collect();
+        let uids: Vec<u64> = related.iter().map(|c| c.uid).collect();
         // The jury email first, the email filed in "Thesis" too; not the newsletter.
         assert_eq!(uids, vec![1, 3]);
 
@@ -1186,7 +1232,7 @@ max_tokens = 10
     fn test_new_mail_notification_texts() {
         use crate::app_state::notification_texts;
         use crate::i18n::Lang;
-        let card = |uid: u32, from: &str, subject: &str, read: bool| {
+        let card = |uid: u64, from: &str, subject: &str, read: bool| {
             let mut c = make_test_card(uid, Priority::Information);
             c.from_name = from.into();
             c.subject = subject.into();
@@ -1379,6 +1425,35 @@ max_tokens = 10
         let cfg: Config = toml::from_str("[claude]\napi_key = \"sk-old\"\n[ai]\nprovider = \"ollama\"\nmodel = \"qwen\"\n").unwrap();
         let cfg = cfg.migrated();
         assert_eq!((cfg.ai.provider(), cfg.ai.model.as_str(), cfg.ai.key()), ("ollama", "qwen", ""));
+    }
+
+    #[test]
+    fn test_mail_id_keeps_accounts_apart() {
+        use crate::models::{mail_id, split_mail_id};
+        // The first account's ids are its UIDs, so older caches stay valid.
+        assert_eq!(mail_id(0, 42), 42);
+        // Same UID in two accounts: two ids, each leading back to its account.
+        assert_ne!(mail_id(0, 42), mail_id(1, 42));
+        assert_eq!(split_mail_id(mail_id(1, 42)), (1, 42));
+        assert_eq!(split_mail_id(mail_id(3, u32::MAX)), (3, u32::MAX));
+        // JavaScript numbers hold the id exactly for any realistic account count.
+        assert!(mail_id(1000, u32::MAX) < 1u64 << 53);
+    }
+
+    #[test]
+    fn test_moved_ids_finds_second_account_emails() {
+        use crate::models::mail_id;
+        let cached = [(7, "<a@x>"), (8, "<b@x>"), (9, ""), (mail_id(1, 5), "<c@x>")];
+        let server = [
+            (7, "<a@x>"),                // first account: stays
+            (mail_id(1, 8), "<b@x>"),    // second account, same UID and Message-ID: moves
+            (mail_id(1, 7), "<z@x>"),    // same UID, other email: no move
+            (mail_id(2, 9), ""),         // no Message-ID to be sure: no move
+            (mail_id(1, 5), "<c@x>"),    // already a new id
+        ];
+        let moved = crate::app_state::moved_ids(&cached, &server);
+        assert_eq!(moved.len(), 1);
+        assert_eq!(moved[&8], mail_id(1, 8));
     }
 
     #[test]

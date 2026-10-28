@@ -15,14 +15,14 @@ static WRITE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Dismissals {
     #[serde(default)]
-    pub tasks: BTreeSet<u32>,
+    pub tasks: BTreeSet<u64>,
     #[serde(default)]
-    pub deadlines: BTreeSet<u32>,
+    pub deadlines: BTreeSet<u64>,
     #[serde(default)]
-    pub meetings: BTreeSet<u32>,
+    pub meetings: BTreeSet<u64>,
     /// AI verdict per task uid: "done" or "obsolete".
     #[serde(default)]
-    pub task_check: BTreeMap<u32, String>,
+    pub task_check: BTreeMap<u64, String>,
 }
 
 impl Dismissals {
@@ -58,7 +58,7 @@ impl Dismissals {
     }
 
     /// Record a user dismissal. `kind` is "task", "deadline" or "meeting".
-    pub fn dismiss(&mut self, kind: &str, uid: u32) -> Result<(), String> {
+    pub fn dismiss(&mut self, kind: &str, uid: u64) -> Result<(), String> {
         match kind {
             "task" => self.tasks.insert(uid),
             "deadline" => self.deadlines.insert(uid),

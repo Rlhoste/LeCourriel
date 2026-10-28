@@ -13,7 +13,7 @@ use crate::tasks::{Board, Status};
 use crate::dto::*;
 use crate::i18n;
 use crate::imap_client::{connect, fetch_emails, fetch_folder};
-use crate::models::{EmailCard, Priority};
+use crate::models::{EmailCard, Priority, RawEmail};
 use crate::state::AppState;
 
 // v2: keyed by real IMAP UIDs (v1 used sequence numbers, which shift on delete).
@@ -115,6 +115,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     let mut trash_raw = Vec::new();
     let mut spam_raw = Vec::new();
     let mut inbox_ok = false;
+    let mut mailboxes = Vec::new();
 
     for (index, account) in cfg.accounts.iter().enumerate() {
         let folders = guess_folder_names(&account.imap).await;
@@ -124,12 +125,8 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
             let mut s = state.lock().unwrap();
             s.sent_folders.resize(cfg.accounts.len(), "Sent".into());
             s.sent_folders[index] = sent_name.clone();
-            if index == 0 {
-                s.trash_folder = trash_name.clone();
-                // No spam folder on the server: "Junk" is created when first needed.
-                s.spam_folder = folders.spam.unwrap_or_else(|| "Junk".into());
-            }
         }
+        mailboxes.push((account.clone(), folders));
         let (inbox_res, sent_res, drafts_res, trash_res, spam_res) = tokio::join!(
             fetch_emails(&account.imap),
             fetch_folder(&account.imap, &sent_name),
@@ -143,6 +140,13 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
                 }
             },
         );
+        // Ids carry the account, so two accounts' emails never share one.
+        let tag = |res: Result<Vec<RawEmail>>| res.map(|mut v| {
+            for r in &mut v { r.uid = crate::models::mail_id(index, r.uid as u32); }
+            v
+        });
+        let (inbox_res, sent_res, drafts_res, trash_res, spam_res) =
+            (tag(inbox_res), tag(sent_res), tag(drafts_res), tag(trash_res), tag(spam_res));
         match inbox_res {
             Ok(mut v) => { info!("Inbox[{}]: {} emails", account.name, v.len()); raw_emails.append(&mut v); inbox_ok = true; }
             Err(e) => warn!("Inbox[{}]: {}", account.name, e),
@@ -171,7 +175,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     }
 
     // Evidence for the task check, captured before the raw emails are consumed.
-    let inbox_dates: std::collections::HashMap<u32, chrono::DateTime<Utc>> = raw_emails.iter()
+    let inbox_dates: std::collections::HashMap<u64, chrono::DateTime<Utc>> = raw_emails.iter()
         .filter_map(|r| r.date.map(|d| (r.uid, d))).collect();
     let recent_inbox: Vec<(chrono::DateTime<Utc>, RecentMail)> = raw_emails.iter()
         .filter_map(|r| r.date.map(|d| (d, to_recent_mail("inbox", r)))).collect();
@@ -181,9 +185,18 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     // Load previously classified emails from cache — reuse results for known UIDs.
     // Emails the AI has not sorted yet (it was not set up, or it failed) are sorted again.
     let mut cached_cards = load_cache();
-    let seen_uids: std::collections::HashSet<u32> = cached_cards.iter().map(|c| c.uid).collect();
+    migrate_account_ids(&mut cached_cards, &raw_emails);
+    let seen_uids: std::collections::HashSet<u64> = cached_cards.iter().map(|c| c.uid).collect();
     cached_cards.retain(is_sorted);
-    let cached_uids: std::collections::HashSet<u32> = cached_cards.iter().map(|c| c.uid).collect();
+    // A cached email whose Message-ID differs is another email under the same id (older
+    // versions gave two accounts' emails the same one): it is sorted again.
+    let server_ids: std::collections::HashMap<u64, &str> = raw_emails.iter()
+        .map(|r| (r.uid, r.message_id.as_str())).collect();
+    cached_cards.retain(|c| match server_ids.get(&c.uid) {
+        Some(id) => id.is_empty() || c.message_id.is_empty() || *id == c.message_id,
+        None => true,
+    });
+    let cached_uids: std::collections::HashSet<u64> = cached_cards.iter().map(|c| c.uid).collect();
     let ai_ready = crate::ai::readiness(&cfg.ai);
 
     // Split inbox into already-known (reuse cache) and new (need AI).
@@ -223,6 +236,8 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     } else {
         Briefing { kind: "up_to_date", ..Default::default() }
     };
+    // From here the emails shown carry this refresh's ids: actions resolve them with its accounts.
+    state.lock().unwrap().mailboxes = mailboxes;
     populate(cfg, app, state, pre_cards, sent_cards_pre.clone(), drafts_cards_pre.clone(), trash_cards_pre.clone(), spam_cards_pre.clone(), Some(briefing_pre));
 
     // Classify only new emails.
@@ -329,11 +344,11 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     }
 
     // Merge: cached + newly classified. Remove UIDs no longer in inbox.
-    let all_uids: std::collections::HashSet<u32> = cached_uids.iter()
+    let all_uids: std::collections::HashSet<u64> = cached_uids.iter()
         .chain(new_cards.iter().map(|c| &c.uid)).copied().collect();
     // Keep only emails still present on server (by UID range we fetched).
     // Simple approach: keep cached entries whose UID appears in known_raw, plus new.
-    let known_uid_set: std::collections::HashSet<u32> = known_raw.iter().map(|r| r.uid).collect();
+    let known_uid_set: std::collections::HashSet<u64> = known_raw.iter().map(|r| r.uid).collect();
     cached_cards.retain(|c| known_uid_set.contains(&c.uid));
     let mut cards = cached_cards;
     cards.extend(new_cards);
@@ -666,6 +681,54 @@ fn render_body(plain: &str, html: &Option<String>) -> String {
     plain.to_string()
 }
 
+/// Older versions numbered every account's emails by bare IMAP UID, like the first account's.
+/// Cached ids (below 2^32) that are, by Message-ID, another account's email at the same UID,
+/// mapped to that email's id (`models::mail_id`).
+pub fn moved_ids(cached: &[(u64, &str)], server: &[(u64, &str)]) -> std::collections::HashMap<u64, u64> {
+    let others: std::collections::HashMap<(u64, &str), u64> = server.iter()
+        .filter(|(id, mid)| id >> 32 > 0 && !mid.is_empty())
+        .map(|&(id, mid)| ((id & 0xFFFF_FFFF, mid), id))
+        .collect();
+    cached.iter()
+        .filter(|(id, _)| id >> 32 == 0)
+        .filter_map(|&(id, mid)| others.get(&(id, mid)).map(|&new| (id, new)))
+        .collect()
+}
+
+/// Give older versions' cached emails of the second (third…) account their new ids, with their
+/// tasks, dismissals and project choices, so they are neither sorted again nor announced as new.
+fn migrate_account_ids(cached: &mut [EmailCard], raw: &[RawEmail]) {
+    let moved = {
+        let cached_ids: Vec<(u64, &str)> = cached.iter().map(|c| (c.uid, c.message_id.as_str())).collect();
+        let server_ids: Vec<(u64, &str)> = raw.iter().map(|r| (r.uid, r.message_id.as_str())).collect();
+        moved_ids(&cached_ids, &server_ids)
+    };
+    if moved.is_empty() {
+        return;
+    }
+    info!("Moving {} cached emails to their account's ids", moved.len());
+    let id = |u: u64| *moved.get(&u).unwrap_or(&u);
+    for c in cached.iter_mut() {
+        c.uid = id(c.uid);
+    }
+    save_cache(cached);
+    Board::update(|b| {
+        for t in &mut b.tasks {
+            t.source_uid = t.source_uid.map(id);
+        }
+        b.deleted_sources = std::mem::take(&mut b.deleted_sources).into_iter().map(id).collect();
+    });
+    Dismissals::update(|d| {
+        for set in [&mut d.tasks, &mut d.deadlines, &mut d.meetings] {
+            *set = std::mem::take(set).into_iter().map(id).collect();
+        }
+        d.task_check = std::mem::take(&mut d.task_check).into_iter().map(|(u, v)| (id(u), v)).collect();
+    });
+    crate::overrides::Overrides::update(|o| {
+        o.projects = std::mem::take(&mut o.projects).into_iter().map(|(u, v)| (id(u), v)).collect();
+    });
+}
+
 fn load_cache() -> Vec<EmailCard> {
     match std::fs::read_to_string(crate::paths::file(CACHE_PATH)) {
         Ok(s) => serde_json::from_str(&s).unwrap_or_default(),
@@ -776,7 +839,7 @@ fn to_recent_mail(folder: &'static str, raw: &crate::models::RawEmail) -> Recent
 async fn check_open_tasks(
     cfg: &Config,
     cards: &[EmailCard],
-    inbox_dates: &std::collections::HashMap<u32, chrono::DateTime<Utc>>,
+    inbox_dates: &std::collections::HashMap<u64, chrono::DateTime<Utc>>,
     recent_inbox: Vec<(chrono::DateTime<Utc>, RecentMail)>,
     recent_sent: Vec<(chrono::DateTime<Utc>, RecentMail)>,
 ) -> Result<()> {
@@ -801,7 +864,7 @@ async fn check_open_tasks(
         return Ok(());
     }
 
-    let open_uids: std::collections::HashSet<u32> = open.iter().map(|t| t.uid).collect();
+    let open_uids: std::collections::HashSet<u64> = open.iter().map(|t| t.uid).collect();
     let oldest = open.iter().filter_map(|t| inbox_dates.get(&t.uid)).min().copied();
     let sent_cutoff = Utc::now() - chrono::Duration::days(14);
 
@@ -848,7 +911,7 @@ pub fn important_unread(urgent: &[EmailCard], high: &[EmailCard]) -> Vec<EmailCa
 }
 
 /// Set one email's read state in the on-disk cache.
-pub fn set_read_in_cache(uid: u32, read: bool) {
+pub fn set_read_in_cache(uid: u64, read: bool) {
     let mut cards = load_cache();
     if let Some(c) = cards.iter_mut().find(|c| c.uid == uid) {
         c.is_read = read;
@@ -857,7 +920,7 @@ pub fn set_read_in_cache(uid: u32, read: bool) {
 }
 
 /// Drop one email from the on-disk cache (after it was moved to the trash).
-pub fn remove_from_cache(uid: u32) {
+pub fn remove_from_cache(uid: u64) {
     let mut cards = load_cache();
     cards.retain(|c| c.uid != uid);
     save_cache(&cards);

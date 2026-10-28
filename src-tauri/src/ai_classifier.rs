@@ -173,7 +173,7 @@ pub async fn classify(
 
 /// An open task extracted from an inbox email.
 pub struct OpenTask {
-    pub uid: u32,
+    pub uid: u64,
     pub task: String,
     pub subject: String,
     pub from: String,
@@ -193,9 +193,9 @@ pub struct RecentMail {
 #[derive(Deserialize, Default)]
 struct TaskCheckResult {
     #[serde(default)]
-    done: Vec<u32>,
+    done: Vec<u64>,
     #[serde(default)]
-    obsolete: Vec<u32>,
+    obsolete: Vec<u64>,
 }
 
 const TASK_CHECK_PROMPT: &str = r#"You track a user's to-do list built from their emails. You get the open tasks (each with an id) and the user's recent emails, both received (inbox) and sent by the user (sent).
@@ -209,7 +209,7 @@ Respond ONLY with a JSON object (no explanation, no markdown, no code fences):
 {"done": [<task ids>], "obsolete": [<task ids>]}"#;
 
 /// Parse the model's answer into (uid, verdict) pairs, ignoring ids that are not open tasks.
-pub fn parse_task_check(text: &str, open_uids: &[u32]) -> Vec<(u32, &'static str)> {
+pub fn parse_task_check(text: &str, open_uids: &[u64]) -> Vec<(u64, &'static str)> {
     let trimmed = text
         .trim()
         .trim_start_matches("```json")
@@ -242,7 +242,7 @@ pub async fn check_tasks(
     ai: &AiConfig,
     tasks: &[OpenTask],
     recent: &[RecentMail],
-) -> Result<Vec<(u32, &'static str)>> {
+) -> Result<Vec<(u64, &'static str)>> {
     if tasks.is_empty() || recent.is_empty() {
         return Ok(vec![]);
     }
@@ -271,6 +271,6 @@ pub async fn check_tasks(
     .await?;
     debug!("Task check raw response: {}", text);
 
-    let open_uids: Vec<u32> = tasks.iter().map(|t| t.uid).collect();
+    let open_uids: Vec<u64> = tasks.iter().map(|t| t.uid).collect();
     Ok(parse_task_check(&text, &open_uids))
 }

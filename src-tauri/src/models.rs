@@ -68,10 +68,22 @@ pub struct Project {
     pub urgency: ProjectUrgency,
 }
 
+/// An email's id in the app: its account's position above bit 32, its IMAP UID below, so
+/// emails of two accounts never share an id. The first account's ids are its UIDs (older
+/// caches, tasks and dismissals stay valid). Stays below 2^53 for the UI's JavaScript numbers.
+pub fn mail_id(account: usize, uid: u32) -> u64 {
+    ((account as u64) << 32) | uid as u64
+}
+
+/// The account position and the IMAP UID inside a `mail_id`.
+pub fn split_mail_id(id: u64) -> (usize, u32) {
+    ((id >> 32) as usize, id as u32)
+}
+
 /// Raw email as fetched from IMAP before AI processing.
 #[derive(Debug, Clone)]
 pub struct RawEmail {
-    pub uid: u32,
+    pub uid: u64,
     pub subject: String,
     pub from: String,
     pub to: String,
@@ -93,7 +105,7 @@ pub struct RawEmail {
 /// Processed email card ready for display.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmailCard {
-    pub uid: u32,
+    pub uid: u64,
     pub subject: String,
     pub from_name: String,
     pub from_email: String,

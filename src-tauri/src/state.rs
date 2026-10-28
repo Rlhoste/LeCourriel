@@ -9,10 +9,9 @@ pub struct AppState {
     /// Every cached email tagged with its folder (UIDs repeat across folders), for search;
     /// also holds the results of the last server search (Folder::Server).
     pub search_index: Vec<(Folder, EmailCard)>,
-    /// Trash folder name of the first account, found during refresh.
-    pub trash_folder: String,
-    /// Spam/Junk folder name of the first account.
-    pub spam_folder: String,
+    /// The accounts and their special folders as of the refresh that fetched `emails`:
+    /// an email id's account part is a position in this list (`models::mail_id`).
+    pub mailboxes: Vec<(crate::config::AccountConfig, crate::app_state::SpecialFolders)>,
     /// Sent folder name of each account (same order as the config), found during refresh.
     pub sent_folders: Vec<String>,
     /// The briefing line last shown, kept when the screen is redrawn without a refresh.

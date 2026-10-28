@@ -47,11 +47,11 @@ impl Folder {
 }
 
 /// Stable id for a result: "inbox:123", "sent:45"… (UIDs repeat across folders).
-pub fn make_id(folder: Folder, uid: u32) -> String {
+pub fn make_id(folder: Folder, uid: u64) -> String {
     format!("{}:{}", folder.as_str(), uid)
 }
 
-pub fn parse_id(id: &str) -> Option<(Folder, u32)> {
+pub fn parse_id(id: &str) -> Option<(Folder, u64)> {
     let (f, uid) = id.split_once(':')?;
     Some((Folder::parse(f)?, uid.parse().ok()?))
 }
@@ -280,7 +280,7 @@ fn passes(folder: Folder, card: &EmailCard, f: &Filters) -> bool {
 pub struct SearchHit {
     pub id: String,
     pub folder: Folder,
-    pub uid: u32,
+    pub uid: u64,
     pub subject: String,
     pub from_name: String,
     pub date_str: String,

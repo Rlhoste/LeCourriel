@@ -348,7 +348,7 @@ fn parse_fetch(fetch: &Fetch) -> Option<RawEmail> {
     debug!("Parsed email uid={} subject={:?}", uid, subject);
 
     Some(RawEmail {
-        uid,
+        uid: uid.into(),   // the caller adds the account (`mail_id`)
         subject,
         from,
         to,

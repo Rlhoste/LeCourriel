@@ -51,7 +51,7 @@ pub struct Task {
     pub due_date: Option<String>,
     /// Inbox UID of the email this task was extracted from.
     #[serde(default)]
-    pub source_uid: Option<u32>,
+    pub source_uid: Option<u64>,
     /// Sender and subject of the source email, for display.
     #[serde(default)]
     pub source_from: String,
@@ -74,7 +74,7 @@ pub struct Board {
     pub tasks: Vec<Task>,
     /// Source UIDs of email tasks the user deleted, so sync doesn't re-add them.
     #[serde(default)]
-    pub deleted_sources: std::collections::BTreeSet<u32>,
+    pub deleted_sources: std::collections::BTreeSet<u64>,
 }
 
 impl Board {

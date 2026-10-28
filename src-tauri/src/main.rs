@@ -267,7 +267,7 @@ async fn refresh_emails(
 }
 
 #[tauri::command]
-fn get_email(uid: u32, shared: State<'_, SharedState>) -> Option<dto::EmailCardDto> {
+fn get_email(uid: u64, shared: State<'_, SharedState>) -> Option<dto::EmailCardDto> {
     let s = shared.lock().unwrap();
     s.emails.iter().find(|e| e.uid == uid).map(|c| dto::EmailCardDto {
         uid: c.uid,
@@ -509,16 +509,27 @@ fn search_local(query: String, shared: State<'_, SharedState>) -> Vec<search::Se
 #[tauri::command]
 async fn search_server(query: String, shared: State<'_, SharedState>) -> Result<Vec<search::SearchHit>, String> {
     let cfg = shared.lock().unwrap().cfg.clone();
-    let account = cfg.accounts.first().ok_or("No accounts configured")?;
+    if cfg.accounts.is_empty() {
+        return Err("No accounts configured".into());
+    }
     let (terms, filters) = search::parse_query(&query);
     if terms.is_empty() && filters.after.is_none() {
         return Err("Type at least one word to search on the server".into());
     }
-    let raws = imap_client::search_server(&account.imap, &terms, filters.after, 20)
-        .await
-        .map_err(|e| format!("{:#}", e))?;
+    let mut raws = Vec::new();
+    let mut failed = Vec::new();
+    for (index, account) in cfg.accounts.iter().enumerate() {
+        // One unreachable account keeps the other accounts' results.
+        match imap_client::search_server(&account.imap, &terms, filters.after, 20).await {
+            Ok(found) => raws.extend(found.into_iter().map(|mut r| { r.uid = models::mail_id(index, r.uid as u32); r })),
+            Err(e) => failed.push(format!("{}: {:#}", account.name, e)),
+        }
+    }
+    if failed.len() == cfg.accounts.len() {
+        return Err(failed.join("\n"));
+    }
     let mut s = shared.lock().unwrap();
-    let cached: std::collections::HashSet<u32> = s.search_index.iter()
+    let cached: std::collections::HashSet<u64> = s.search_index.iter()
         .filter(|(f, _)| *f == search::Folder::Inbox).map(|(_, c)| c.uid).collect();
     s.search_index.retain(|(f, _)| *f != search::Folder::Server);
     let mut hits = Vec::new();
@@ -838,11 +849,32 @@ fn delete_project(name: String, shared: State<'_, SharedState>) -> Result<(), St
     Ok(())
 }
 
+/// The account an email id belongs to (as of the refresh that fetched the email, so an
+/// account removed or reordered since cannot catch it), its folders, and the IMAP UID.
+fn account_of(shared: &SharedState, id: u64) -> Result<(config::AccountConfig, app_state::SpecialFolders, u32), String> {
+    let (index, uid) = models::split_mail_id(id);
+    let s = shared.lock().unwrap();
+    let found = match s.mailboxes.get(index) {
+        Some(m) => Some(m.clone()),
+        // Emails shown from the cache before the first refresh: the settings' accounts.
+        None if s.mailboxes.is_empty() => s.cfg.accounts.get(index).map(|a| (a.clone(), app_state::SpecialFolders {
+            sent: "Sent".into(), drafts: "Drafts".into(), trash: "Trash".into(), spam: None,
+        })),
+        None => None,
+    };
+    let (account, folders) = found.ok_or("This email's account was removed")?;
+    Ok((account, folders, uid))
+}
+
+/// The spam folder name; "Junk" when the server has none yet (created when first needed).
+fn spam_name(folders: &app_state::SpecialFolders) -> String {
+    folders.spam.clone().unwrap_or_else(|| "Junk".into())
+}
+
 /// Move an inbox email to another folder, then forget it locally.
-async fn move_email(shared: &SharedState, uid: u32, folder: String) -> Result<(), String> {
-    let cfg = shared.lock().unwrap().cfg.clone();
-    let account = cfg.accounts.first().ok_or("No accounts configured")?;
-    imap_client::move_message(&account.imap, uid, &folder)
+async fn move_email(shared: &SharedState, uid: u64, folder: String) -> Result<(), String> {
+    let (account, _, imap_uid) = account_of(shared, uid)?;
+    imap_client::move_message(&account.imap, imap_uid, &folder)
         .await
         .map_err(|e| format!("{:#}", e))?;
     {
@@ -856,22 +888,19 @@ async fn move_email(shared: &SharedState, uid: u32, folder: String) -> Result<()
 
 /// Move an inbox email to the Trash folder on the server.
 #[tauri::command]
-async fn trash_email(uid: u32, shared: State<'_, SharedState>) -> Result<(), String> {
-    let folder = shared.lock().unwrap().trash_folder.clone();
+async fn trash_email(uid: u64, shared: State<'_, SharedState>) -> Result<(), String> {
+    let (_, folders, _) = account_of(shared.inner(), uid)?;
+    let folder = folders.trash;
     move_email(shared.inner(), uid, folder).await
 }
 
 /// "Not spam": move an email from the Spam/Junk folder back to the inbox.
 #[tauri::command]
-async fn not_spam_email(uid: u32, shared: State<'_, SharedState>) -> Result<(), String> {
-    let (cfg, spam_folder) = {
-        let s = shared.lock().unwrap();
-        (s.cfg.clone(), s.spam_folder.clone())
-    };
-    let account = cfg.accounts.first().ok_or("No accounts configured")?;
+async fn not_spam_email(uid: u64, shared: State<'_, SharedState>) -> Result<(), String> {
+    let (account, folders, imap_uid) = account_of(shared.inner(), uid)?;
     // move_message moves from the configured mailbox: point it at the spam folder.
-    let from_spam = config::ImapConfig { mailbox: spam_folder, ..account.imap.clone() };
-    imap_client::move_message(&from_spam, uid, &account.imap.mailbox)
+    let from_spam = config::ImapConfig { mailbox: spam_name(&folders), ..account.imap.clone() };
+    imap_client::move_message(&from_spam, imap_uid, &account.imap.mailbox)
         .await
         .map_err(|e| format!("{:#}", e))?;
     // Spam UIDs have their own numbering: forget only the spam entry. The email comes
@@ -883,13 +912,10 @@ async fn not_spam_email(uid: u32, shared: State<'_, SharedState>) -> Result<(), 
 
 /// Move an inbox email to the Spam/Junk folder on the server.
 #[tauri::command]
-async fn spam_email(uid: u32, shared: State<'_, SharedState>) -> Result<(), String> {
-    let (cfg, folder) = {
-        let s = shared.lock().unwrap();
-        (s.cfg.clone(), s.spam_folder.clone())
-    };
+async fn spam_email(uid: u64, shared: State<'_, SharedState>) -> Result<(), String> {
+    let (account, folders, _) = account_of(shared.inner(), uid)?;
+    let folder = spam_name(&folders);
     // Many mailboxes have no spam folder: create it the first time, like other mail clients.
-    let account = cfg.accounts.first().ok_or("No accounts configured")?;
     imap_client::ensure_folder(&account.imap, &folder)
         .await
         .map_err(|e| format!("{:#}", e))?;
@@ -898,10 +924,9 @@ async fn spam_email(uid: u32, shared: State<'_, SharedState>) -> Result<(), Stri
 
 /// Mark an inbox email read or unread, on the server and locally.
 #[tauri::command]
-async fn set_read(uid: u32, read: bool, shared: State<'_, SharedState>) -> Result<(), String> {
-    let cfg = shared.lock().unwrap().cfg.clone();
-    let account = cfg.accounts.first().ok_or("No accounts configured")?;
-    imap_client::set_seen(&account.imap, uid, read)
+async fn set_read(uid: u64, read: bool, shared: State<'_, SharedState>) -> Result<(), String> {
+    let (account, _, imap_uid) = account_of(shared.inner(), uid)?;
+    imap_client::set_seen(&account.imap, imap_uid, read)
         .await
         .map_err(|e| format!("{:#}", e))?;
     {
@@ -920,7 +945,7 @@ async fn set_read(uid: u32, read: bool, shared: State<'_, SharedState>) -> Resul
 /// Re-tag an inbox email (and the tasks taken from it) to another project, or none.
 #[tauri::command]
 fn set_email_project(
-    uid: u32,
+    uid: u64,
     project: Option<String>,
     shared: State<'_, SharedState>,
 ) -> Result<(), String> {
@@ -936,7 +961,7 @@ fn set_email_project(
 }
 
 /// Show inbox emails in `project` (None = no project): in memory and on their tasks.
-fn set_project_in_memory(shared: &SharedState, uids: &[u32], project: Option<&str>) {
+fn set_project_in_memory(shared: &SharedState, uids: &[u64], project: Option<&str>) {
     let project = project.map(str::to_string);
     {
         let mut s = shared.lock().unwrap();
@@ -987,12 +1012,20 @@ async fn file_existing_emails(app: &AppHandle, shared: &SharedState, name: &str)
     Ok(count)
 }
 
-/// Save the original message as an .eml file at `path`.
+/// Save the original message as an .eml file at `path`. `folder` is the list it was opened
+/// from ("inbox", "sent", "drafts", "trash" or "spam"): each folder numbers its UIDs apart.
 #[tauri::command]
-async fn save_email(uid: u32, path: String, shared: State<'_, SharedState>) -> Result<(), String> {
-    let cfg = shared.lock().unwrap().cfg.clone();
-    let account = cfg.accounts.first().ok_or("No accounts configured")?;
-    let raw = imap_client::fetch_raw(&account.imap, uid)
+async fn save_email(uid: u64, folder: String, path: String, shared: State<'_, SharedState>) -> Result<(), String> {
+    let (account, folders, imap_uid) = account_of(shared.inner(), uid)?;
+    let mailbox = match folder.as_str() {
+        "sent" => folders.sent.clone(),
+        "drafts" => folders.drafts.clone(),
+        "trash" => folders.trash.clone(),
+        "spam" => spam_name(&folders),
+        _ => account.imap.mailbox.clone(),
+    };
+    let from = config::ImapConfig { mailbox, ..account.imap.clone() };
+    let raw = imap_client::fetch_raw(&from, imap_uid)
         .await
         .map_err(|e| format!("{:#}", e))?;
     std::fs::write(&path, raw).map_err(|e| format!("Could not write {}: {}", path, e))
@@ -1000,7 +1033,7 @@ async fn save_email(uid: u32, path: String, shared: State<'_, SharedState>) -> R
 
 /// Hide a task, deadline or meeting item without touching the email.
 #[tauri::command]
-fn dismiss_item(kind: String, uid: u32) -> Result<(), String> {
+fn dismiss_item(kind: String, uid: u64) -> Result<(), String> {
     dismissals::Dismissals::update(|d| d.dismiss(&kind, uid))
 }
 
@@ -1114,8 +1147,7 @@ fn main() {
         cfg: cfg.clone(),
         emails: vec![],
         search_index: vec![],
-        trash_folder: "Trash".into(),
-        spam_folder: "Junk".into(),
+        mailboxes: Vec::new(),
         sent_folders: Vec::new(),
         briefing: None,
         startup_error: config_error,

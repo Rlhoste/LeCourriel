@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct EmailCardDto {
-    pub uid: u32,
+    pub uid: u64,
     pub subject: String,
     pub from_name: String,
     pub from_email: String,
@@ -73,7 +73,7 @@ pub struct ProjectDto {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct DeadlineDto {
-    pub uid: u32,
+    pub uid: u64,
     pub subject: String,
     pub deadline_str: String,
     /// YYYY-MM-DD, used to place the deadline in the calendar.
@@ -90,11 +90,11 @@ pub struct WeekDayDto {
     pub day_number: u32,
     pub is_today: bool,
     pub dl1_subject: String,
-    pub dl1_uid: u32,
+    pub dl1_uid: u64,
     pub dl2_subject: String,
-    pub dl2_uid: u32,
+    pub dl2_uid: u64,
     pub dl3_subject: String,
-    pub dl3_uid: u32,
+    pub dl3_uid: u64,
 }
 
 /// What the briefing line says, as data: "live" (refreshed at hour:minute, `count` need

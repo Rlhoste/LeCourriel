@@ -646,7 +646,7 @@ async function saveEmail(email) {
     filters: [{ name: t('rp.emailFilter'), extensions: ['eml'] }],
   });
   if (!path) return null;
-  await cmd('save_email', { uid: email.uid, path });
+  await cmd('save_email', { uid: email.uid, folder: panelForEmail(email), path });
   return t('rp.savedTo', { path });
 }
 

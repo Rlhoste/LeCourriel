@@ -17,7 +17,7 @@ static WRITE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 pub struct Overrides {
     /// Project chosen by the user per inbox UID; "" means "no project".
     #[serde(default)]
-    pub projects: BTreeMap<u32, String>,
+    pub projects: BTreeMap<u64, String>,
 }
 
 impl Overrides {
@@ -52,7 +52,7 @@ impl Overrides {
         out
     }
 
-    pub fn set_project(&mut self, uid: u32, project: Option<String>) {
+    pub fn set_project(&mut self, uid: u64, project: Option<String>) {
         self.projects.insert(uid, project.unwrap_or_default());
     }
 
