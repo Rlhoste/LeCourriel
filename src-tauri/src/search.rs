@@ -97,12 +97,6 @@ pub struct Filters {
     pub folder: Option<Folder>,
 }
 
-impl Filters {
-    pub fn is_empty(&self) -> bool {
-        *self == Filters::default()
-    }
-}
-
 fn parse_date(s: &str) -> Option<NaiveDate> {
     NaiveDate::parse_from_str(s, "%Y-%m-%d")
         .or_else(|_| NaiveDate::parse_from_str(s, "%d/%m/%Y"))
@@ -213,7 +207,7 @@ fn term_weight(field: &str, term: &str) -> f32 {
     let mut best = 0.0f32;
     for (pos, _) in field.match_indices(term) {
         let at_word_start = pos == 0
-            || !field[..pos].chars().next_back().map_or(false, |c| c.is_alphanumeric());
+            || !field[..pos].chars().next_back().is_some_and(|c| c.is_alphanumeric());
         best = best.max(if at_word_start { 1.0 } else { 0.5 });
         if best == 1.0 {
             break;
@@ -264,12 +258,12 @@ fn passes(folder: Folder, card: &EmailCard, f: &Filters) -> bool {
     }
     let date = (card.date_ts > 0).then(|| Utc.timestamp_opt(card.date_ts, 0).single()).flatten().map(|d| d.date_naive());
     if let Some(before) = f.before {
-        if date.map_or(true, |d| d >= before) {
+        if date.is_none_or(|d| d >= before) {
             return false;
         }
     }
     if let Some(after) = f.after {
-        if date.map_or(true, |d| d <= after) {
+        if date.is_none_or(|d| d <= after) {
             return false;
         }
     }

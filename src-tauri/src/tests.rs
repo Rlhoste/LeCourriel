@@ -130,7 +130,7 @@ api_key = "k" model = "m" max_tokens = 100
         // We can't write to disk in unit tests, but we can test the logic
         // by verifying save_config builds the right Config structure.
         // Instead, test AccountDto → AccountConfig mapping manually.
-        let accounts = vec![AccountDto {
+        let accounts = [AccountDto {
             label: "Personal".to_string(),
             imap_host: "imap.test.com".to_string(),
             imap_port: "993".to_string(),
@@ -267,17 +267,15 @@ api_key = "k" model = "m" max_tokens = 100
 
     #[test]
     fn test_uid_dedup_logic() {
-        let cached = vec![
-            make_test_card(100, Priority::Urgent),
+        let cached = [make_test_card(100, Priority::Urgent),
             make_test_card(101, Priority::Information),
-            make_test_card(102, Priority::Task),
-        ];
+            make_test_card(102, Priority::Task)];
 
         let cached_uids: std::collections::HashSet<u64> =
             cached.iter().map(|c| c.uid).collect();
 
         // Simulate raw emails from server: 101 and 102 already known, 103 is new
-        let server_uids = vec![101u64, 102, 103];
+        let server_uids = [101u64, 102, 103];
         let (known, new): (Vec<&u64>, Vec<&u64>) = server_uids.iter()
             .partition(|uid| cached_uids.contains(uid));
 
@@ -868,6 +866,18 @@ max_tokens = 10
     }
 
     #[test]
+    fn test_board_dismissals_overrides_survive_a_restart() {
+        use crate::{dismissals::Dismissals, overrides::Overrides, tasks::Board};
+        assert!(crate::paths::file("tasks.json").starts_with(std::env::temp_dir()), "tests keep data in a temp folder");
+        let id = Board::update(|b| b.add("Call Bob".into(), None));
+        assert!(Board::load().tasks.iter().any(|t| t.id == id && t.title == "Call Bob"));
+        Dismissals::update(|d| { d.tasks.insert(7_000_001); });
+        assert!(Dismissals::load().tasks.contains(&7_000_001));
+        Overrides::update(|o| o.set_project(7_000_001, Some("Thesis".into())));
+        assert_eq!(Overrides::load().projects.get(&7_000_001).map(String::as_str), Some("Thesis"));
+    }
+
+    #[test]
     fn test_task_status_parse_and_open() {
         use crate::tasks::Status;
         for (s, status, open) in [
@@ -1171,7 +1181,7 @@ max_tokens = 10
         assert_eq!(f.before, chrono::NaiveDate::from_ymd_opt(2026, 12, 31));
         // An unknown key stays a search word; an invalid date is not a filter.
         let (terms, f) = parse_query("http://x avant:demain");
-        assert!(f.is_empty());
+        assert_eq!(f, crate::search::Filters::default());
         assert_eq!(terms.len(), 2);
     }
 

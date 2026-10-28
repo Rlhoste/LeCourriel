@@ -383,12 +383,3 @@ pub fn write_to(cfg: &Config, path: &Path) -> Result<()> {
     fs::write(path, serialized).context("Failed to write config.toml")?;
     Ok(())
 }
-
-/// Update a project's description in config.toml in-place.
-pub fn save_project_description(name: &str, description: &str) -> Result<()> {
-    let mut cfg = Config::load()?;
-    if let Some(proj) = cfg.projects.iter_mut().find(|p| p.name == name) {
-        proj.description = description.to_string();
-    }
-    save_config(&cfg)
-}

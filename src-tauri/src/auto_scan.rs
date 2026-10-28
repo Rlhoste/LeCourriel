@@ -121,7 +121,7 @@ fn roots() -> Vec<(PathBuf, &'static str)> {
         if let Some(appdata) = std::env::var_os("APPDATA") {
             let appdata = PathBuf::from(appdata);
             out.push((appdata.join("Thunderbird"), "Thunderbird"));
-            out.push((PathBuf::from(appdata).join("Betterbird"), "Betterbird"));
+            out.push((appdata.join("Betterbird"), "Betterbird"));
         }
     }
     #[cfg(not(windows))]

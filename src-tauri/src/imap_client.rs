@@ -85,7 +85,7 @@ pub async fn move_message(cfg: &ImapConfig, uid: u32, folder: &str) -> Result<()
         // mailbox (including ones another client flagged). Only purge this one, with UID
         // EXPUNGE (UIDPLUS); otherwise leave it flagged — it is already copied, and flagged
         // messages are hidden by the app and by other clients.
-        let uidplus = session.capabilities().await.map_or(false, |c| c.has_str("UIDPLUS"));
+        let uidplus = session.capabilities().await.is_ok_and(|c| c.has_str("UIDPLUS"));
         if uidplus {
             let stream = session.uid_expunge(&uid_set).await.context("IMAP UID EXPUNGE failed")?;
             futures::pin_mut!(stream);
@@ -233,7 +233,7 @@ pub async fn ensure_folder(cfg: &ImapConfig, folder: &str) -> Result<()> {
         futures::pin_mut!(stream);
         let mut found = false;
         while let Some(item) = stream.next().await {
-            if item.map_or(false, |n| n.name() == folder) {
+            if item.is_ok_and(|n| n.name() == folder) {
                 found = true;
             }
         }
@@ -290,7 +290,7 @@ pub async fn fetch_emails(cfg: &ImapConfig) -> Result<Vec<RawEmail>> {
 
     let mut emails: Vec<RawEmail> = messages
         .iter()
-        .filter_map(|fetch| parse_fetch(fetch))
+        .filter_map(parse_fetch)
         // Flagged \Deleted (moved away, waiting for a purge): not in this folder any more.
         .filter(|e: &RawEmail| !e.deleted)
         .collect();

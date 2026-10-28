@@ -64,7 +64,7 @@ pub fn mx_host(json: &str) -> Option<String> {
             continue;
         }
         let pref: u32 = pref.trim().parse().unwrap_or(u32::MAX);
-        if best.as_ref().map_or(true, |(p, _)| pref < *p) {
+        if best.as_ref().is_none_or(|(p, _)| pref < *p) {
             best = Some((pref, host));
         }
     }

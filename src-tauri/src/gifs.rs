@@ -108,7 +108,7 @@ pub fn is_giphy_media_url(url: &str) -> bool {
     match reqwest::Url::parse(url) {
         Ok(u) => {
             u.scheme() == "https"
-                && u.host_str().map_or(false, |h| h == "giphy.com" || h.ends_with(".giphy.com"))
+                && u.host_str().is_some_and(|h| h == "giphy.com" || h.ends_with(".giphy.com"))
         }
         Err(_) => false,
     }

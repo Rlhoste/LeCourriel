@@ -82,7 +82,7 @@ pub fn parse_assist(text: &str, allowed_ids: &[String], mode: &str) -> Result<As
         }
     }
     let compose = raw.compose.map(|mut c| {
-        if c.reply_to_id.as_ref().map_or(false, |id| !allowed_ids.contains(id)) {
+        if c.reply_to_id.as_ref().is_some_and(|id| !allowed_ids.contains(id)) {
             c.reply_to_id = None;
         }
         c

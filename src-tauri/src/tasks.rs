@@ -109,6 +109,7 @@ impl Board {
         out
     }
 
+    #[cfg(test)]
     pub fn add(&mut self, title: String, project: Option<String>) -> u64 {
         self.add_dated(title, project, None)
     }

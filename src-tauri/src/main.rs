@@ -16,6 +16,9 @@
 
 // Prevents additional console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// Tauri commands take their arguments by name from the UI; Priority's variant names are
+// saved in caches and sent to the UI; `sort_by(|a, b| b.cmp(a))` reads clearer than `Reverse`.
+#![allow(clippy::too_many_arguments, clippy::enum_variant_names, clippy::module_inception, clippy::unnecessary_sort_by)]
 
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
@@ -987,7 +990,7 @@ fn set_project_in_memory(shared: &SharedState, uids: &[u64], project: Option<&st
         }
     }
     tasks::Board::update(|b| {
-        for t in b.tasks.iter_mut().filter(|t| t.source_uid.map_or(false, |u| uids.contains(&u))) {
+        for t in b.tasks.iter_mut().filter(|t| t.source_uid.is_some_and(|u| uids.contains(&u))) {
             t.project = project.clone();
         }
     });

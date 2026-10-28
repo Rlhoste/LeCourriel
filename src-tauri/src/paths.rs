@@ -62,10 +62,16 @@ pub fn init_data_dir() -> std::io::Result<PathBuf> {
     Ok(dir)
 }
 
-/// Full path of a data file. Before `init_data_dir` (unit tests), relative to the current directory.
+/// Full path of a data file. Before `init_data_dir`, relative to the current directory
+/// (in unit tests, to a temp folder for the run, so they never write into the source tree).
 pub fn file(name: &str) -> PathBuf {
     match DATA_DIR.get() {
         Some(dir) => dir.join(name),
+        None if cfg!(test) => {
+            let dir = std::env::temp_dir().join(format!("courriel-test-data-{}", std::process::id()));
+            let _ = std::fs::create_dir_all(&dir);
+            dir.join(name)
+        }
         None => PathBuf::from(name),
     }
 }

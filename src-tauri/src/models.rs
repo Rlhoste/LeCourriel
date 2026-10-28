@@ -37,37 +37,6 @@ impl Priority {
     }
 }
 
-/// Project urgency level.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ProjectUrgency {
-    High,
-    Normal,
-}
-
-impl ProjectUrgency {
-    pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
-            "high" => ProjectUrgency::High,
-            _ => ProjectUrgency::Normal,
-        }
-    }
-
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            ProjectUrgency::High => "high",
-            ProjectUrgency::Normal => "normal",
-        }
-    }
-}
-
-/// A user-defined project for grouping emails.
-#[derive(Debug, Clone)]
-pub struct Project {
-    pub name: String,
-    pub description: String,
-    pub urgency: ProjectUrgency,
-}
-
 /// An email's id in the app: its account's position above bit 32, its IMAP UID below, so
 /// emails of two accounts never share an id. The first account's ids are its UIDs (older
 /// caches, tasks and dismissals stay valid). Stays below 2^53 for the UI's JavaScript numbers.

@@ -1,6 +1,5 @@
 use anyhow::Result;
 use chrono::{Local, NaiveDate, Utc};
-use html2text;
 use std::sync::{Arc, Mutex};
 use tauri::AppHandle;
 use tauri::Emitter;
@@ -842,7 +841,7 @@ pub fn choose_folders(list: &[(String, Vec<&'static str>)]) -> SpecialFolders {
         // Also as the last path segment: "INBOX.Junk", "[Gmail]/Spam"…
         for c in candidates {
             if let Some((n, _)) = list.iter().find(|(n, _)| {
-                n.rsplit(|ch| ch == '/' || ch == '.').next().map_or(false, |last| last.eq_ignore_ascii_case(c))
+                n.rsplit(['/', '.']).next().is_some_and(|last| last.eq_ignore_ascii_case(c))
             }) {
                 return Some(n.clone());
             }
