@@ -31,10 +31,7 @@ pub async fn connect(cfg: &ImapConfig) -> Result<ImapSession> {
         .await
         .context("TCP connection to IMAP server failed")?;
 
-    let tls_stream = tls
-        .connect(&cfg.host, tcp)
-        .await
-        .context("TLS handshake with IMAP server failed")?;
+    let tls_stream = tls.connect(&cfg.host, tcp).await.context("TLS handshake with IMAP server failed")?;
 
     let client = async_imap::Client::new(tls_stream);
 
@@ -49,10 +46,8 @@ pub async fn connect(cfg: &ImapConfig) -> Result<ImapSession> {
 /// messages the folder holds.
 pub async fn check_connection(cfg: &ImapConfig) -> Result<u32> {
     let mut session = connect(cfg).await?;
-    let mailbox = session
-        .select(&cfg.mailbox)
-        .await
-        .with_context(|| format!("Folder \"{}\" not found", cfg.mailbox))?;
+    let mailbox =
+        session.select(&cfg.mailbox).await.with_context(|| format!("Folder \"{}\" not found", cfg.mailbox))?;
     session.logout().await.ok();
     Ok(mailbox.exists)
 }
@@ -60,10 +55,7 @@ pub async fn check_connection(cfg: &ImapConfig) -> Result<u32> {
 /// Move one message (by real UID) from the configured mailbox to `folder` (Trash, Junk…).
 pub async fn move_message(cfg: &ImapConfig, uid: u32, folder: &str) -> Result<()> {
     let mut session = connect(cfg).await?;
-    session
-        .select(&cfg.mailbox)
-        .await
-        .context("IMAP SELECT mailbox failed")?;
+    session.select(&cfg.mailbox).await.context("IMAP SELECT mailbox failed")?;
 
     let uid_set = uid.to_string();
     if let Err(e) = session.uid_mv(&uid_set, folder).await {
@@ -74,10 +66,8 @@ pub async fn move_message(cfg: &ImapConfig, uid: u32, folder: &str) -> Result<()
             .await
             .with_context(|| format!("Could not move the email to {} (MOVE: {})", folder, e))?;
         {
-            let stream = session
-                .uid_store(&uid_set, "+FLAGS (\\Deleted)")
-                .await
-                .context("IMAP STORE \\Deleted failed")?;
+            let stream =
+                session.uid_store(&uid_set, "+FLAGS (\\Deleted)").await.context("IMAP STORE \\Deleted failed")?;
             futures::pin_mut!(stream);
             while stream.next().await.is_some() {}
         }
@@ -103,10 +93,7 @@ pub async fn move_message(cfg: &ImapConfig, uid: u32, folder: &str) -> Result<()
 /// Set or clear the \Seen flag on one message (by real UID) in the configured mailbox.
 pub async fn set_seen(cfg: &ImapConfig, uid: u32, seen: bool) -> Result<()> {
     let mut session = connect(cfg).await?;
-    session
-        .select(&cfg.mailbox)
-        .await
-        .context("IMAP SELECT mailbox failed")?;
+    session.select(&cfg.mailbox).await.context("IMAP SELECT mailbox failed")?;
     {
         let stream = session
             .uid_store(uid.to_string(), if seen { "+FLAGS (\\Seen)" } else { "-FLAGS (\\Seen)" })
@@ -122,15 +109,9 @@ pub async fn set_seen(cfg: &ImapConfig, uid: u32, seen: bool) -> Result<()> {
 /// The exact original message (RFC 822 bytes) of one inbox email, without marking it read.
 pub async fn fetch_raw(cfg: &ImapConfig, uid: u32) -> Result<Vec<u8>> {
     let mut session = connect(cfg).await?;
-    session
-        .select(&cfg.mailbox)
-        .await
-        .context("IMAP SELECT mailbox failed")?;
+    session.select(&cfg.mailbox).await.context("IMAP SELECT mailbox failed")?;
     let raw = {
-        let stream = session
-            .uid_fetch(uid.to_string(), "BODY.PEEK[]")
-            .await
-            .context("IMAP FETCH failed")?;
+        let stream = session.uid_fetch(uid.to_string(), "BODY.PEEK[]").await.context("IMAP FETCH failed")?;
         futures::pin_mut!(stream);
         let mut raw = None;
         while let Some(item) = stream.next().await {
@@ -180,7 +161,11 @@ pub fn search_criteria(terms: &[String], since: Option<chrono::NaiveDate>) -> St
         parts.push("ALL".into());
     }
     let criteria = parts.join(" ");
-    if criteria.is_ascii() { criteria } else { format!("CHARSET UTF-8 {}", criteria) }
+    if criteria.is_ascii() {
+        criteria
+    } else {
+        format!("CHARSET UTF-8 {}", criteria)
+    }
 }
 
 /// Search the whole mailbox on the server (not just the cached emails).
@@ -192,25 +177,15 @@ pub async fn search_server(
     limit: usize,
 ) -> Result<Vec<RawEmail>> {
     let mut session = connect(cfg).await?;
-    session
-        .select(&cfg.mailbox)
-        .await
-        .context("IMAP SELECT mailbox failed")?;
-    let mut uids: Vec<u32> = session
-        .uid_search(search_criteria(terms, since))
-        .await
-        .context("IMAP SEARCH failed")?
-        .into_iter()
-        .collect();
+    session.select(&cfg.mailbox).await.context("IMAP SELECT mailbox failed")?;
+    let mut uids: Vec<u32> =
+        session.uid_search(search_criteria(terms, since)).await.context("IMAP SEARCH failed")?.into_iter().collect();
     uids.sort_unstable_by(|a, b| b.cmp(a));
     uids.truncate(limit);
     let mut emails = Vec::new();
     if !uids.is_empty() {
         let set = uids.iter().map(|u| u.to_string()).collect::<Vec<_>>().join(",");
-        let stream = session
-            .uid_fetch(&set, "(UID FLAGS BODY.PEEK[])")
-            .await
-            .context("IMAP FETCH failed")?;
+        let stream = session.uid_fetch(&set, "(UID FLAGS BODY.PEEK[])").await.context("IMAP FETCH failed")?;
         futures::pin_mut!(stream);
         while let Some(item) = stream.next().await {
             if let Some(email) = item.ok().as_ref().and_then(parse_fetch) {
@@ -251,10 +226,7 @@ pub async fn ensure_folder(cfg: &ImapConfig, folder: &str) -> Result<()> {
 pub async fn fetch_emails(cfg: &ImapConfig) -> Result<Vec<RawEmail>> {
     let mut session = connect(cfg).await?;
 
-    let mailbox = session
-        .select(&cfg.mailbox)
-        .await
-        .context("IMAP SELECT mailbox failed")?;
+    let mailbox = session.select(&cfg.mailbox).await.context("IMAP SELECT mailbox failed")?;
 
     let total = mailbox.exists;
     if total == 0 {
@@ -262,11 +234,7 @@ pub async fn fetch_emails(cfg: &ImapConfig) -> Result<Vec<RawEmail>> {
         return Ok(vec![]);
     }
 
-    let start = if total > cfg.fetch_count {
-        total - cfg.fetch_count + 1
-    } else {
-        1
-    };
+    let start = if total > cfg.fetch_count { total - cfg.fetch_count + 1 } else { 1 };
     let seq_set = format!("{}:{}", start, total);
 
     info!("Fetching messages {} of total {}", seq_set, total);
@@ -315,21 +283,9 @@ fn parse_fetch(fetch: &Fetch) -> Option<RawEmail> {
     let seen = fetch.flags().any(|f| matches!(f, async_imap::types::Flag::Seen));
     let deleted = fetch.flags().any(|f| matches!(f, async_imap::types::Flag::Deleted));
 
-    let subject = parsed
-        .headers
-        .get_first_value("Subject")
-        .unwrap_or_default()
-        .trim()
-        .to_string();
+    let subject = parsed.headers.get_first_value("Subject").unwrap_or_default().trim().to_string();
 
-    let header = |name: &str| {
-        parsed
-            .headers
-            .get_first_value(name)
-            .unwrap_or_default()
-            .trim()
-            .to_string()
-    };
+    let header = |name: &str| parsed.headers.get_first_value(name).unwrap_or_default().trim().to_string();
     let from = header("From");
     let to = header("To");
     let cc = header("Cc");
@@ -339,16 +295,15 @@ fn parse_fetch(fetch: &Fetch) -> Option<RawEmail> {
     let references = format!("{} {}", header("In-Reply-To"), header("References")).trim().to_string();
 
     let date_str = parsed.headers.get_first_value("Date").unwrap_or_default();
-    let date: Option<DateTime<Utc>> = mailparse::dateparse(&date_str)
-        .ok()
-        .and_then(|ts| DateTime::from_timestamp(ts, 0));
+    let date: Option<DateTime<Utc>> =
+        mailparse::dateparse(&date_str).ok().and_then(|ts| DateTime::from_timestamp(ts, 0));
 
     let (body_text, body_html) = extract_bodies(&parsed);
 
     debug!("Parsed email uid={} subject={:?}", uid, subject);
 
     Some(RawEmail {
-        uid: uid.into(),   // the caller adds the account (`mail_id`)
+        uid: uid.into(), // the caller adds the account (`mail_id`)
         subject,
         from,
         to,
@@ -401,11 +356,8 @@ fn embed_inline_images(mut html: String, mut inline: Vec<(String, String)>) -> S
 /// Windows-1252 instead of mailparse's lossy US-ASCII default.
 pub(crate) fn decode_text_body(mail: &mailparse::ParsedMail) -> Result<String, mailparse::MailParseError> {
     let raw = mail.get_body_raw()?;
-    if let Some(encoding) = mail
-        .ctype
-        .params
-        .get("charset")
-        .and_then(|label| encoding_rs::Encoding::for_label(label.trim().as_bytes()))
+    if let Some(encoding) =
+        mail.ctype.params.get("charset").and_then(|label| encoding_rs::Encoding::for_label(label.trim().as_bytes()))
     {
         let (text, _, had_errors) = encoding.decode(&raw);
         if !had_errors {

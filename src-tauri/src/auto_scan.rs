@@ -96,7 +96,7 @@ fn evolution_accounts() -> Vec<FoundAccountDto> {
             }
         }
     }
-    files.sort();   // a folder lists its files in no order of its own
+    files.sort(); // a folder lists its files in no order of its own
     parse_evolution(&files)
 }
 
@@ -159,7 +159,7 @@ pub fn profile_dirs(profiles_ini: &str, root: &Path) -> Vec<PathBuf> {
         if line.starts_with('[') {
             let section = line.trim_start_matches('[').split(']').next().unwrap_or("");
             in_profile = section.as_bytes().get(..7).is_some_and(|b| b.eq_ignore_ascii_case(b"profile"));
-            relative = true;   // a section that says nothing writes a relative path
+            relative = true; // a section that says nothing writes a relative path
             continue;
         }
         if !in_profile {
@@ -197,10 +197,8 @@ pub fn parse_prefs(prefs_js: &str, client: &str) -> Vec<FoundAccountDto> {
         if stype != "imap" && stype != "pop3" {
             continue;
         }
-        let identity = list(&prefs, &format!("mail.account.{account}.identities"))
-            .into_iter()
-            .next()
-            .unwrap_or_default();
+        let identity =
+            list(&prefs, &format!("mail.account.{account}.identities")).into_iter().next().unwrap_or_default();
         let email = text(&prefs, &format!("mail.identity.{identity}.useremail"));
         if email.is_empty() {
             continue;
@@ -229,7 +227,8 @@ pub fn parse_prefs(prefs_js: &str, client: &str) -> Vec<FoundAccountDto> {
         if let Some(smtp) = smtp_server(&prefs, &identity) {
             let host = text(&prefs, &format!("mail.smtpserver.{smtp}.hostname"));
             let socket = socket_name(number(&prefs, &format!("mail.smtpserver.{smtp}.try_ssl")));
-            let port = number(&prefs, &format!("mail.smtpserver.{smtp}.port")).map(|p| p.to_string()).unwrap_or_default();
+            let port =
+                number(&prefs, &format!("mail.smtpserver.{smtp}.port")).map(|p| p.to_string()).unwrap_or_default();
             let user = or_else(text(&prefs, &format!("mail.smtpserver.{smtp}.username")), &email);
             match usable_port("smtp", &socket, &port) {
                 Ok(port) => found.smtp = Some(ServerDto { host, port, user }),
@@ -267,10 +266,8 @@ fn account_order(prefs: &Prefs) -> Vec<String> {
         .map(|(account, _)| account.to_string())
         .collect();
     known.sort_by_key(|a| (a.parse::<u32>().unwrap_or(u32::MAX), a.clone()));
-    let mut out: Vec<String> = list(prefs, "mail.accountmanager.accounts")
-        .into_iter()
-        .filter(|a| known.contains(a))
-        .collect();
+    let mut out: Vec<String> =
+        list(prefs, "mail.accountmanager.accounts").into_iter().filter(|a| known.contains(a)).collect();
     let rest: Vec<String> = known.into_iter().filter(|a| !out.contains(a)).collect();
     out.extend(rest);
     out
@@ -380,16 +377,16 @@ fn number(prefs: &Prefs, key: &str) -> Option<u32> {
 
 /// A comma-separated list of keys.
 fn list(prefs: &Prefs, key: &str) -> Vec<String> {
-    text(prefs, key)
-        .split(',')
-        .map(|s| s.trim().to_lowercase())
-        .filter(|s| !s.is_empty())
-        .collect()
+    text(prefs, key).split(',').map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()).collect()
 }
 
 /// What a profile left blank, which for a login means the email address.
 fn or_else(value: String, fallback: &str) -> String {
-    if value.is_empty() { fallback.to_string() } else { value }
+    if value.is_empty() {
+        fallback.to_string()
+    } else {
+        value
+    }
 }
 
 // ── Classic Outlook (registry) ────────────────────────────────────────────────
@@ -402,7 +399,8 @@ pub fn parse_outlook_reg(output: &str) -> Vec<FoundAccountDto> {
     for key in reg_blocks(output) {
         let account = reg_text(&key, "account name");
         // An account with no address of its own is named by one, when it holds one.
-        let email = or_else(reg_text(&key, "email"), &if account.contains('@') { account.clone() } else { String::new() });
+        let email =
+            or_else(reg_text(&key, "email"), &if account.contains('@') { account.clone() } else { String::new() });
         if email.is_empty() {
             continue;
         }
@@ -426,7 +424,9 @@ pub fn parse_outlook_reg(output: &str) -> Vec<FoundAccountDto> {
         if !pop3 {
             let socket = if reg_number(&key, "imap use ssl").unwrap_or(0) != 0 { "SSL" } else { "plain" };
             match usable_port("imap", socket, &reg_port(&key, "imap port")) {
-                Ok(port) => found.imap = Some(ServerDto { host, port, user: or_else(reg_text(&key, "imap user"), &email) }),
+                Ok(port) => {
+                    found.imap = Some(ServerDto { host, port, user: or_else(reg_text(&key, "imap user"), &email) })
+                }
                 Err(why) => found.imap_issue = why.to_string(),
             }
         }
@@ -443,7 +443,10 @@ pub fn parse_outlook_reg(output: &str) -> Vec<FoundAccountDto> {
                 "plain"
             };
             match usable_port("smtp", socket, &reg_port(&key, "smtp port")) {
-                Ok(port) => found.smtp = Some(ServerDto { host: smtp_host, port, user: or_else(reg_text(&key, "smtp user"), &email) }),
+                Ok(port) => {
+                    found.smtp =
+                        Some(ServerDto { host: smtp_host, port, user: or_else(reg_text(&key, "smtp user"), &email) })
+                }
                 Err(why) => found.smtp_issue = why.to_string(),
             }
         }
@@ -477,7 +480,7 @@ fn reg_value(line: &str) -> Option<(String, String, String)> {
     let (name, rest) = split_gap(line.trim_start())?;
     let (kind, data) = match split_gap(rest) {
         Some((kind, data)) => (kind, data),
-        None => (rest.trim(), ""),   // a value with no data at all
+        None => (rest.trim(), ""), // a value with no data at all
     };
     let kind = kind.to_uppercase();
     if name.is_empty() || !kind.starts_with("REG_") {
@@ -516,12 +519,7 @@ fn utf16_hex(hex: &str) -> String {
         }
         i += 4;
     }
-    String::from_utf16_lossy(&units)
-        .split('\u{0}')
-        .next()
-        .unwrap_or_default()
-        .trim()
-        .to_string()
+    String::from_utf16_lossy(&units).split('\u{0}').next().unwrap_or_default().trim().to_string()
 }
 
 /// A REG_DWORD value: `reg query` writes it as `0x3db`.
@@ -544,8 +542,7 @@ fn reg_port(key: &RegKey, name: &str) -> String {
 /// itself, the identity it names and the transport it sends through. `files` is one entry
 /// per file: its UID (its name without ".source") and its content.
 pub fn parse_evolution(files: &[(String, String)]) -> Vec<FoundAccountDto> {
-    let sources: Vec<(String, Sections)> =
-        files.iter().map(|(uid, content)| (uid.clone(), keyfile(content))).collect();
+    let sources: Vec<(String, Sections)> = files.iter().map(|(uid, content)| (uid.clone(), keyfile(content))).collect();
     let mut out: Vec<FoundAccountDto> = Vec::new();
     for (uid, source) in &sources {
         let backend = get(source, "mail account", "backendname").to_lowercase();
@@ -621,8 +618,7 @@ fn keyfile(content: &str) -> Sections {
             continue;
         }
         if let Some((key, value)) = line.split_once('=') {
-            out.get_mut(&section).unwrap()
-                .insert(key.trim().to_lowercase(), value.trim().to_string());
+            out.get_mut(&section).unwrap().insert(key.trim().to_lowercase(), value.trim().to_string());
         }
     }
     out
@@ -637,14 +633,19 @@ fn get(source: &Sections, section: &str, key: &str) -> String {
 /// children holding `section` — a file of an older version sometimes writes no link.
 fn linked<'a>(sources: &'a [(String, Sections)], uid: &str, parent: &str, section: &str) -> Option<&'a Sections> {
     if !uid.is_empty() {
-        if let Some((_, source)) = sources.iter().find(|(id, s)| id.eq_ignore_ascii_case(uid) && s.contains_key(section)) {
+        if let Some((_, source)) =
+            sources.iter().find(|(id, s)| id.eq_ignore_ascii_case(uid) && s.contains_key(section))
+        {
             return Some(source);
         }
     }
-    sources.iter()
-        .find(|(id, s)| !id.eq_ignore_ascii_case(parent)
-            && get(s, "data source", "parent").eq_ignore_ascii_case(parent)
-            && s.contains_key(section))
+    sources
+        .iter()
+        .find(|(id, s)| {
+            !id.eq_ignore_ascii_case(parent)
+                && get(s, "data source", "parent").eq_ignore_ascii_case(parent)
+                && s.contains_key(section)
+        })
         .map(|(_, s)| s)
 }
 
@@ -653,8 +654,14 @@ fn linked<'a>(sources: &'a [(String, Sections)], uid: &str, parent: &str, sectio
 /// port", so anything holding "starttls" is STARTTLS and anything holding "ssl" is SSL.
 fn security(method: &str) -> String {
     let method = method.to_lowercase();
-    if method.contains("starttls") { "STARTTLS" } else if method.contains("ssl") { "SSL" } else { "plain" }
-        .to_string()
+    if method.contains("starttls") {
+        "STARTTLS"
+    } else if method.contains("ssl") {
+        "SSL"
+    } else {
+        "plain"
+    }
+    .to_string()
 }
 
 /// A login this app cannot fill with a password: Evolution keeps the token in its keyring.

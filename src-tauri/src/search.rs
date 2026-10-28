@@ -78,12 +78,80 @@ fn normalize_char(c: char) -> char {
 
 /// Words that carry no meaning for search (natural-language requests are full of them).
 const STOPWORDS: &[&str] = &[
-    "le", "la", "les", "de", "des", "du", "un", "une", "et", "ou", "a", "au", "aux", "en", "pour", "par",
-    "sur", "avec", "dans", "que", "qui", "quoi", "mes", "mon", "ma", "me", "moi", "ce", "ces", "cet",
-    "cette", "est", "sont", "il", "elle", "on", "nous", "vous", "tous", "tout", "toutes",
-    "mail", "mails", "email", "emails", "e-mail", "e-mails", "courriel", "courriels", "message", "messages",
-    "the", "an", "and", "or", "of", "to", "for", "from", "in", "on", "with", "my", "me", "all", "about",
-    "is", "are", "what", "which", "that", "this", "these", "please",
+    "le",
+    "la",
+    "les",
+    "de",
+    "des",
+    "du",
+    "un",
+    "une",
+    "et",
+    "ou",
+    "a",
+    "au",
+    "aux",
+    "en",
+    "pour",
+    "par",
+    "sur",
+    "avec",
+    "dans",
+    "que",
+    "qui",
+    "quoi",
+    "mes",
+    "mon",
+    "ma",
+    "me",
+    "moi",
+    "ce",
+    "ces",
+    "cet",
+    "cette",
+    "est",
+    "sont",
+    "il",
+    "elle",
+    "on",
+    "nous",
+    "vous",
+    "tous",
+    "tout",
+    "toutes",
+    "mail",
+    "mails",
+    "email",
+    "emails",
+    "e-mail",
+    "e-mails",
+    "courriel",
+    "courriels",
+    "message",
+    "messages",
+    "the",
+    "an",
+    "and",
+    "or",
+    "of",
+    "to",
+    "for",
+    "from",
+    "in",
+    "on",
+    "with",
+    "my",
+    "me",
+    "all",
+    "about",
+    "is",
+    "are",
+    "what",
+    "which",
+    "that",
+    "this",
+    "these",
+    "please",
 ];
 
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -98,9 +166,7 @@ pub struct Filters {
 }
 
 fn parse_date(s: &str) -> Option<NaiveDate> {
-    NaiveDate::parse_from_str(s, "%Y-%m-%d")
-        .or_else(|_| NaiveDate::parse_from_str(s, "%d/%m/%Y"))
-        .ok()
+    NaiveDate::parse_from_str(s, "%Y-%m-%d").or_else(|_| NaiveDate::parse_from_str(s, "%d/%m/%Y")).ok()
 }
 
 /// Split a query into search terms and filters. Quoted text is one term.
@@ -151,12 +217,30 @@ pub fn parse_query(q: &str) -> (Vec<String>, Filters) {
             let value = value.trim();
             if !value.is_empty() {
                 let handled = match key {
-                    "de" | "from" => { filters.from.push(value.to_string()); true }
-                    "a" | "to" => { filters.to.push(value.to_string()); true }
-                    "projet" | "project" => { filters.project = Some(value.to_string()); true }
-                    "avant" | "before" => { filters.before = parse_date(value); filters.before.is_some() }
-                    "apres" | "after" => { filters.after = parse_date(value); filters.after.is_some() }
-                    "dossier" | "folder" => { filters.folder = Folder::parse(value); filters.folder.is_some() }
+                    "de" | "from" => {
+                        filters.from.push(value.to_string());
+                        true
+                    }
+                    "a" | "to" => {
+                        filters.to.push(value.to_string());
+                        true
+                    }
+                    "projet" | "project" => {
+                        filters.project = Some(value.to_string());
+                        true
+                    }
+                    "avant" | "before" => {
+                        filters.before = parse_date(value);
+                        filters.before.is_some()
+                    }
+                    "apres" | "after" => {
+                        filters.after = parse_date(value);
+                        filters.after.is_some()
+                    }
+                    "dossier" | "folder" => {
+                        filters.folder = Folder::parse(value);
+                        filters.folder.is_some()
+                    }
                     _ => false,
                 };
                 if handled {
@@ -206,8 +290,7 @@ fn fields(card: &EmailCard) -> Vec<Field> {
 fn term_weight(field: &str, term: &str) -> f32 {
     let mut best = 0.0f32;
     for (pos, _) in field.match_indices(term) {
-        let at_word_start = pos == 0
-            || !field[..pos].chars().next_back().is_some_and(|c| c.is_alphanumeric());
+        let at_word_start = pos == 0 || !field[..pos].chars().next_back().is_some_and(|c| c.is_alphanumeric());
         best = best.max(if at_word_start { 1.0 } else { 0.5 });
         if best == 1.0 {
             break;
@@ -256,7 +339,8 @@ fn passes(folder: Folder, card: &EmailCard, f: &Filters) -> bool {
             return false;
         }
     }
-    let date = (card.date_ts > 0).then(|| Utc.timestamp_opt(card.date_ts, 0).single()).flatten().map(|d| d.date_naive());
+    let date =
+        (card.date_ts > 0).then(|| Utc.timestamp_opt(card.date_ts, 0).single()).flatten().map(|d| d.date_naive());
     if let Some(before) = f.before {
         if date.is_none_or(|d| d >= before) {
             return false;
@@ -343,9 +427,7 @@ pub fn search_local(index: &[(Folder, EmailCard)], query: &str, limit: usize) ->
         .collect();
     // Emails matching more of the words first, then the best score, then the most recent.
     hits.sort_by(|a, b| {
-        b.0.cmp(&a.0)
-            .then(b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal))
-            .then(b.2.cmp(&a.2))
+        b.0.cmp(&a.0).then(b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)).then(b.2.cmp(&a.2))
     });
     hits.into_iter().take(limit).map(|(_, _, _, h)| h).collect()
 }

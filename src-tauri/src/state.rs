@@ -1,6 +1,6 @@
+use crate::config::Config;
 use crate::models::EmailCard;
 use crate::search::Folder;
-use crate::config::Config;
 use std::sync::Arc;
 
 pub struct AppState {

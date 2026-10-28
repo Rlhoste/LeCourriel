@@ -79,18 +79,21 @@ pub fn parse_giphy(json: &str) -> Result<Vec<GifDto>> {
 
 /// Search GIPHY; an empty query returns trending GIFs.
 pub async fn search(api_key: &str, query: &str) -> Result<Vec<GifDto>> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .build()?;
+    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(15)).build()?;
     let query = query.trim();
     let req = if query.is_empty() {
-        client
-            .get("https://api.giphy.com/v1/gifs/trending")
-            .query(&[("api_key", api_key), ("limit", "24"), ("rating", "g")])
+        client.get("https://api.giphy.com/v1/gifs/trending").query(&[
+            ("api_key", api_key),
+            ("limit", "24"),
+            ("rating", "g"),
+        ])
     } else {
-        client
-            .get("https://api.giphy.com/v1/gifs/search")
-            .query(&[("api_key", api_key), ("q", query), ("limit", "24"), ("rating", "g")])
+        client.get("https://api.giphy.com/v1/gifs/search").query(&[
+            ("api_key", api_key),
+            ("q", query),
+            ("limit", "24"),
+            ("rating", "g"),
+        ])
     };
     let resp = req.send().await.context("Could not reach GIPHY")?;
     let status = resp.status();
@@ -106,10 +109,7 @@ pub async fn search(api_key: &str, query: &str) -> Result<Vec<GifDto>> {
 /// Whether a URL is on GIPHY's https media hosts.
 pub fn is_giphy_media_url(url: &str) -> bool {
     match reqwest::Url::parse(url) {
-        Ok(u) => {
-            u.scheme() == "https"
-                && u.host_str().is_some_and(|h| h == "giphy.com" || h.ends_with(".giphy.com"))
-        }
+        Ok(u) => u.scheme() == "https" && u.host_str().is_some_and(|h| h == "giphy.com" || h.ends_with(".giphy.com")),
         Err(_) => false,
     }
 }

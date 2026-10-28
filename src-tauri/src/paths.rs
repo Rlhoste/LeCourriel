@@ -35,7 +35,11 @@ pub fn platform_data_dir() -> Option<PathBuf> {
 }
 
 /// Pick the data directory (see the module docs). Pure apart from the existence check.
-pub fn choose_data_dir(env_override: Option<PathBuf>, cwd: Option<&Path>, platform: Option<PathBuf>) -> Option<PathBuf> {
+pub fn choose_data_dir(
+    env_override: Option<PathBuf>,
+    cwd: Option<&Path>,
+    platform: Option<PathBuf>,
+) -> Option<PathBuf> {
     if let Some(dir) = env_override.filter(|d| !d.as_os_str().is_empty()) {
         return Some(dir);
     }
@@ -50,13 +54,10 @@ pub fn choose_data_dir(env_override: Option<PathBuf>, cwd: Option<&Path>, platfo
 /// Choose the data directory and create it. Call once, at startup.
 pub fn init_data_dir() -> std::io::Result<PathBuf> {
     let cwd = std::env::current_dir().ok();
-    let dir = choose_data_dir(
-        std::env::var_os("COURRIEL_DATA_DIR").map(PathBuf::from),
-        cwd.as_deref(),
-        platform_data_dir(),
-    )
-    .or(cwd)
-    .ok_or_else(|| std::io::Error::other("no usable data directory"))?;
+    let dir =
+        choose_data_dir(std::env::var_os("COURRIEL_DATA_DIR").map(PathBuf::from), cwd.as_deref(), platform_data_dir())
+            .or(cwd)
+            .ok_or_else(|| std::io::Error::other("no usable data directory"))?;
     std::fs::create_dir_all(&dir)?;
     let _ = DATA_DIR.set(dir.clone());
     Ok(dir)

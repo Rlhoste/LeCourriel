@@ -367,10 +367,18 @@ pub fn prefs_from_config(cfg: &Config) -> Value {
 /// Apply synced settings onto the local config, keeping accounts, keys and the database URL.
 pub fn merge_prefs(cfg: &mut Config, prefs: &Value) {
     let user = &prefs["user"];
-    if let Some(v) = user["display_name"].as_str() { cfg.user.display_name = v.to_string(); }
-    if let Some(v) = user["font_scale"].as_f64() { cfg.user.font_scale = v as f32; }
-    if let Some(v) = user["theme"].as_str() { cfg.user.theme = v.to_string(); }
-    if let Some(v) = user["language"].as_str() { cfg.user.language = v.to_string(); }
+    if let Some(v) = user["display_name"].as_str() {
+        cfg.user.display_name = v.to_string();
+    }
+    if let Some(v) = user["font_scale"].as_f64() {
+        cfg.user.font_scale = v as f32;
+    }
+    if let Some(v) = user["theme"].as_str() {
+        cfg.user.theme = v.to_string();
+    }
+    if let Some(v) = user["language"].as_str() {
+        cfg.user.language = v.to_string();
+    }
     // The provider and model sync; keys and the server URL stay on each computer.
     if let Some(v) = prefs["ai_provider"].as_str().filter(|p| crate::config::AI_PROVIDERS.contains(p)) {
         cfg.ai.provider = v.to_string();
@@ -414,12 +422,16 @@ fn write_local(doc: Doc, data: &Value, updated_at: DateTime<Utc>) -> Result<()> 
 async fn push_doc(t: &Target, doc: Doc) -> Result<()> {
     let Some(data) = local_value(doc)? else { return Ok(()) };
     let updated_at = local_mtime(&doc.file()).unwrap_or_else(Utc::now);
-    rpc(t, "courriel_push", json!({
-        "p_mailbox": t.mailbox,
-        "p_doc": doc.name(),
-        "p_data": data,
-        "p_updated_at": updated_at.to_rfc3339(),
-    }))
+    rpc(
+        t,
+        "courriel_push",
+        json!({
+            "p_mailbox": t.mailbox,
+            "p_doc": doc.name(),
+            "p_data": data,
+            "p_updated_at": updated_at.to_rfc3339(),
+        }),
+    )
     .await
     .with_context(|| format!("Could not upload {}", doc.name()))?;
     Ok(())
@@ -482,10 +494,8 @@ pub async fn lookup_ai(message_ids: &[String]) -> HashMap<String, ClassifiedEmai
     }
     match rpc(&t, "courriel_lookup_insights", json!({ "p_mailbox": t.mailbox, "p_ids": message_ids })).await {
         Ok(Value::Object(map)) => {
-            let found: HashMap<String, ClassifiedEmail> = map
-                .into_iter()
-                .filter_map(|(id, v)| serde_json::from_value(v).ok().map(|c| (id, c)))
-                .collect();
+            let found: HashMap<String, ClassifiedEmail> =
+                map.into_iter().filter_map(|(id, v)| serde_json::from_value(v).ok().map(|c| (id, c))).collect();
             if !found.is_empty() {
                 info!("Reused {} AI result(s) from Supabase", found.len());
             }
@@ -505,10 +515,8 @@ pub async fn store_ai(results: &[(String, ClassifiedEmail)]) {
     if session().is_none() || results.is_empty() {
         return;
     }
-    let items: serde_json::Map<String, Value> = results
-        .iter()
-        .filter_map(|(id, c)| serde_json::to_value(c).ok().map(|v| (id.clone(), v)))
-        .collect();
+    let items: serde_json::Map<String, Value> =
+        results.iter().filter_map(|(id, c)| serde_json::to_value(c).ok().map(|v| (id.clone(), v))).collect();
     if let Err(e) = rpc(&t, "courriel_store_insights", json!({ "p_mailbox": t.mailbox, "p_items": items })).await {
         warn!("Saving AI results to Supabase failed: {:#}", e);
     }

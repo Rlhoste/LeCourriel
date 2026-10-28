@@ -12,12 +12,11 @@ use crate::config::SmtpConfig;
 pub async fn check_connection(cfg: &SmtpConfig) -> Result<()> {
     let creds = Credentials::new(cfg.username.clone(), cfg.password.clone());
     if cfg.port == 465 {
-        let transport: AsyncSmtpTransport<Tokio1Executor> =
-            AsyncSmtpTransport::<Tokio1Executor>::relay(&cfg.host)
-                .context("Failed to create SMTP transport")?
-                .port(cfg.port)
-                .credentials(creds)
-                .build();
+        let transport: AsyncSmtpTransport<Tokio1Executor> = AsyncSmtpTransport::<Tokio1Executor>::relay(&cfg.host)
+            .context("Failed to create SMTP transport")?
+            .port(cfg.port)
+            .credentials(creds)
+            .build();
         transport.test_connection().await.context("SMTP connection/auth failed")?;
     } else {
         let transport: AsyncSmtpTransport<Tokio1Executor> =
@@ -63,9 +62,15 @@ pub fn extract_inline_images(html: &str) -> (String, Vec<InlineImage>) {
         let quote = after_src.chars().next();
         let (q, value_start) = match quote {
             Some(c @ ('"' | '\'')) => (c, &after_src[1..]),
-            _ => { rest = after_src; continue; }
+            _ => {
+                rest = after_src;
+                continue;
+            }
         };
-        let Some(end) = value_start.find(q) else { rest = after_src; continue; };
+        let Some(end) = value_start.find(q) else {
+            rest = after_src;
+            continue;
+        };
         let value = &value_start[..end];
         let decoded = value
             .strip_prefix("data:")
@@ -111,10 +116,12 @@ fn parse_list(list: &str, field: &str) -> Result<Vec<Mailbox>> {
 /// Send an HTML message (with a plain-text alternative and inline images).
 /// Returns the raw RFC 822 bytes so a copy can be stored in the Sent folder.
 pub async fn send_message(cfg: &SmtpConfig, mail: &OutgoingMail) -> Result<Vec<u8>> {
-    let from_mailbox: Mailbox = cfg
-        .from_address
-        .parse()
-        .with_context(|| format!("Invalid sender address \"{}\": write it as Name <you@example.com> in Settings → Accounts", cfg.from_address))?;
+    let from_mailbox: Mailbox = cfg.from_address.parse().with_context(|| {
+        format!(
+            "Invalid sender address \"{}\": write it as Name <you@example.com> in Settings → Accounts",
+            cfg.from_address
+        )
+    })?;
 
     let to = parse_list(&mail.to, "To")?;
     let cc = parse_list(&mail.cc, "Cc")?;
@@ -125,18 +132,21 @@ pub async fn send_message(cfg: &SmtpConfig, mail: &OutgoingMail) -> Result<Vec<u
     info!("Sending email to {} recipient(s)", to.len() + cc.len() + bcc.len());
 
     let mut builder = Message::builder().from(from_mailbox).subject(mail.subject.clone());
-    for m in to { builder = builder.to(m); }
-    for m in cc { builder = builder.cc(m); }
-    for m in bcc { builder = builder.bcc(m); }
+    for m in to {
+        builder = builder.to(m);
+    }
+    for m in cc {
+        builder = builder.cc(m);
+    }
+    for m in bcc {
+        builder = builder.bcc(m);
+    }
     if let Some(id) = mail.in_reply_to.as_ref().filter(|id| !id.trim().is_empty()) {
         builder = builder.in_reply_to(id.trim().to_string()).references(id.trim().to_string());
     }
 
     let (html, images) = extract_inline_images(&mail.html);
-    let html_doc = format!(
-        "<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head><body>{}</body></html>",
-        html
-    );
+    let html_doc = format!("<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head><body>{}</body></html>", html);
     let text = html2text::from_read(mail.html.as_bytes(), 80);
 
     let mut related = MultiPart::related().singlepart(SinglePart::html(html_doc));
@@ -146,11 +156,7 @@ pub async fn send_message(cfg: &SmtpConfig, mail: &OutgoingMail) -> Result<Vec<u
         related = related.singlepart(Attachment::new_inline(img.cid).body(img.data, ct));
     }
     let email = builder
-        .multipart(
-            MultiPart::alternative()
-                .singlepart(SinglePart::plain(text))
-                .multipart(related),
-        )
+        .multipart(MultiPart::alternative().singlepart(SinglePart::plain(text)).multipart(related))
         .context("Failed to build email message")?;
 
     let creds = Credentials::new(cfg.username.clone(), cfg.password.clone());
@@ -171,10 +177,7 @@ pub async fn send_message(cfg: &SmtpConfig, mail: &OutgoingMail) -> Result<Vec<u
     };
 
     let raw = email.formatted();
-    transport
-        .send(email)
-        .await
-        .context("SMTP send failed")?;
+    transport.send(email).await.context("SMTP send failed")?;
 
     info!("Email sent successfully");
     Ok(raw)

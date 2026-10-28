@@ -140,12 +140,15 @@ pub async fn assist(
             c.id, c.date, c.from, c.to, c.subject, c.summary, c.body
         ));
     }
-    let text = crate::ai::complete(&cfg.ai, crate::ai::Request {
-        system: &system_prompt(&cfg.user_name(), lang),
-        user: &user,
-        max_tokens: 2000,
-        json: true,
-    })
+    let text = crate::ai::complete(
+        &cfg.ai,
+        crate::ai::Request {
+            system: &system_prompt(&cfg.user_name(), lang),
+            user: &user,
+            max_tokens: 2000,
+            json: true,
+        },
+    )
     .await?;
     let ids: Vec<String> = candidates.iter().map(|c| c.id.clone()).collect();
     parse_assist(&text, &ids, mode)

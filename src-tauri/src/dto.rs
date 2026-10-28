@@ -237,7 +237,13 @@ impl ConnError {
         let detail = parts.join(": ");
         let lower = detail.to_lowercase();
         let has = |words: &[&str]| words.iter().any(|w| lower.contains(w));
-        let kind = if has(&["authenticationfailed", "authentication failed", "(535)", "login failed", "invalid credentials"]) {
+        let kind = if has(&[
+            "authenticationfailed",
+            "authentication failed",
+            "(535)",
+            "login failed",
+            "invalid credentials",
+        ]) {
             "auth"
         } else if has(&["lookup address", "name or service not known", "no such host", "nodename nor servname"]) {
             "host"

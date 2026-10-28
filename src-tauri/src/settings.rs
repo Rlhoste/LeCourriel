@@ -1,6 +1,6 @@
 use anyhow::Result;
-use qrcode::QrCode;
 use qrcode::render::unicode;
+use qrcode::QrCode;
 
 use crate::config::{AccountConfig, Config, ImapConfig, SignatureConfig, SmtpConfig, UserConfig, AI_PROVIDERS};
 use crate::dto::{AccountDto, AiSettingsDto, SettingsDto};
@@ -21,23 +21,27 @@ pub fn config_to_dto(cfg: &Config) -> SettingsDto {
         giphy_key: cfg.gifs.giphy_api_key.clone(),
         supabase_url: cfg.supabase.as_ref().map(|s| s.url.clone()).unwrap_or_default(),
         supabase_anon_key: cfg.supabase.as_ref().map(|s| s.anon_key.clone()).unwrap_or_default(),
-        accounts: cfg.accounts.iter().map(|a| AccountDto {
-            label: a.name.clone(),
-            imap_host: a.imap.host.clone(),
-            imap_port: a.imap.port.to_string(),
-            imap_user: a.imap.username.clone(),
-            imap_pass: a.imap.password.clone(),
-            imap_mailbox: a.imap.mailbox.clone(),
-            imap_fetch: a.imap.fetch_count.to_string(),
-            smtp_host: a.smtp.host.clone(),
-            smtp_port: a.smtp.port.to_string(),
-            smtp_user: a.smtp.username.clone(),
-            smtp_pass: a.smtp.password.clone(),
-            smtp_from: a.smtp.from_address.clone(),
-            signature_file: a.signature.file.clone(),
-            signature_on_new: a.signature.on_new,
-            signature_on_reply: a.signature.on_reply,
-        }).collect(),
+        accounts: cfg
+            .accounts
+            .iter()
+            .map(|a| AccountDto {
+                label: a.name.clone(),
+                imap_host: a.imap.host.clone(),
+                imap_port: a.imap.port.to_string(),
+                imap_user: a.imap.username.clone(),
+                imap_pass: a.imap.password.clone(),
+                imap_mailbox: a.imap.mailbox.clone(),
+                imap_fetch: a.imap.fetch_count.to_string(),
+                smtp_host: a.smtp.host.clone(),
+                smtp_port: a.smtp.port.to_string(),
+                smtp_user: a.smtp.username.clone(),
+                smtp_pass: a.smtp.password.clone(),
+                smtp_from: a.smtp.from_address.clone(),
+                signature_file: a.signature.file.clone(),
+                signature_on_new: a.signature.on_new,
+                signature_on_reply: a.signature.on_reply,
+            })
+            .collect(),
     }
 }
 
@@ -52,7 +56,15 @@ pub fn save_config(
     notify_new_mail: Option<bool>,
 ) -> Result<()> {
     let cfg = apply_to_config(
-        Config::load()?, display_name, accounts, ai, giphy_key, font_scale, theme, language, notify_new_mail,
+        Config::load()?,
+        display_name,
+        accounts,
+        ai,
+        giphy_key,
+        font_scale,
+        theme,
+        language,
+        notify_new_mail,
     );
     crate::config::save_config(&cfg)
 }
@@ -70,7 +82,6 @@ pub fn apply_to_config(
     language: Option<&str>,
     notify_new_mail: Option<bool>,
 ) -> Config {
-
     cfg.user = UserConfig {
         // Not in Settings any more: keep the stored name (it may come from config.toml or the cloud).
         display_name: display_name.map(str::to_string).unwrap_or_else(|| cfg.user.display_name.clone()),
@@ -90,7 +101,9 @@ pub fn apply_to_config(
     }
     cfg.ai.model = ai.model.trim().to_string();
     cfg.ai.base_url = ai.base_url.trim().to_string();
-    cfg.ai.keys = ai.keys.iter()
+    cfg.ai.keys = ai
+        .keys
+        .iter()
         .map(|(p, k)| (p.clone(), k.trim().to_string()))
         .filter(|(p, k)| AI_PROVIDERS.contains(&p.as_str()) && !k.is_empty())
         .collect();
@@ -131,11 +144,17 @@ pub fn generate_qr(cfg: &Config) -> String {
     for (i, a) in cfg.accounts.iter().enumerate() {
         lines.push(format!(
             "account{} label={} imap={}:{}@{}:{}/{} smtp={}:{}@{}:{} from={}",
-            i, a.name,
-            a.imap.username, a.imap.password,
-            a.imap.host, a.imap.port, a.imap.mailbox,
-            a.smtp.username, a.smtp.password,
-            a.smtp.host, a.smtp.port,
+            i,
+            a.name,
+            a.imap.username,
+            a.imap.password,
+            a.imap.host,
+            a.imap.port,
+            a.imap.mailbox,
+            a.smtp.username,
+            a.smtp.password,
+            a.smtp.host,
+            a.smtp.port,
             a.smtp.from_address,
         ));
     }

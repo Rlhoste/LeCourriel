@@ -173,9 +173,7 @@ impl Board {
             if c.task.is_none() && c.priority != Priority::Task {
                 continue;
             }
-            if self.deleted_sources.contains(&c.uid)
-                || self.tasks.iter().any(|t| t.source_uid == Some(c.uid))
-            {
+            if self.deleted_sources.contains(&c.uid) || self.tasks.iter().any(|t| t.source_uid == Some(c.uid)) {
                 continue;
             }
             let verdict = dismissed.task_check.get(&c.uid).cloned();

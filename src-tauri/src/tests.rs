@@ -3,9 +3,9 @@
 #[cfg(test)]
 mod tests {
     use crate::config::*;
+    use crate::dto::AccountDto;
     use crate::models::*;
     use crate::settings::config_to_dto;
-    use crate::dto::AccountDto;
 
     // ── Config ────────────────────────────────────────────────────────────────
 
@@ -76,7 +76,7 @@ api_key = "k" model = "m" max_tokens = 100
         let restored: Config = toml::from_str(&serialized).unwrap();
         assert_eq!(restored.user.display_name, cfg.user.display_name);
         assert_eq!(restored.accounts[0].imap.host, cfg.accounts[0].imap.host);
-        assert_eq!(restored.ai.key(), "sk-test");   // [claude] was migrated into [ai]
+        assert_eq!(restored.ai.key(), "sk-test"); // [claude] was migrated into [ai]
         assert!(!serialized.contains("[claude]"), "the legacy section is not written back");
     }
 
@@ -84,24 +84,28 @@ api_key = "k" model = "m" max_tokens = 100
 
     #[test]
     fn test_priority_from_str() {
-        assert_eq!(Priority::from_str("urgent"),       Priority::Urgent);
-        assert_eq!(Priority::from_str("URGENT"),       Priority::Urgent);
-        assert_eq!(Priority::from_str("high_priority"),Priority::HighPriority);
-        assert_eq!(Priority::from_str("high"),         Priority::HighPriority);
-        assert_eq!(Priority::from_str("threat"),       Priority::Threat);
-        assert_eq!(Priority::from_str("task"),         Priority::Task);
-        assert_eq!(Priority::from_str("information"),  Priority::Information);
-        assert_eq!(Priority::from_str("info"),         Priority::Information);
-        assert_eq!(Priority::from_str("other"),        Priority::OtherPriority);
-        assert_eq!(Priority::from_str("garbage"),      Priority::OtherPriority);
-        assert_eq!(Priority::from_str(""),             Priority::OtherPriority);
+        assert_eq!(Priority::from_str("urgent"), Priority::Urgent);
+        assert_eq!(Priority::from_str("URGENT"), Priority::Urgent);
+        assert_eq!(Priority::from_str("high_priority"), Priority::HighPriority);
+        assert_eq!(Priority::from_str("high"), Priority::HighPriority);
+        assert_eq!(Priority::from_str("threat"), Priority::Threat);
+        assert_eq!(Priority::from_str("task"), Priority::Task);
+        assert_eq!(Priority::from_str("information"), Priority::Information);
+        assert_eq!(Priority::from_str("info"), Priority::Information);
+        assert_eq!(Priority::from_str("other"), Priority::OtherPriority);
+        assert_eq!(Priority::from_str("garbage"), Priority::OtherPriority);
+        assert_eq!(Priority::from_str(""), Priority::OtherPriority);
     }
 
     #[test]
     fn test_priority_as_str_roundtrip() {
         for p in [
-            Priority::Urgent, Priority::HighPriority, Priority::OtherPriority,
-            Priority::Information, Priority::Threat, Priority::Task,
+            Priority::Urgent,
+            Priority::HighPriority,
+            Priority::OtherPriority,
+            Priority::Information,
+            Priority::Threat,
+            Priority::Task,
         ] {
             assert_eq!(Priority::from_str(p.as_str()), p);
         }
@@ -192,7 +196,12 @@ api_key = "k" model = "m" max_tokens = 100
             subject: "Hello".to_string(),
             from_name: "Alice".to_string(),
             from_email: "alice@example.com".to_string(),
-            to: String::new(), cc: String::new(), reply_to: String::new(), bcc: String::new(), message_id: String::new(), references: String::new(),
+            to: String::new(),
+            cc: String::new(),
+            reply_to: String::new(),
+            bcc: String::new(),
+            message_id: String::new(),
+            references: String::new(),
             date_str: "10:30".to_string(),
             date_full: String::new(),
             date_ts: 0,
@@ -267,17 +276,17 @@ api_key = "k" model = "m" max_tokens = 100
 
     #[test]
     fn test_uid_dedup_logic() {
-        let cached = [make_test_card(100, Priority::Urgent),
+        let cached = [
+            make_test_card(100, Priority::Urgent),
             make_test_card(101, Priority::Information),
-            make_test_card(102, Priority::Task)];
+            make_test_card(102, Priority::Task),
+        ];
 
-        let cached_uids: std::collections::HashSet<u64> =
-            cached.iter().map(|c| c.uid).collect();
+        let cached_uids: std::collections::HashSet<u64> = cached.iter().map(|c| c.uid).collect();
 
         // Simulate raw emails from server: 101 and 102 already known, 103 is new
         let server_uids = [101u64, 102, 103];
-        let (known, new): (Vec<&u64>, Vec<&u64>) = server_uids.iter()
-            .partition(|uid| cached_uids.contains(uid));
+        let (known, new): (Vec<&u64>, Vec<&u64>) = server_uids.iter().partition(|uid| cached_uids.contains(uid));
 
         assert_eq!(known.len(), 2);
         assert_eq!(new.len(), 1);
@@ -288,17 +297,28 @@ api_key = "k" model = "m" max_tokens = 100
 
     fn make_test_config() -> Config {
         Config {
-            user: UserConfig { display_name: "Test".to_string(), font_scale: 1.0, theme: "midnight".to_string(), language: "en".to_string(), notify_new_mail: true },
+            user: UserConfig {
+                display_name: "Test".to_string(),
+                font_scale: 1.0,
+                theme: "midnight".to_string(),
+                language: "en".to_string(),
+                notify_new_mail: true,
+            },
             accounts: vec![AccountConfig {
                 name: "Work".to_string(),
                 imap: ImapConfig {
-                    host: "imap.example.com".to_string(), port: 993,
-                    username: "u".to_string(), password: "p".to_string(),
-                    mailbox: "INBOX".to_string(), fetch_count: 50,
+                    host: "imap.example.com".to_string(),
+                    port: 993,
+                    username: "u".to_string(),
+                    password: "p".to_string(),
+                    mailbox: "INBOX".to_string(),
+                    fetch_count: 50,
                 },
                 smtp: SmtpConfig {
-                    host: "smtp.example.com".to_string(), port: 587,
-                    username: "u".to_string(), password: "p".to_string(),
+                    host: "smtp.example.com".to_string(),
+                    port: 587,
+                    username: "u".to_string(),
+                    password: "p".to_string(),
                     from_address: "u@example.com".to_string(),
                 },
                 signature: SignatureConfig::default(),
@@ -323,7 +343,12 @@ api_key = "k" model = "m" max_tokens = 100
             subject: format!("Subject {}", uid),
             from_name: "Sender".to_string(),
             from_email: "sender@example.com".to_string(),
-            to: String::new(), cc: String::new(), reply_to: String::new(), bcc: String::new(), message_id: String::new(), references: String::new(),
+            to: String::new(),
+            cc: String::new(),
+            reply_to: String::new(),
+            bcc: String::new(),
+            message_id: String::new(),
+            references: String::new(),
             date_str: "Mon".to_string(),
             date_full: String::new(),
             date_ts: 0,
@@ -345,7 +370,7 @@ api_key = "k" model = "m" max_tokens = 100
         if let Some(lt) = from.find('<') {
             if let Some(gt) = from.find('>') {
                 let name = from[..lt].trim().trim_matches('"').to_string();
-                let email = from[lt+1..gt].trim().to_string();
+                let email = from[lt + 1..gt].trim().to_string();
                 let display = if name.is_empty() { email.clone() } else { name };
                 return (display, email);
             }
@@ -353,7 +378,9 @@ api_key = "k" model = "m" max_tokens = 100
         (from.to_string(), from.to_string())
     }
 
-    fn default_font_scale_val() -> f32 { 1.0 }
+    fn default_font_scale_val() -> f32 {
+        1.0
+    }
 
     // ── Task check / dismissals ───────────────────────────────────────────────
 
@@ -391,7 +418,6 @@ api_key = "k" model = "m" max_tokens = 100
         assert!(d.tasks.contains(&1));
         assert!(d.deadlines.contains(&2) && d.meetings.contains(&3));
     }
-
 
     // ── Task board ────────────────────────────────────────────────────────────
 
@@ -440,9 +466,12 @@ api_key = "k" model = "m" max_tokens = 100
         assert!(!b.needs_sync(&[card.clone()]));
 
         // A board saved before dates were kept: email tasks get their email's date.
-        let mut old: Board = serde_json::from_str(r#"{"next_id":2,"tasks":[
+        let mut old: Board = serde_json::from_str(
+            r#"{"next_id":2,"tasks":[
             {"id":1,"title":"Send the figures","status":"todo","source_uid":30},
-            {"id":2,"title":"By hand","status":"todo"}]}"#).unwrap();
+            {"id":2,"title":"By hand","status":"todo"}]}"#,
+        )
+        .unwrap();
         assert_eq!(old.tasks[0].created_ts, 0);
         assert!(old.needs_sync(&[card.clone()]));
         assert!(!old.sync_from_cards(&[card.clone()], &Dismissals::default()));
@@ -488,7 +517,6 @@ api_key = "k" model = "m" max_tokens = 100
         assert_eq!(Status::parse("nope"), None);
     }
 
-
     // ── Read state ────────────────────────────────────────────────────────────
 
     #[test]
@@ -503,7 +531,6 @@ api_key = "k" model = "m" max_tokens = 100
         let uids: Vec<u64> = out.iter().map(|c| c.uid).collect();
         assert_eq!(uids, vec![2, 3]);
     }
-
 
     // ── Overrides ─────────────────────────────────────────────────────────────
 
@@ -534,7 +561,6 @@ api_key = "k" model = "m" max_tokens = 100
         assert_eq!(back.projects.get(&2).map(String::as_str), Some(""));
     }
 
-
     // ── Outgoing mail ─────────────────────────────────────────────────────────
 
     #[test]
@@ -561,7 +587,6 @@ api_key = "k" model = "m" max_tokens = 100
         assert!(images.is_empty());
         assert_eq!(out, "plain <b>text</b>, src= nothing");
     }
-
 
     // ── GIFs ──────────────────────────────────────────────────────────────────
 
@@ -594,7 +619,6 @@ api_key = "k" model = "m" max_tokens = 100
         assert!(!is_giphy_media_url("file:///etc/passwd"));
     }
 
-
     // ── AI writing ────────────────────────────────────────────────────────────
 
     #[test]
@@ -604,7 +628,6 @@ api_key = "k" model = "m" max_tokens = 100
         assert_eq!(strip_fences("```\n<p>Hi</p>```"), "<p>Hi</p>");
         assert_eq!(strip_fences("  <p>Hi</p> "), "<p>Hi</p>");
     }
-
 
     // ── Theme ─────────────────────────────────────────────────────────────────
 
@@ -626,7 +649,6 @@ max_tokens = 10
         assert_eq!(back.user.theme, "aero");
         assert_eq!(config_to_dto(&back).theme, "aero");
     }
-
 
     // ── Overview week strip ───────────────────────────────────────────────────
 
@@ -662,14 +684,13 @@ max_tokens = 10
         assert_eq!(nums, vec![29, 30, 31, 1, 2, 3, 4]);
     }
 
-
     // ── Language ──────────────────────────────────────────────────────────────
 
     #[test]
     fn test_i18n_dates() {
         use crate::i18n::{day_month, full_datetime, short_day, Lang};
         use chrono::NaiveDate;
-        let d = NaiveDate::from_ymd_opt(2026, 10, 20).unwrap();   // a Tuesday
+        let d = NaiveDate::from_ymd_opt(2026, 10, 20).unwrap(); // a Tuesday
         let dt = d.and_hms_opt(9, 5, 0).unwrap();
         assert_eq!(short_day(&d, Lang::En), "Tue");
         assert_eq!(short_day(&d, Lang::Fr), "mar.");
@@ -703,7 +724,8 @@ max_tokens = 10
     fn test_language_default_and_roundtrip() {
         let mut cfg: Config = toml::from_str(
             "[user]\ndisplay_name = \"A\"\n\n[claude]\napi_key = \"k\"\nmodel = \"m\"\nmax_tokens = 10\n",
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(cfg.user.language, "en");
         cfg.user.language = "fr".into();
         let back: Config = toml::from_str(&toml::to_string_pretty(&cfg).unwrap()).unwrap();
@@ -711,24 +733,35 @@ max_tokens = 10
         assert_eq!(config_to_dto(&back).language, "fr");
     }
 
-
     // ── Cloud sync (Supabase) ───────────────────────────────────────────────────────
 
     fn config_with_secrets() -> Config {
         let mut cfg = make_test_config();
         cfg.accounts = vec![AccountConfig {
             name: "Main".into(),
-            imap: ImapConfig { host: "imap.example.com".into(), port: 993, username: "remi".into(),
-                password: "IMAP-SECRET".into(), mailbox: "INBOX".into(), fetch_count: 50 },
-            smtp: SmtpConfig { host: "smtp.example.com".into(), port: 465, username: "remi".into(),
-                password: "SMTP-SECRET".into(), from_address: "Remi <remi@example.com>".into() },
+            imap: ImapConfig {
+                host: "imap.example.com".into(),
+                port: 993,
+                username: "remi".into(),
+                password: "IMAP-SECRET".into(),
+                mailbox: "INBOX".into(),
+                fetch_count: 50,
+            },
+            smtp: SmtpConfig {
+                host: "smtp.example.com".into(),
+                port: 465,
+                username: "remi".into(),
+                password: "SMTP-SECRET".into(),
+                from_address: "Remi <remi@example.com>".into(),
+            },
             signature: SignatureConfig::default(),
         }];
         cfg.ai.keys.insert("anthropic".into(), "CLAUDE-SECRET".into());
         cfg.ai.keys.insert("openai".into(), "OPENAI-SECRET".into());
         cfg.ai.base_url = "http://my-private-host:11434/v1".into();
         cfg.gifs.giphy_api_key = "GIPHY-SECRET".into();
-        cfg.supabase = Some(SupabaseConfig { url: "https://DB-SECRET.supabase.co".into(), anon_key: "ANON-SECRET".into() });
+        cfg.supabase =
+            Some(SupabaseConfig { url: "https://DB-SECRET.supabase.co".into(), anon_key: "ANON-SECRET".into() });
         cfg.user.theme = "aero".into();
         cfg.projects = vec![ProjectConfig { name: "Thesis".into(), description: "PhD".into(), urgency: "high".into() }];
         cfg
@@ -752,7 +785,17 @@ max_tokens = 10
     fn test_cloud_prefs_never_contain_secrets() {
         use crate::cloud::prefs_from_config;
         let json = prefs_from_config(&config_with_secrets()).to_string();
-        for secret in ["IMAP-SECRET", "SMTP-SECRET", "CLAUDE-SECRET", "OPENAI-SECRET", "my-private-host", "GIPHY-SECRET", "DB-SECRET", "ANON-SECRET", "imap.example.com"] {
+        for secret in [
+            "IMAP-SECRET",
+            "SMTP-SECRET",
+            "CLAUDE-SECRET",
+            "OPENAI-SECRET",
+            "my-private-host",
+            "GIPHY-SECRET",
+            "DB-SECRET",
+            "ANON-SECRET",
+            "imap.example.com",
+        ] {
             assert!(!json.contains(secret), "prefs leak {}", secret);
         }
         assert!(json.contains("aero") && json.contains("Thesis"));
@@ -764,7 +807,8 @@ max_tokens = 10
         let mut remote_cfg = make_test_config();
         remote_cfg.user.theme = "brutalist".into();
         remote_cfg.user.language = "fr".into();
-        remote_cfg.projects = vec![ProjectConfig { name: "Work".into(), description: "".into(), urgency: "normal".into() }];
+        remote_cfg.projects =
+            vec![ProjectConfig { name: "Work".into(), description: "".into(), urgency: "normal".into() }];
         let remote = prefs_from_config(&remote_cfg);
 
         let mut local = config_with_secrets();
@@ -789,7 +833,7 @@ max_tokens = 10
         assert_eq!(mailbox_key(&no_accounts), "default");
         let mut cfg = make_test_config();
         cfg.supabase = Some(SupabaseConfig { url: "https://x.supabase.co".into(), anon_key: "  ".into() });
-        assert_eq!(cfg.supabase_settings(), None);   // both values are required
+        assert_eq!(cfg.supabase_settings(), None); // both values are required
     }
 
     #[test]
@@ -827,9 +871,20 @@ max_tokens = 10
     async fn test_classify_reports_ai_failures() {
         // A failed AI call is an error, not an "information" email with a placeholder summary.
         let email = RawEmail {
-            uid: 1, subject: "Server down".into(), from: "a@b.c".into(), to: String::new(), cc: String::new(),
-            reply_to: String::new(), bcc: String::new(), message_id: String::new(), references: String::new(),
-            seen: false, deleted: false, date: None, body_text: "Help".into(), body_html: None,
+            uid: 1,
+            subject: "Server down".into(),
+            from: "a@b.c".into(),
+            to: String::new(),
+            cc: String::new(),
+            reply_to: String::new(),
+            bcc: String::new(),
+            message_id: String::new(),
+            references: String::new(),
+            seen: false,
+            deleted: false,
+            date: None,
+            body_text: "Help".into(),
+            body_html: None,
         };
         let err = crate::ai_classifier::classify(&AiConfig::default(), &email, &[]).await.unwrap_err();
         assert!(format!("{:#}", err).contains("Choose an AI model"), "{:#}", err);
@@ -842,20 +897,46 @@ max_tokens = 10
     #[tokio::test]
     async fn test_classify_drops_null_fields_and_lists_projects() {
         let email = RawEmail {
-            uid: 1, subject: "Defense".into(), from: "a@b.c".into(), to: String::new(), cc: String::new(),
-            reply_to: String::new(), bcc: String::new(), message_id: String::new(), references: String::new(),
-            seen: false, deleted: false, date: None, body_text: "Jury".into(), body_html: None,
+            uid: 1,
+            subject: "Defense".into(),
+            from: "a@b.c".into(),
+            to: String::new(),
+            cc: String::new(),
+            reply_to: String::new(),
+            bcc: String::new(),
+            message_id: String::new(),
+            references: String::new(),
+            seen: false,
+            deleted: false,
+            date: None,
+            body_text: "Jury".into(),
+            body_html: None,
         };
         let projects = vec![ProjectConfig { name: "Thesis".into(), description: "PhD".into(), urgency: "high".into() }];
         let cases: [(&'static str, &[ProjectConfig], bool); 3] = [
             // The AI writes "null" or "" for "none": neither is a real project, task or link.
-            (r#"{"choices":[{"message":{"content":"{\"priority\":\"task\",\"summary\":\"S\",\"project\":\"null\",\"task\":\"null\",\"meeting_link\":\"null\"}"}}]}"#, &[], false),
-            (r#"{"choices":[{"message":{"content":"{\"priority\":\"task\",\"summary\":\"S\",\"project\":\"\",\"task\":\"\",\"meeting_link\":\"\"}"}}]}"#, &[], false),
-            (r#"{"choices":[{"message":{"content":"{\"priority\":\"task\",\"summary\":\"S\",\"project\":\"Thesis\",\"task\":\"Book the room\",\"meeting_link\":\"https://meet.google.com/x\"}"}}]}"#, &projects, true),
+            (
+                r#"{"choices":[{"message":{"content":"{\"priority\":\"task\",\"summary\":\"S\",\"project\":\"null\",\"task\":\"null\",\"meeting_link\":\"null\"}"}}]}"#,
+                &[],
+                false,
+            ),
+            (
+                r#"{"choices":[{"message":{"content":"{\"priority\":\"task\",\"summary\":\"S\",\"project\":\"\",\"task\":\"\",\"meeting_link\":\"\"}"}}]}"#,
+                &[],
+                false,
+            ),
+            (
+                r#"{"choices":[{"message":{"content":"{\"priority\":\"task\",\"summary\":\"S\",\"project\":\"Thesis\",\"task\":\"Book the room\",\"meeting_link\":\"https://meet.google.com/x\"}"}}]}"#,
+                &projects,
+                true,
+            ),
         ];
         for (reply, projects, kept) in cases {
             let (base, server) = fake_ai_server(200, reply).await;
-            let c = crate::ai_classifier::classify(&ai_cfg("custom", "m", "k", &format!("{}/v1", base)), &email, projects).await.unwrap();
+            let c =
+                crate::ai_classifier::classify(&ai_cfg("custom", "m", "k", &format!("{}/v1", base)), &email, projects)
+                    .await
+                    .unwrap();
             assert_eq!(c.project.is_some() && c.task.is_some() && c.meeting_link.is_some(), kept, "{:?}", c);
             assert_eq!(c.project.is_none() && c.task.is_none() && c.meeting_link.is_none(), !kept, "{:?}", c);
             let (_, body) = server.await.unwrap();
@@ -871,7 +952,9 @@ max_tokens = 10
         assert!(crate::paths::file("tasks.json").starts_with(std::env::temp_dir()), "tests keep data in a temp folder");
         let id = Board::update(|b| b.add("Call Bob".into(), None));
         assert!(Board::load().tasks.iter().any(|t| t.id == id && t.title == "Call Bob"));
-        Dismissals::update(|d| { d.tasks.insert(7_000_001); });
+        Dismissals::update(|d| {
+            d.tasks.insert(7_000_001);
+        });
         assert!(Dismissals::load().tasks.contains(&7_000_001));
         Overrides::update(|o| o.set_project(7_000_001, Some("Thesis".into())));
         assert_eq!(Overrides::load().projects.get(&7_000_001).map(String::as_str), Some("Thesis"));
@@ -916,7 +999,7 @@ max_tokens = 10
         assert!(!crate::cloud::is_configured());
         assert!(!crate::cloud::status().configured);
         assert!(crate::cloud::lookup_ai(&["<x@y>".into()]).await.is_empty());
-        crate::cloud::store_ai(&[]).await;   // no-op, must not try to connect
+        crate::cloud::store_ai(&[]).await; // no-op, must not try to connect
         assert_eq!(crate::cloud::pull_all().await.unwrap(), "cloud sync off");
     }
 
@@ -943,13 +1026,27 @@ max_tokens = 10
     fn test_cloud_error_messages() {
         use crate::cloud::error_message;
         use reqwest::StatusCode;
-        assert_eq!(error_message(StatusCode::BAD_REQUEST,
-            r#"{"error":"invalid_grant","error_description":"Invalid login credentials"}"#), "Invalid login credentials");
-        assert_eq!(error_message(StatusCode::UNPROCESSABLE_ENTITY,
-            r#"{"code":422,"error_code":"weak_password","msg":"Password should be at least 6 characters."}"#),
-            "Password should be at least 6 characters.");
-        assert_eq!(error_message(StatusCode::FORBIDDEN,
-            r#"{"code":"42501","details":null,"hint":null,"message":"not signed in"}"#), "not signed in");
+        assert_eq!(
+            error_message(
+                StatusCode::BAD_REQUEST,
+                r#"{"error":"invalid_grant","error_description":"Invalid login credentials"}"#
+            ),
+            "Invalid login credentials"
+        );
+        assert_eq!(
+            error_message(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                r#"{"code":422,"error_code":"weak_password","msg":"Password should be at least 6 characters."}"#
+            ),
+            "Password should be at least 6 characters."
+        );
+        assert_eq!(
+            error_message(
+                StatusCode::FORBIDDEN,
+                r#"{"code":"42501","details":null,"hint":null,"message":"not signed in"}"#
+            ),
+            "not signed in"
+        );
         assert!(error_message(StatusCode::BAD_GATEWAY, "<html>oops</html>").contains("502"));
     }
 
@@ -962,7 +1059,6 @@ max_tokens = 10
         assert_eq!(at.to_rfc3339(), "2026-10-20T10:00:00+00:00");
         assert!(parse_pulled(&serde_json::Value::Null).is_none());
     }
-
 
     /// End to end against a Supabase project (or the local stand-in used in development):
     /// CLOUD_TEST_URL=http://127.0.0.1:54330 CLOUD_TEST_ANON=… cargo test test_cloud_e2e -- --ignored
@@ -981,7 +1077,7 @@ max_tokens = 10
         std::env::set_current_dir(&dir).unwrap();
 
         let mut cfg = config_with_secrets();
-        cfg.accounts[0].imap.username = format!("e2e-{}", std::process::id());   // fresh mailbox
+        cfg.accounts[0].imap.username = format!("e2e-{}", std::process::id()); // fresh mailbox
         cfg.supabase = Some(SupabaseConfig { url: url.clone(), anon_key: anon.clone() });
         crate::config::write_local(&cfg).unwrap();
         crate::cloud::configure(&cfg);
@@ -1021,8 +1117,12 @@ max_tokens = 10
 
         // AI results round trip.
         let c = ClassifiedEmail {
-            priority: Priority::HighPriority, summary: "Jury asks".into(), project: Some("Thesis".into()),
-            deadline: chrono::NaiveDate::from_ymd_opt(2026, 11, 2), task: Some("Reply".into()), meeting_link: None,
+            priority: Priority::HighPriority,
+            summary: "Jury asks".into(),
+            project: Some("Thesis".into()),
+            deadline: chrono::NaiveDate::from_ymd_opt(2026, 11, 2),
+            task: Some("Reply".into()),
+            meeting_link: None,
         };
         crate::cloud::store_ai(&[("<e2e@x>".into(), c.clone())]).await;
         let found = crate::cloud::lookup_ai(&["<e2e@x>".into(), "<missing@x>".into()]).await;
@@ -1043,12 +1143,14 @@ max_tokens = 10
         assert_eq!(crate::cloud::pull_all().await.unwrap(), "pulled [], pushed []");
 
         // Expired access token: refreshed automatically and transparently.
-        let mut s: crate::cloud::Session = serde_json::from_str(&std::fs::read_to_string("session.json").unwrap()).unwrap();
+        let mut s: crate::cloud::Session =
+            serde_json::from_str(&std::fs::read_to_string("session.json").unwrap()).unwrap();
         s.expires_at = 0;
         std::fs::write("session.json", serde_json::to_string(&s).unwrap()).unwrap();
-        crate::cloud::configure(&cfg);   // reload the session from disk
+        crate::cloud::configure(&cfg); // reload the session from disk
         assert_eq!(crate::cloud::lookup_ai(&["<e2e@x>".into()]).await.len(), 1);
-        let s2: crate::cloud::Session = serde_json::from_str(&std::fs::read_to_string("session.json").unwrap()).unwrap();
+        let s2: crate::cloud::Session =
+            serde_json::from_str(&std::fs::read_to_string("session.json").unwrap()).unwrap();
         assert!(s2.expires_at > s.expires_at && s2.refresh_token != s.refresh_token);
 
         // Bob, same mailbox name: sees none of Alice's data.
@@ -1067,7 +1169,6 @@ max_tokens = 10
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-
     // ── Search ────────────────────────────────────────────────────────────────
 
     fn search_card(uid: u64, from: &str, subject: &str, body: &str, ts: i64) -> EmailCard {
@@ -1084,12 +1185,19 @@ max_tokens = 10
 
     fn search_index() -> Vec<(crate::search::Folder, EmailCard)> {
         use crate::search::Folder;
-        let mut unread = search_card(3, "ADUM", "Échéance du manuscrit", "Merci d'envoyer le manuscrit avant le 23.", 3_000);
+        let mut unread =
+            search_card(3, "ADUM", "Échéance du manuscrit", "Merci d'envoyer le manuscrit avant le 23.", 3_000);
         unread.is_read = false;
         unread.project = Some("Thesis".into());
         vec![
-            (Folder::Inbox, search_card(1, "Prof Martin", "Defense date", "The jury agreed on the soutenance date.", 1_000)),
-            (Folder::Inbox, search_card(2, "Newsletter", "Weekly digest", "Some news about the manuscript market.", 2_000)),
+            (
+                Folder::Inbox,
+                search_card(1, "Prof Martin", "Defense date", "The jury agreed on the soutenance date.", 1_000),
+            ),
+            (
+                Folder::Inbox,
+                search_card(2, "Newsletter", "Weekly digest", "Some news about the manuscript market.", 2_000),
+            ),
             (Folder::Inbox, unread),
             (Folder::Sent, search_card(3, "Remi", "Re: manuscrit", "Je vous envoie le manuscrit.", 4_000)),
         ]
@@ -1102,7 +1210,11 @@ max_tokens = 10
         use crate::ai_project::format_description;
         let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
         assert_eq!(
-            format_description("Emails about my PhD defense", &s(&["Prof Martin (jury)", " ADUM ", "adum"]), &s(&["soutenance", "manuscrit."])),
+            format_description(
+                "Emails about my PhD defense",
+                &s(&["Prof Martin (jury)", " ADUM ", "adum"]),
+                &s(&["soutenance", "manuscrit."])
+            ),
             "Emails about my PhD defense. People: Prof Martin (jury), ADUM. Keywords: soutenance, manuscrit."
         );
         // No people or keywords: no empty labels.
@@ -1114,7 +1226,10 @@ max_tokens = 10
         use crate::ai_project::parse;
         let d = parse(r#"Here: {"name":" PhD  defense ","summary":"Organising the PhD defense with the jury","people":["Prof Martin"],"keywords":["jury","soutenance"],"importance":"HIGH"}"#).unwrap();
         assert_eq!(d.name, "PhD defense");
-        assert_eq!(d.description, "Organising the PhD defense with the jury. People: Prof Martin. Keywords: jury, soutenance.");
+        assert_eq!(
+            d.description,
+            "Organising the PhD defense with the jury. People: Prof Martin. Keywords: jury, soutenance."
+        );
         assert_eq!(d.urgency, "high");
         let d = parse(r#"{"name":"Garden","summary":"Garden works","importance":"maybe"}"#).unwrap();
         assert_eq!((d.description.as_str(), d.urgency.as_str()), ("Garden works.", "normal"));
@@ -1132,15 +1247,29 @@ max_tokens = 10
         assert_eq!(uids, vec![1, 3]);
 
         let (base, server) = fake_ai_server(200, r#"{"choices":[{"message":{"content":"{\"name\":\"Thesis defense\",\"summary\":\"Organising the thesis defense with the jury\",\"people\":[\"Prof Martin (jury)\"],\"keywords\":[\"soutenance\",\"jury\"],\"importance\":\"high\"}"}}]}"#).await;
-        let d = draft(&ai_cfg("custom", "m", "k", &base), "my thesis defense with the jury", "Remi <remi@univ.fr>", &related).await.unwrap();
+        let d = draft(
+            &ai_cfg("custom", "m", "k", &base),
+            "my thesis defense with the jury",
+            "Remi <remi@univ.fr>",
+            &related,
+        )
+        .await
+        .unwrap();
         assert_eq!(d.name, "Thesis defense");
-        assert_eq!(d.description, "Organising the thesis defense with the jury. People: Prof Martin (jury). Keywords: soutenance, jury.");
+        assert_eq!(
+            d.description,
+            "Organising the thesis defense with the jury. People: Prof Martin (jury). Keywords: soutenance, jury."
+        );
         let (_, body) = server.await.unwrap();
         let body: serde_json::Value = serde_json::from_str(&body).unwrap();
         let user = body["messages"][1]["content"].as_str().unwrap();
         assert!(user.starts_with("REQUEST: my thesis defense with the jury"), "{}", user);
         assert!(user.contains("THE USER (not one of the people): Remi <remi@univ.fr>"), "{}", user);
-        assert!(user.contains("Subject: Defense date") && user.contains("Prof Martin <prof.martin@univ.fr>"), "{}", user);
+        assert!(
+            user.contains("Subject: Defense date") && user.contains("Prof Martin <prof.martin@univ.fr>"),
+            "{}",
+            user
+        );
 
         // An AI failure is reported, not hidden behind a copy of the request.
         let err = draft(&AiConfig::default(), "my thesis", "Remi", &[]).await.unwrap_err();
@@ -1158,7 +1287,13 @@ max_tokens = 10
         assert!(text.starts_with("PROJECT: Defense\nDESCRIPTION: My PhD defense. People: Prof Martin.\n"), "{}", text);
         // Its id, where it is now, and the AI summary (or the start of the body when unsorted).
         assert!(text.contains("[1] From: Prof Martin <prof.martin@univ.fr> | Subject: Defense date | project now: Thesis | The jury agreed on the defense date."), "{}", text);
-        assert!(text.contains("[2] From: Newsletter <newsletter@univ.fr> | Subject: Weekly digest | project now: none | Some news."), "{}", text);
+        assert!(
+            text.contains(
+                "[2] From: Newsletter <newsletter@univ.fr> | Subject: Weekly digest | project now: none | Some news."
+            ),
+            "{}",
+            text
+        );
 
         // Only offered emails; numbers or strings; duplicates once.
         assert_eq!(parse_ids(r#"{"ids":[2,"1",2,99]}"#, &[1, 2]), Some(vec![1, 2]));
@@ -1169,7 +1304,9 @@ max_tokens = 10
     #[test]
     fn test_search_parse_query() {
         use crate::search::{parse_query, Folder};
-        let (terms, f) = parse_query(r#"résume les mails de l'ADUM "date de soutenance" de:martin non lu après:2026-10-01 dossier:envoyés"#);
+        let (terms, f) = parse_query(
+            r#"résume les mails de l'ADUM "date de soutenance" de:martin non lu après:2026-10-01 dossier:envoyés"#,
+        );
         assert_eq!(terms, vec!["resume", "adum", "date de soutenance"]);
         assert_eq!(f.from, vec!["martin"]);
         assert!(f.unread);
@@ -1232,9 +1369,9 @@ max_tokens = 10
         let mut b = search_card(2, "Prof Martin", "b", "", 2);
         b.cc = "Jury <jury@univ.fr>".into();
         let c = contacts(&[(Folder::Inbox, a), (Folder::Inbox, b)], 10);
-        assert_eq!(c[0], "Prof Martin <prof.martin@univ.fr>");   // most frequent
-        assert!(c.contains(&"Jury <jury@univ.fr>".to_string()));   // display name preferred
-        assert!(c.contains(&r#""Lhoste, Remi" <remi@example.com>"#.to_string()));   // comma inside quotes
+        assert_eq!(c[0], "Prof Martin <prof.martin@univ.fr>"); // most frequent
+        assert!(c.contains(&"Jury <jury@univ.fr>".to_string())); // display name preferred
+        assert!(c.contains(&r#""Lhoste, Remi" <remi@example.com>"#.to_string())); // comma inside quotes
         assert_eq!(c.len(), 3);
     }
 
@@ -1253,15 +1390,20 @@ max_tokens = 10
         assert!(notification_texts(&[card(1, "Ana", "Hi", true)], Lang::En).is_empty());
 
         let few = [card(1, "Ana", "Hi", false), card(2, "Bob", "Report", false), card(3, "Cyd", "Lunch", false)];
-        assert_eq!(notification_texts(&few, Lang::En), vec![
-            ("Ana".to_string(), "Hi".to_string()),
-            ("Bob".to_string(), "Report".to_string()),
-            ("Cyd".to_string(), "Lunch".to_string()),
-        ]);
+        assert_eq!(
+            notification_texts(&few, Lang::En),
+            vec![
+                ("Ana".to_string(), "Hi".to_string()),
+                ("Bob".to_string(), "Report".to_string()),
+                ("Cyd".to_string(), "Lunch".to_string()),
+            ]
+        );
 
         let many: Vec<EmailCard> = (1..=10).map(|i| card(i, &format!("P{}", i % 5), "x", false)).collect();
-        assert_eq!(notification_texts(&many, Lang::Fr),
-                   vec![("10 nouveaux e-mails".to_string(), "P1, P2, P3, …".to_string())]);
+        assert_eq!(
+            notification_texts(&many, Lang::Fr),
+            vec![("10 nouveaux e-mails".to_string(), "P1, P2, P3, …".to_string())]
+        );
     }
 
     #[test]
@@ -1286,7 +1428,10 @@ max_tokens = 10
     fn test_imap_search_criteria() {
         use crate::imap_client::search_criteria;
         let c = search_criteria(&["adum".into(), "say \"hi\"".into()], chrono::NaiveDate::from_ymd_opt(2026, 10, 1));
-        assert_eq!(c, r#"OR OR SUBJECT "adum" FROM "adum" TEXT "adum" OR OR SUBJECT "say \"hi\"" FROM "say \"hi\"" TEXT "say \"hi\"" SINCE 01-Oct-2026"#);
+        assert_eq!(
+            c,
+            r#"OR OR SUBJECT "adum" FROM "adum" TEXT "adum" OR OR SUBJECT "say \"hi\"" FROM "say \"hi\"" TEXT "say \"hi\"" SINCE 01-Oct-2026"#
+        );
         assert!(search_criteria(&["échéance".into()], None).starts_with("CHARSET UTF-8 "));
         assert_eq!(search_criteria(&[], None), "ALL");
     }
@@ -1295,25 +1440,29 @@ max_tokens = 10
     fn test_parse_assist() {
         use crate::ai_assistant::parse_assist;
         let allowed = vec!["inbox:1".to_string(), "sent:3".to_string()];
-        let r = parse_assist(r#"```json
+        let r = parse_assist(
+            r#"```json
 {"intent":"summarize","email_ids":["inbox:1","inbox:999","inbox:1","sent:3"],"answer":" Two emails. ","compose":null}
-```"#, &allowed, "auto").unwrap();
+```"#,
+            &allowed,
+            "auto",
+        )
+        .unwrap();
         assert_eq!(r.intent, "summarize");
-        assert_eq!(r.email_ids, vec!["inbox:1", "sent:3"]);   // unknown and duplicate ids dropped
+        assert_eq!(r.email_ids, vec!["inbox:1", "sent:3"]); // unknown and duplicate ids dropped
         assert_eq!(r.answer, "Two emails.");
         assert!(r.compose.is_none());
 
         let r = parse_assist(r#"Sure! {"intent":"compose","compose":{"to":"Prof Martin <prof.martin@univ.fr>","subject":"Soutenance","body_html":"<p>Bonjour</p>","reply_to_id":"inbox:42"}}"#, &allowed, "auto").unwrap();
         let c = r.compose.unwrap();
         assert_eq!((c.to.as_str(), c.subject.as_str()), ("Prof Martin <prof.martin@univ.fr>", "Soutenance"));
-        assert_eq!(c.reply_to_id, None);   // not one of the given emails
+        assert_eq!(c.reply_to_id, None); // not one of the given emails
 
         // A forced mode wins; an unknown intent falls back to find.
         assert_eq!(parse_assist(r#"{"intent":"answer"}"#, &allowed, "compose").unwrap().intent, "compose");
         assert_eq!(parse_assist(r#"{"intent":"dance"}"#, &allowed, "auto").unwrap().intent, "find");
         assert!(parse_assist("I cannot do that.", &allowed, "auto").is_err());
     }
-
 
     // ── Data directory ────────────────────────────────────────────────────────
 
@@ -1349,7 +1498,6 @@ max_tokens = 10
         assert_eq!(cfg.claude.max_tokens, 300);
         assert!(!cfg.claude.model.is_empty());
     }
-
 
     // ── Special folders ───────────────────────────────────────────────────────
 
@@ -1392,7 +1540,6 @@ max_tokens = 10
         assert_eq!(f.trash, "Corbeille");
     }
 
-
     #[test]
     fn test_ai_language_for_all_ui_languages() {
         use crate::i18n::{ai_language, is_supported, set_lang, LANGUAGES};
@@ -1402,17 +1549,17 @@ max_tokens = 10
             set_lang(code);
             assert_eq!(ai_language(), name);
         }
-        set_lang("xx");   // unknown: English
+        set_lang("xx"); // unknown: English
         assert_eq!(ai_language(), "English");
         assert!(!is_supported("xx"));
         set_lang("en");
     }
 
-
     // ── AI providers ──────────────────────────────────────────────────────────
 
     fn ai_cfg(provider: &str, model: &str, key: &str, base: &str) -> AiConfig {
-        let mut ai = AiConfig { provider: provider.into(), model: model.into(), base_url: base.into(), ..Default::default() };
+        let mut ai =
+            AiConfig { provider: provider.into(), model: model.into(), base_url: base.into(), ..Default::default() };
         if !key.is_empty() {
             ai.keys.insert(provider.into(), key.into());
         }
@@ -1426,13 +1573,21 @@ max_tokens = 10
         assert_eq!(ai_cfg("ollama", "m", "", "").base_url(), "http://localhost:11434/v1");
         assert_eq!(ai_cfg("", "m", "", "").base_url(), "https://api.anthropic.com/v1");
         assert_eq!(ai_cfg("custom", "m", "", "").base_url(), "");
-        assert_eq!(ai_cfg("custom", "m", "", "https://api.groq.com/openai/v1/").base_url(), "https://api.groq.com/openai/v1");
+        assert_eq!(
+            ai_cfg("custom", "m", "", "https://api.groq.com/openai/v1/").base_url(),
+            "https://api.groq.com/openai/v1"
+        );
         // A config with only the old [claude] section becomes Anthropic in [ai].
-        let cfg: Config = toml::from_str("[claude]\napi_key = \"sk-old\"\nmodel = \"claude-x\"\nmax_tokens = 222\n").unwrap();
+        let cfg: Config =
+            toml::from_str("[claude]\napi_key = \"sk-old\"\nmodel = \"claude-x\"\nmax_tokens = 222\n").unwrap();
         let cfg = cfg.migrated();
-        assert_eq!((cfg.ai.provider(), cfg.ai.model.as_str(), cfg.ai.key(), cfg.ai.max_tokens), ("anthropic", "claude-x", "sk-old", 222));
+        assert_eq!(
+            (cfg.ai.provider(), cfg.ai.model.as_str(), cfg.ai.key(), cfg.ai.max_tokens),
+            ("anthropic", "claude-x", "sk-old", 222)
+        );
         // An existing [ai] section is left alone.
-        let cfg: Config = toml::from_str("[claude]\napi_key = \"sk-old\"\n[ai]\nprovider = \"ollama\"\nmodel = \"qwen\"\n").unwrap();
+        let cfg: Config =
+            toml::from_str("[claude]\napi_key = \"sk-old\"\n[ai]\nprovider = \"ollama\"\nmodel = \"qwen\"\n").unwrap();
         let cfg = cfg.migrated();
         assert_eq!((cfg.ai.provider(), cfg.ai.model.as_str(), cfg.ai.key()), ("ollama", "qwen", ""));
     }
@@ -1467,11 +1622,11 @@ max_tokens = 10
         use crate::models::mail_id;
         let cached = [(7, "<a@x>"), (8, "<b@x>"), (9, ""), (mail_id(1, 5), "<c@x>")];
         let server = [
-            (7, "<a@x>"),                // first account: stays
-            (mail_id(1, 8), "<b@x>"),    // second account, same UID and Message-ID: moves
-            (mail_id(1, 7), "<z@x>"),    // same UID, other email: no move
-            (mail_id(2, 9), ""),         // no Message-ID to be sure: no move
-            (mail_id(1, 5), "<c@x>"),    // already a new id
+            (7, "<a@x>"),             // first account: stays
+            (mail_id(1, 8), "<b@x>"), // second account, same UID and Message-ID: moves
+            (mail_id(1, 7), "<z@x>"), // same UID, other email: no move
+            (mail_id(2, 9), ""),      // no Message-ID to be sure: no move
+            (mail_id(1, 5), "<c@x>"), // already a new id
         ];
         let moved = crate::app_state::moved_ids(&cached, &server);
         assert_eq!(moved.len(), 1);
@@ -1511,11 +1666,15 @@ max_tokens = 10
     #[test]
     fn test_claude_code_status() {
         use crate::claude_code::parse_status;
-        let s = parse_status(r#"{"loggedIn":true,"authMethod":"claude.ai","email":"a@b.com","subscriptionType":"team"}"#);
+        let s =
+            parse_status(r#"{"loggedIn":true,"authMethod":"claude.ai","email":"a@b.com","subscriptionType":"team"}"#);
         assert!(s.installed && s.signed_in && s.paid);
         assert_eq!(s.email, "a@b.com");
         for plan in ["pro", "max", "enterprise"] {
-            assert!(parse_status(&format!(r#"{{"loggedIn":true,"authMethod":"claude.ai","subscriptionType":"{}"}}"#, plan)).paid);
+            assert!(
+                parse_status(&format!(r#"{{"loggedIn":true,"authMethod":"claude.ai","subscriptionType":"{}"}}"#, plan))
+                    .paid
+            );
         }
         // Free plan, API-key login, logged out: not usable for subscription sign-in.
         assert!(!parse_status(r#"{"loggedIn":true,"authMethod":"claude.ai","subscriptionType":"free"}"#).paid);
@@ -1534,7 +1693,12 @@ max_tokens = 10
     #[ignore]
     async fn test_claude_code_live() {
         let ai = ai_cfg("claude_code", "haiku", "", "");
-        let req = crate::ai::Request { system: "Reply with the single word OK.", user: "Reply with OK.\nThanks \"quoted\" & <tags>", max_tokens: 20, json: false };
+        let req = crate::ai::Request {
+            system: "Reply with the single word OK.",
+            user: "Reply with OK.\nThanks \"quoted\" & <tags>",
+            max_tokens: 20,
+            json: false,
+        };
         let answer = crate::ai::complete(&ai, req).await.unwrap();
         assert!(answer.to_uppercase().contains("OK"), "{}", answer);
         assert!(crate::claude_code::status().await.installed);
@@ -1576,15 +1740,18 @@ max_tokens = 10
     fn test_ai_decode_and_errors() {
         use crate::ai::{decode, error_message, extract_json};
         let anthropic = ai_cfg("anthropic", "m", "k", "");
-        let v = serde_json::json!({"content": [{"type": "thinking", "thinking": "…"}, {"type": "text", "text": "Hello"}]});
+        let v =
+            serde_json::json!({"content": [{"type": "thinking", "thinking": "…"}, {"type": "text", "text": "Hello"}]});
         assert_eq!(decode(&anthropic, &v).unwrap(), "Hello");
         let openai = ai_cfg("openai", "m", "k", "");
         let v = serde_json::json!({"choices": [{"message": {"role": "assistant", "content": "Bonjour"}}]});
         assert_eq!(decode(&openai, &v).unwrap(), "Bonjour");
         assert!(decode(&openai, &serde_json::json!({"choices": []})).is_err());
 
-        assert_eq!(error_message(401, r#"{"error":{"message":"Incorrect API key provided","type":"invalid_request_error"}}"#),
-                   "Incorrect API key provided (401)");
+        assert_eq!(
+            error_message(401, r#"{"error":{"message":"Incorrect API key provided","type":"invalid_request_error"}}"#),
+            "Incorrect API key provided (401)"
+        );
         assert_eq!(error_message(404, r#"{"error":"model 'nope' not found"}"#), "model 'nope' not found (404)");
         assert_eq!(error_message(422, r#"{"message":"Invalid model"}"#), "Invalid model (422)");
         assert!(error_message(502, "<html>bad gateway</html>").contains("502"));
@@ -1607,16 +1774,28 @@ max_tokens = 10
                 buf.extend_from_slice(&chunk[..n]);
                 let text = String::from_utf8_lossy(&buf).to_string();
                 if let Some(h) = text.find("\r\n\r\n") {
-                    let len = text[..h].lines()
-                        .find_map(|l| l.to_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap()))
+                    let len = text[..h]
+                        .lines()
+                        .find_map(|l| {
+                            l.to_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap())
+                        })
                         .unwrap_or(0);
-                    if buf.len() >= h + 4 + len { break; }
+                    if buf.len() >= h + 4 + len {
+                        break;
+                    }
                 }
-                if n == 0 { break; }
+                if n == 0 {
+                    break;
+                }
             }
             let text = String::from_utf8_lossy(&buf).to_string();
             let (head, body) = text.split_once("\r\n\r\n").unwrap();
-            let resp = format!("HTTP/1.1 {} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", status, reply.len(), reply);
+            let resp = format!(
+                "HTTP/1.1 {} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                status,
+                reply.len(),
+                reply
+            );
             sock.write_all(resp.as_bytes()).await.unwrap();
             (head.to_string(), body.to_string())
         });
@@ -1629,7 +1808,8 @@ max_tokens = 10
         let req = Request { system: "SYS", user: "Classify this", max_tokens: 50, json: true };
 
         // OpenAI-compatible (as used by Mistral, Ollama, Groq…) through a custom base URL.
-        let (base, server) = fake_ai_server(200, r#"{"choices":[{"message":{"content":"{\"priority\":\"urgent\"}"}}]}"#).await;
+        let (base, server) =
+            fake_ai_server(200, r#"{"choices":[{"message":{"content":"{\"priority\":\"urgent\"}"}}]}"#).await;
         let ai = ai_cfg("custom", "local-model", "tok-123", &format!("{}/v1", base));
         assert_eq!(complete(&ai, req.clone()).await.unwrap(), r#"{"priority":"urgent"}"#);
         let (head, body) = server.await.unwrap();
@@ -1653,8 +1833,11 @@ max_tokens = 10
         assert_eq!(format!("{:#}", err), "Incorrect API key provided (401)");
 
         // Missing settings are caught before any request.
-        assert!(format!("{:#}", complete(&ai_cfg("openai", "gpt-x", "", ""), req.clone()).await.unwrap_err()).contains("API key"));
-        assert!(format!("{:#}", complete(&ai_cfg("ollama", "", "", ""), req.clone()).await.unwrap_err()).contains("model"));
+        assert!(format!("{:#}", complete(&ai_cfg("openai", "gpt-x", "", ""), req.clone()).await.unwrap_err())
+            .contains("API key"));
+        assert!(
+            format!("{:#}", complete(&ai_cfg("ollama", "", "", ""), req.clone()).await.unwrap_err()).contains("model")
+        );
 
         // Ollama not running: a clear hint (port 1 is closed).
         let err = complete(&ai_cfg("ollama", "llava:7b", "", "http://127.0.0.1:1/v1"), req.clone()).await.unwrap_err();
@@ -1670,25 +1853,42 @@ max_tokens = 10
         let models = list_models(&probe).await.expect("is Ollama running?");
         assert!(!models.is_empty(), "no local model: ollama pull <model>");
         let ai = ai_cfg("ollama", &models[0], "", "");
-        let answer = complete(&ai, Request { system: "Reply with the single word OK.", user: "Reply with OK.", max_tokens: 20, json: false })
-            .await
-            .unwrap();
+        let answer = complete(
+            &ai,
+            Request { system: "Reply with the single word OK.", user: "Reply with OK.", max_tokens: 20, json: false },
+        )
+        .await
+        .unwrap();
         assert!(!answer.trim().is_empty());
 
         // A real classification through the OpenAI-compatible path.
         let email = crate::models::RawEmail {
-            uid: 1, subject: "Defense date confirmation".into(), from: "Prof Martin <martin@univ.fr>".into(),
-            to: String::new(), cc: String::new(), reply_to: String::new(), bcc: String::new(),
-            message_id: String::new(), references: String::new(), seen: false, deleted: false, date: None,
-            body_text: "Dear Remi, please confirm by Friday 23 October that the PhD defense can take place on 27 October.".into(),
+            uid: 1,
+            subject: "Defense date confirmation".into(),
+            from: "Prof Martin <martin@univ.fr>".into(),
+            to: String::new(),
+            cc: String::new(),
+            reply_to: String::new(),
+            bcc: String::new(),
+            message_id: String::new(),
+            references: String::new(),
+            seen: false,
+            deleted: false,
+            date: None,
+            body_text:
+                "Dear Remi, please confirm by Friday 23 October that the PhD defense can take place on 27 October."
+                    .into(),
             body_html: None,
         };
-        let projects = vec![ProjectConfig { name: "Thesis".into(), description: "PhD thesis, defense, jury".into(), urgency: "high".into() }];
+        let projects = vec![ProjectConfig {
+            name: "Thesis".into(),
+            description: "PhD thesis, defense, jury".into(),
+            urgency: "high".into(),
+        }];
         let c = crate::ai_classifier::classify(&ai, &email, &projects).await.unwrap();
         println!("model {} → {:?}", models[0], c);
         assert!(crate::ai_classifier::is_real_result(&c), "the local model's answer could not be used: {:?}", c);
     }
-
 
     // ── Signature ─────────────────────────────────────────────────────────────
 
@@ -1700,11 +1900,15 @@ max_tokens = 10
         let html = decode_html(bytes);
         assert!(html.contains("Rémi — Thèse"), "{}", html);
         // A declared charset is honoured.
-        let latin1 = b"<meta http-equiv=\"Content-Type\" content=\"text/html; charset=iso-8859-1\"><p>D\xe9partement</p>";
+        let latin1 =
+            b"<meta http-equiv=\"Content-Type\" content=\"text/html; charset=iso-8859-1\"><p>D\xe9partement</p>";
         assert!(decode_html(latin1).contains("Département"));
         // UTF-8 (with BOM) stays as is.
         assert_eq!(decode_html("\u{feff}<b>Ça va</b>".as_bytes()), "<b>Ça va</b>");
-        assert_eq!(body_inner("<HTML><HEAD><style>x</style></HEAD><BODY lang=FR>\n<p>Sig</p>\n</BODY></HTML>"), "<p>Sig</p>");
+        assert_eq!(
+            body_inner("<HTML><HEAD><style>x</style></HEAD><BODY lang=FR>\n<p>Sig</p>\n</BODY></HTML>"),
+            "<p>Sig</p>"
+        );
         assert_eq!(body_inner("<p>Just a snippet</p>"), "<p>Just a snippet</p>");
     }
 
@@ -1723,9 +1927,16 @@ max_tokens = 10
         let file_url = format!("file://{}", abs.display().to_string().replace(' ', "%20"));
         // Windows-1252 file with Outlook's relative image folder.
         let mut html = b"<html><head><meta name=Generator content=\"Microsoft Word\"></head><body>\
-<p>R\xe9mi Lhoste<br>Doctorant</p><img src=\"Sig_files/image001.png\" width=80>".to_vec();
-        html.extend_from_slice(format!("<img src='{}'><img src=\"https://example.com/logo.png\">\
-<img src=\"big.png\"><img src=\"logo.svg\"><img src=\"missing.png\"></body></html>", file_url).as_bytes());
+<p>R\xe9mi Lhoste<br>Doctorant</p><img src=\"Sig_files/image001.png\" width=80>"
+            .to_vec();
+        html.extend_from_slice(
+            format!(
+                "<img src='{}'><img src=\"https://example.com/logo.png\">\
+<img src=\"big.png\"><img src=\"logo.svg\"><img src=\"missing.png\"></body></html>",
+                file_url
+            )
+            .as_bytes(),
+        );
         let sig_path = dir.join("Sig.htm");
         std::fs::write(&sig_path, &html).unwrap();
 
@@ -1745,18 +1956,30 @@ max_tokens = 10
         assert_ne!(file, file2, "each import gets its own file");
 
         // Quote styles and an unquoted src are handled without breaking the HTML.
-        let mixed = embed_local_images("<img src=Sig_files/image001.png><img src=\"Sig_files/image001.png\">", &dir, 1024);
+        let mixed =
+            embed_local_images("<img src=Sig_files/image001.png><img src=\"Sig_files/image001.png\">", &dir, 1024);
         assert!(mixed.starts_with("<img src=Sig_files/image001.png>"));
         assert!(mixed.contains("data:image/png;base64,"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-
     #[test]
     fn test_smtp_blank_fields_use_incoming_settings() {
-        let imap = ImapConfig { host: "imap.x.fr".into(), port: 993, username: "remi@x.fr".into(),
-                                password: "secret".into(), mailbox: "INBOX".into(), fetch_count: 50 };
-        let blank = SmtpConfig { host: "smtp.x.fr".into(), port: 587, username: "".into(), password: "".into(), from_address: "".into() };
+        let imap = ImapConfig {
+            host: "imap.x.fr".into(),
+            port: 993,
+            username: "remi@x.fr".into(),
+            password: "secret".into(),
+            mailbox: "INBOX".into(),
+            fetch_count: 50,
+        };
+        let blank = SmtpConfig {
+            host: "smtp.x.fr".into(),
+            port: 587,
+            username: "".into(),
+            password: "".into(),
+            from_address: "".into(),
+        };
         let acc = AccountConfig { name: "Work".into(), imap, smtp: blank, signature: SignatureConfig::default() };
         let s = acc.smtp_for_sending("Remi Lhoste");
         assert_eq!((s.username.as_str(), s.password.as_str()), ("remi@x.fr", "secret"));
@@ -1770,7 +1993,10 @@ max_tokens = 10
         filled.smtp.password = "p2".into();
         filled.smtp.from_address = "Boss <boss@x.fr>".into();
         let s = filled.smtp_for_sending("Remi");
-        assert_eq!((s.username.as_str(), s.password.as_str(), s.from_address.as_str()), ("relay", "p2", "Boss <boss@x.fr>"));
+        assert_eq!(
+            (s.username.as_str(), s.password.as_str(), s.from_address.as_str()),
+            ("relay", "p2", "Boss <boss@x.fr>")
+        );
         // A non-email login gives no automatic sender (the send error then asks for one).
         filled.smtp.username = "relay".into();
         filled.smtp.from_address = "".into();
@@ -1779,11 +2005,22 @@ max_tokens = 10
 
     #[test]
     fn test_blank_advanced_options_mean_defaults() {
-        let dto = AccountDto { label: "W".into(), imap_host: "h".into(), imap_port: " ".into(), imap_mailbox: "".into(),
-                               imap_fetch: "".into(), smtp_port: "".into(), ..Default::default() };
+        let dto = AccountDto {
+            label: "W".into(),
+            imap_host: "h".into(),
+            imap_port: " ".into(),
+            imap_mailbox: "".into(),
+            imap_fetch: "".into(),
+            smtp_port: "".into(),
+            ..Default::default()
+        };
         let acc = crate::settings::account_from_dto(&dto);
-        assert_eq!((acc.imap.port, acc.imap.mailbox.as_str(), acc.imap.fetch_count, acc.smtp.port), (993, "INBOX", 50, 587));
-        let dto = AccountDto { imap_port: "143".into(), imap_mailbox: "Archive".into(), imap_fetch: "200".into(), ..dto };
+        assert_eq!(
+            (acc.imap.port, acc.imap.mailbox.as_str(), acc.imap.fetch_count, acc.smtp.port),
+            (993, "INBOX", 50, 587)
+        );
+        let dto =
+            AccountDto { imap_port: "143".into(), imap_mailbox: "Archive".into(), imap_fetch: "200".into(), ..dto };
         let acc = crate::settings::account_from_dto(&dto);
         assert_eq!((acc.imap.port, acc.imap.mailbox.as_str(), acc.imap.fetch_count), (143, "Archive", 200));
     }
@@ -1797,7 +2034,7 @@ max_tokens = 10
         assert_eq!(cfg.user_name(), "Remi Lhoste");
         cfg.accounts[0].smtp.from_address = "remi@x.fr".into();
         assert_eq!(cfg.user_name(), "");
-        cfg.user.display_name = "Remi".into();   // set earlier, or synced from the cloud
+        cfg.user.display_name = "Remi".into(); // set earlier, or synced from the cloud
         assert_eq!(cfg.user_name(), "Remi");
     }
 
@@ -1834,14 +2071,26 @@ max_tokens = 10
         let err = |s: &str| ConnError::from_error(&anyhow::anyhow!(s.to_string()));
         let smtp = err("SMTP connection/auth failed: permanent error (535): 5.7.8 Error: authentication failed: : 5.7.8 Error: authentication failed: ");
         assert_eq!(smtp.kind, "auth");
-        assert_eq!(smtp.detail, "SMTP connection/auth failed: permanent error (535): 5.7.8 Error: authentication failed");
+        assert_eq!(
+            smtp.detail,
+            "SMTP connection/auth failed: permanent error (535): 5.7.8 Error: authentication failed"
+        );
         assert_eq!(err("IMAP login failed: no response: [AUTHENTICATIONFAILED] Authentication failed.").kind, "auth");
-        assert_eq!(err("TCP connection to IMAP server failed: failed to lookup address information: Name or service not known").kind, "host");
+        assert_eq!(
+            err(
+                "TCP connection to IMAP server failed: failed to lookup address information: Name or service not known"
+            )
+            .kind,
+            "host"
+        );
         assert_eq!(err("Folder \"Nope\" not found: Mailbox doesn't exist: Nope").kind, "folder");
         let reset = err("SMTP connection/auth failed: Connection error: Connection error: Connection reset by peer (os error 104): Connection reset by peer (os error 104)");
         assert_eq!(reset.kind, "reset");
         assert_eq!(err("TCP connection to IMAP server failed: Connection refused (os error 111)").kind, "refused");
-        assert_eq!(reset.detail, "SMTP connection/auth failed: Connection error: Connection reset by peer (os error 104)");
+        assert_eq!(
+            reset.detail,
+            "SMTP connection/auth failed: Connection error: Connection reset by peer (os error 104)"
+        );
         assert_eq!(err("TLS handshake with IMAP server failed").kind, "tls");
         assert_eq!(err("something odd").kind, "other");
         assert_eq!(ConnError::timeout().kind, "timeout");
@@ -1851,8 +2100,16 @@ max_tokens = 10
     fn test_signature_file_names_are_checked() {
         use crate::signature::{is_signature_file, load};
         assert!(is_signature_file("signature-18f3a2b.html"));
-        for bad in ["signature.html", "signature-.html", "signature-xyz.html", "../signature-1.html",
-                    "signature-1.html/../config.toml", "config.toml", "signature-1.htm", ""] {
+        for bad in [
+            "signature.html",
+            "signature-.html",
+            "signature-xyz.html",
+            "../signature-1.html",
+            "signature-1.html/../config.toml",
+            "config.toml",
+            "signature-1.htm",
+            "",
+        ] {
             assert!(!is_signature_file(bad), "{}", bad);
         }
         let dir = std::env::temp_dir().join(format!("courriel-signame-{}", std::process::id()));
@@ -1879,7 +2136,11 @@ max_tokens = 10
         let file = cfg.accounts[0].signature.file.clone();
         assert_eq!(load(&dir, &file), "<b>Remi</b>");
         assert!(!dir.join("signature.html").exists());
-        assert_eq!((cfg.accounts[0].signature.on_new, cfg.accounts[0].signature.on_reply), (false, true), "legacy options kept");
+        assert_eq!(
+            (cfg.accounts[0].signature.on_new, cfg.accounts[0].signature.on_reply),
+            (false, true),
+            "legacy options kept"
+        );
         assert_eq!(cfg.accounts[1].signature.file, "", "only the first account gets it");
         std::fs::write(dir.join("signature.html"), "again").unwrap();
         assert!(!migrate_legacy(&dir, &mut cfg), "never twice once an account has a signature");
@@ -2087,7 +2348,11 @@ max_tokens = 10
         // An HTML error page, a clientConfig without any server, and broken XML all mean
         // "this source has nothing": the lookup then tries the next one.
         assert!(parse_autoconfig("<html><body>Not found</body></html>", "a@example.com").is_err());
-        assert!(parse_autoconfig(r#"<clientConfig version="1.1"><emailProvider id="x"/></clientConfig>"#, "a@example.com").is_err());
+        assert!(parse_autoconfig(
+            r#"<clientConfig version="1.1"><emailProvider id="x"/></clientConfig>"#,
+            "a@example.com"
+        )
+        .is_err());
         assert!(parse_autoconfig("<clientConfig version=\"1.1\"><emailProvider", "a@example.com").is_err());
     }
 
@@ -2226,7 +2491,10 @@ user_pref("mail.smtpservers", "smtp1");"#;
         assert_eq!(emails, vec!["john.doe@gmail.com", "john@example.com", "john.doe@alice.it"]);
 
         let a = &found[0];
-        assert_eq!((a.client.as_str(), a.label.as_str(), a.name.as_str()), ("Thunderbird", "john.doe@gmail.com", "John Doe"));
+        assert_eq!(
+            (a.client.as_str(), a.label.as_str(), a.name.as_str()),
+            ("Thunderbird", "john.doe@gmail.com", "John Doe")
+        );
         assert!(!a.pop3);
         assert!(a.oauth, "authMethod 10 is OAuth2");
         assert_eq!(srv(a.imap.as_ref()), ("imap.gmail.com", "993", "john.doe@gmail.com"));
@@ -2258,21 +2526,42 @@ user_pref("mail.smtpservers", "smtp1");"#;
         assert!(b.imap.is_none());
         assert_eq!(b.imap_issue, "starttls");
         assert_eq!(b.client, "Betterbird");
-        assert_eq!(srv(b.smtp.as_ref()), ("smtp.gmail.com", "465", "john.doe@gmail.com"), "the other side is untouched");
-        assert_eq!(found(TB_PREFS.replace(imap_socket, r#"user_pref("mail.server.server2.socketType", 0);"#)).imap_issue, "plain");
+        assert_eq!(
+            srv(b.smtp.as_ref()),
+            ("smtp.gmail.com", "465", "john.doe@gmail.com"),
+            "the other side is untouched"
+        );
+        assert_eq!(
+            found(TB_PREFS.replace(imap_socket, r#"user_pref("mail.server.server2.socketType", 0);"#)).imap_issue,
+            "plain"
+        );
         // An IMAP server with no port written is the usual one.
         let b = found(TB_PREFS.replace("user_pref(\"mail.server.server2.port\", 993);\n", ""));
         assert_eq!(srv(b.imap.as_ref()), ("imap.example.com", "993", "john@example.com"));
 
         // Outgoing: STARTTLS on a port other than 587, no encryption, and the old value 1.
-        let out = |socket: &str, port: &str| found(TB_PREFS
-            .replace(r#"user_pref("mail.smtpserver.smtp1.try_ssl", 3);"#, &format!("user_pref(\"mail.smtpserver.smtp1.try_ssl\", {socket});"))
-            .replace(r#"user_pref("mail.smtpserver.smtp1.port", 465);"#, &format!("user_pref(\"mail.smtpserver.smtp1.port\", {port});")));
+        let out = |socket: &str, port: &str| {
+            found(
+                TB_PREFS
+                    .replace(
+                        r#"user_pref("mail.smtpserver.smtp1.try_ssl", 3);"#,
+                        &format!("user_pref(\"mail.smtpserver.smtp1.try_ssl\", {socket});"),
+                    )
+                    .replace(
+                        r#"user_pref("mail.smtpserver.smtp1.port", 465);"#,
+                        &format!("user_pref(\"mail.smtpserver.smtp1.port\", {port});"),
+                    ),
+            )
+        };
         let refused = out("2", "25");
         assert!(refused.smtp.is_none());
         assert_eq!(refused.smtp_issue, "port");
         assert_eq!(out("0", "25").smtp_issue, "plain");
-        assert_eq!(srv(out("1", "587").smtp.as_ref()), ("smtp.gmail.com", "587", "john.doe@gmail.com"), "1 = try STARTTLS");
+        assert_eq!(
+            srv(out("1", "587").smtp.as_ref()),
+            ("smtp.gmail.com", "587", "john.doe@gmail.com"),
+            "1 = try STARTTLS"
+        );
     }
 
     #[test]
@@ -2280,9 +2569,13 @@ user_pref("mail.smtpservers", "smtp1");"#;
         use crate::auto_scan::parse_prefs;
         // The profile's outgoing server logs in with a token: a password will not send
         // anything, so the account is offered with the provider's hint instead.
-        let found = parse_prefs(&TB_PREFS.replace(
-            r#"user_pref("mail.smtpserver.smtp1.authMethod", 3);"#,
-            r#"user_pref("mail.smtpserver.smtp1.authMethod", 10);"#), "Thunderbird");
+        let found = parse_prefs(
+            &TB_PREFS.replace(
+                r#"user_pref("mail.smtpserver.smtp1.authMethod", 3);"#,
+                r#"user_pref("mail.smtpserver.smtp1.authMethod", 10);"#,
+            ),
+            "Thunderbird",
+        );
         assert!(found.iter().all(|a| a.oauth));
         assert!(!parse_prefs(TB_PREFS, "Thunderbird")[1].oauth);
     }
@@ -2291,9 +2584,10 @@ user_pref("mail.smtpservers", "smtp1");"#;
     fn test_auto_scan_accounts_without_an_address_or_a_useful_server() {
         use crate::auto_scan::parse_prefs;
         // An account whose identity has no address, and one whose server is a news group.
-        let prefs = TB_PREFS
-            .replace(r#"user_pref("mail.identity.id2.useremail", "john@example.com");"#, "")
-            .replace(r#"user_pref("mail.server.server1.type", "imap");"#, r#"user_pref("mail.server.server1.type", "nntp");"#);
+        let prefs = TB_PREFS.replace(r#"user_pref("mail.identity.id2.useremail", "john@example.com");"#, "").replace(
+            r#"user_pref("mail.server.server1.type", "imap");"#,
+            r#"user_pref("mail.server.server1.type", "nntp");"#,
+        );
         let found = parse_prefs(&prefs, "Thunderbird");
         let emails: Vec<&str> = found.iter().map(|a| a.email.as_str()).collect();
         assert_eq!(emails, vec!["john.doe@alice.it"]);
@@ -2308,7 +2602,8 @@ user_pref("mail.smtpservers", "smtp1");"#;
         // A name with a \u escape, an escaped quote and a backslash, as prefs.js writes them.
         let prefs = TB_PREFS.replace(
             r#"user_pref("mail.identity.id2.fullName", "John Doe");"#,
-            r#"user_pref("mail.identity.id2.fullName", "Jos\u00e9 \"Jo\" O:\\Mail");"#);
+            r#"user_pref("mail.identity.id2.fullName", "Jos\u00e9 \"Jo\" O:\\Mail");"#,
+        );
         let a = parse_prefs(&prefs, "Thunderbird").into_iter().find(|a| a.email == "john@example.com").unwrap();
         assert_eq!(a.name, "José \"Jo\" O:\\Mail");
         // The lines after it are still read.
@@ -2318,8 +2613,10 @@ user_pref("mail.smtpservers", "smtp1");"#;
     #[test]
     fn test_auto_scan_profile_dirs() {
         use crate::auto_scan::profile_dirs;
-        let abs = if cfg!(windows) { "D:/Mail/Profiles/wxyz9876.default" } else { "/srv/Mail/Profiles/wxyz9876.default" };
-        let ini = format!(r#"[InstallF70CDFEFA1B9B2DEC310184631102A00]
+        let abs =
+            if cfg!(windows) { "D:/Mail/Profiles/wxyz9876.default" } else { "/srv/Mail/Profiles/wxyz9876.default" };
+        let ini = format!(
+            r#"[InstallF70CDFEFA1B9B2DEC310184631102A00]
 Default=1
 IsRelative=1
 Path=Profiles/ignored.default-release
@@ -2338,8 +2635,13 @@ Path={abs}
 [General]
 StartWithLastProfile=1
 Version=2
-"#);
-        let base = std::path::Path::new(if cfg!(windows) { "C:/Users/Me/AppData/Roaming/Thunderbird" } else { "/home/me/.thunderbird" });
+"#
+        );
+        let base = std::path::Path::new(if cfg!(windows) {
+            "C:/Users/Me/AppData/Roaming/Thunderbird"
+        } else {
+            "/home/me/.thunderbird"
+        });
         let dirs = profile_dirs(&ini, base);
         // The [Install…] section points at the default profile again: not a second one.
         assert_eq!(dirs.len(), 2, "{dirs:?}");
@@ -2357,9 +2659,18 @@ Version=2
         // address written with other capitals, and alice.it as an IMAP account too.
         let again = TB_PREFS
             .replace("john@example.com", "JOHN@EXAMPLE.com")
-            .replace(r#"user_pref("mail.server.server3.type", "pop3");"#, r#"user_pref("mail.server.server3.type", "imap");"#)
-            .replace(r#"user_pref("mail.server.server3.hostname", "in.alice.it");"#, r#"user_pref("mail.server.server3.hostname", "imap.alice.it");"#)
-            .replace(r#"user_pref("mail.server.server3.port", 995);"#, r#"user_pref("mail.server.server3.port", 993);"#);
+            .replace(
+                r#"user_pref("mail.server.server3.type", "pop3");"#,
+                r#"user_pref("mail.server.server3.type", "imap");"#,
+            )
+            .replace(
+                r#"user_pref("mail.server.server3.hostname", "in.alice.it");"#,
+                r#"user_pref("mail.server.server3.hostname", "imap.alice.it");"#,
+            )
+            .replace(
+                r#"user_pref("mail.server.server3.port", 995);"#,
+                r#"user_pref("mail.server.server3.port", 993);"#,
+            );
         let all = dedupe([parse_prefs(TB_PREFS, "Thunderbird"), parse_prefs(&again, "Betterbird")].concat());
         let emails: Vec<&str> = all.iter().map(|a| a.email.as_str()).collect();
         assert_eq!(emails, vec!["john.doe@gmail.com", "john@example.com", "john.doe@alice.it"]);
@@ -2374,10 +2685,7 @@ Version=2
 
     /// A REG_BINARY value as `reg query` writes it: UTF-16LE, NUL-terminated, one hex line.
     fn reg_u16(text: &str) -> String {
-        text.encode_utf16()
-            .chain(std::iter::once(0))
-            .map(|u| format!("{:02x}{:02x}", u & 0xff, u >> 8))
-            .collect()
+        text.encode_utf16().chain(std::iter::once(0)).map(|u| format!("{:02x}{:02x}", u & 0xff, u >> 8)).collect()
     }
 
     /// One key of a `reg query … /s` output: its path, then its values.
@@ -2394,41 +2702,50 @@ Version=2
         let base = r"HKEY_CURRENT_USER\Software\Microsoft\Office\16.0\Outlook\Profiles\Outlook\9375CFF0413111d3B88A00104B2A6676";
         let b = reg_u16;
         let mut out = String::new();
-        out.push_str(&reg_block(&format!(r"{base}\00000001"), &[
-            ("Account Name", "REG_BINARY", &b("john.doe@example.com")),
-            ("Display Name", "REG_BINARY", &b("John Doe")),
-            ("Email", "REG_BINARY", &b("john.doe@example.com")),
-            ("IMAP Server", "REG_BINARY", &b("imap.example.com")),
-            ("IMAP User", "REG_BINARY", &b("john.doe@example.com")),
-            ("IMAP Port", "REG_DWORD", "0x3e1"),
-            ("IMAP Use SSL", "REG_DWORD", "0x1"),
-            ("SMTP Server", "REG_BINARY", &b("smtp.example.com")),
-            ("SMTP User", "REG_BINARY", &b("john.doe@example.com")),
-            ("SMTP Port", "REG_DWORD", "0x24b"),
-            ("SMTP Use SSL", "REG_DWORD", "0x0"),
-            ("SMTP Secure Connection", "REG_DWORD", "0x1"),
-            ("Service UID", "REG_BINARY", "c3d19a7b801bc44a960ae5b63bf97c7e"),
-        ]));
-        out.push_str(&reg_block(&format!(r"{base}\00000002"), &[
-            ("Account Name", "REG_BINARY", &b("john@contoso.com")),
-            ("Display Name", "REG_BINARY", &b("John Doe")),
-            ("Email", "REG_BINARY", &b("john@contoso.com")),
-            ("POP3 Server", "REG_BINARY", &b("pop3.contoso.com")),
-            ("POP3 User", "REG_BINARY", &b("john@contoso.com")),
-            ("POP3 Password", "REG_BINARY", "01000000d08c9ddf0115d1118c7a00c04fc297eb"),
-            ("POP3 Port", "REG_DWORD", "0x3e3"),
-            ("POP3 Use SSL", "REG_DWORD", "0x1"),
-            ("SMTP Server", "REG_BINARY", &b("smtp.contoso.com")),
-            ("SMTP Port", "REG_DWORD", "0x1d1"),
-            ("SMTP Use SSL", "REG_DWORD", "0x1"),
-        ]));
-        out.push_str(&reg_block(&format!(r"{base}\00000003"), &[
-            ("Account Name", "REG_BINARY", &b("john@contoso.com")),
-            ("Display Name", "REG_BINARY", &b("John Doe")),
-            ("Email", "REG_BINARY", &b("john@contoso.com")),
-            ("Mdb Name", "REG_BINARY", &b("Mailbox On Contoso")),
-            ("Microsoft Exchange Server", "REG_BINARY", &b("mail.contoso.com")),
-        ]));
+        out.push_str(&reg_block(
+            &format!(r"{base}\00000001"),
+            &[
+                ("Account Name", "REG_BINARY", &b("john.doe@example.com")),
+                ("Display Name", "REG_BINARY", &b("John Doe")),
+                ("Email", "REG_BINARY", &b("john.doe@example.com")),
+                ("IMAP Server", "REG_BINARY", &b("imap.example.com")),
+                ("IMAP User", "REG_BINARY", &b("john.doe@example.com")),
+                ("IMAP Port", "REG_DWORD", "0x3e1"),
+                ("IMAP Use SSL", "REG_DWORD", "0x1"),
+                ("SMTP Server", "REG_BINARY", &b("smtp.example.com")),
+                ("SMTP User", "REG_BINARY", &b("john.doe@example.com")),
+                ("SMTP Port", "REG_DWORD", "0x24b"),
+                ("SMTP Use SSL", "REG_DWORD", "0x0"),
+                ("SMTP Secure Connection", "REG_DWORD", "0x1"),
+                ("Service UID", "REG_BINARY", "c3d19a7b801bc44a960ae5b63bf97c7e"),
+            ],
+        ));
+        out.push_str(&reg_block(
+            &format!(r"{base}\00000002"),
+            &[
+                ("Account Name", "REG_BINARY", &b("john@contoso.com")),
+                ("Display Name", "REG_BINARY", &b("John Doe")),
+                ("Email", "REG_BINARY", &b("john@contoso.com")),
+                ("POP3 Server", "REG_BINARY", &b("pop3.contoso.com")),
+                ("POP3 User", "REG_BINARY", &b("john@contoso.com")),
+                ("POP3 Password", "REG_BINARY", "01000000d08c9ddf0115d1118c7a00c04fc297eb"),
+                ("POP3 Port", "REG_DWORD", "0x3e3"),
+                ("POP3 Use SSL", "REG_DWORD", "0x1"),
+                ("SMTP Server", "REG_BINARY", &b("smtp.contoso.com")),
+                ("SMTP Port", "REG_DWORD", "0x1d1"),
+                ("SMTP Use SSL", "REG_DWORD", "0x1"),
+            ],
+        ));
+        out.push_str(&reg_block(
+            &format!(r"{base}\00000003"),
+            &[
+                ("Account Name", "REG_BINARY", &b("john@contoso.com")),
+                ("Display Name", "REG_BINARY", &b("John Doe")),
+                ("Email", "REG_BINARY", &b("john@contoso.com")),
+                ("Mdb Name", "REG_BINARY", &b("Mailbox On Contoso")),
+                ("Microsoft Exchange Server", "REG_BINARY", &b("mail.contoso.com")),
+            ],
+        ));
         out.push_str("\nEnd of search: 3 different entries found.\n");
         out
     }
@@ -2442,7 +2759,10 @@ Version=2
         assert_eq!(emails, vec!["john.doe@example.com", "john@contoso.com"]);
 
         let a = &found[0];
-        assert_eq!((a.client.as_str(), a.label.as_str(), a.name.as_str()), ("Outlook", "john.doe@example.com", "John Doe"));
+        assert_eq!(
+            (a.client.as_str(), a.label.as_str(), a.name.as_str()),
+            ("Outlook", "john.doe@example.com", "John Doe")
+        );
         assert!(!a.pop3);
         assert_eq!(srv(a.imap.as_ref()), ("imap.example.com", "993", "john.doe@example.com"));
         assert_eq!(srv(a.smtp.as_ref()), ("smtp.example.com", "587", "john.doe@example.com"));
@@ -2458,21 +2778,28 @@ Version=2
     #[test]
     fn test_auto_scan_outlook_reg_security_and_spellings() {
         use crate::auto_scan::parse_outlook_reg;
-        let one = |reg: String| {
-            parse_outlook_reg(&reg).into_iter().find(|a| a.email == "john.doe@example.com").unwrap()
-        };
+        let one =
+            |reg: String| parse_outlook_reg(&reg).into_iter().find(|a| a.email == "john.doe@example.com").unwrap();
         // Incoming mail only speaks implicit TLS: an account without SSL has nothing to offer.
-        let a = one(outlook_reg().replace("    IMAP Use SSL    REG_DWORD    0x1", "    IMAP Use SSL    REG_DWORD    0x0"));
+        let a =
+            one(outlook_reg().replace("    IMAP Use SSL    REG_DWORD    0x1", "    IMAP Use SSL    REG_DWORD    0x0"));
         assert!(a.imap.is_none());
         assert_eq!(a.imap_issue, "plain");
-        assert_eq!(srv(a.smtp.as_ref()), ("smtp.example.com", "587", "john.doe@example.com"), "the other side is untouched");
+        assert_eq!(
+            srv(a.smtp.as_ref()),
+            ("smtp.example.com", "587", "john.doe@example.com"),
+            "the other side is untouched"
+        );
         // An IMAP account with SSL and no port written: the usual one.
         let a = one(outlook_reg().replace("    IMAP Port    REG_DWORD    0x3e1\n", ""));
         assert_eq!(srv(a.imap.as_ref()), ("imap.example.com", "993", "john.doe@example.com"));
         // A string written as REG_SZ instead of a UTF-16 REG_BINARY is read as well,
         // and a value name is matched whatever its capitals.
         let a = one(outlook_reg()
-            .replace(&format!("    IMAP Server    REG_BINARY    {}\n", reg_u16("imap.example.com")), "    IMAP Server    REG_SZ    imap.example.com\n")
+            .replace(
+                &format!("    IMAP Server    REG_BINARY    {}\n", reg_u16("imap.example.com")),
+                "    IMAP Server    REG_SZ    imap.example.com\n",
+            )
             .replace("    Email    REG_BINARY", "    email    REG_BINARY"));
         assert_eq!(srv(a.imap.as_ref()), ("imap.example.com", "993", "john.doe@example.com"));
         // Nothing at all, or an output that names no key: nothing found.
@@ -2548,7 +2875,11 @@ Method=ssl-on-alternate-port
             ("0-ac-002".to_string(), EVO_IDENTITY.to_string()),
             ("0-ac-003".to_string(), EVO_TRANSPORT.to_string()),
             // Local Folders: a mail account, but one with no server at all.
-            ("0-ac-004".to_string(), "[Data Source]\nDisplayName=On This Computer\nParent=\n\n[Mail Account]\nBackendName=maildir\n".to_string()),
+            (
+                "0-ac-004".to_string(),
+                "[Data Source]\nDisplayName=On This Computer\nParent=\n\n[Mail Account]\nBackendName=maildir\n"
+                    .to_string(),
+            ),
         ]
     }
 
@@ -2558,8 +2889,10 @@ Method=ssl-on-alternate-port
         let found = parse_evolution(&evo_files());
         assert_eq!(found.len(), 1, "{found:?}");
         let a = &found[0];
-        assert_eq!((a.client.as_str(), a.label.as_str(), a.name.as_str(), a.email.as_str()),
-            ("Evolution", "Company Account", "John Doe", "me@example.com"));
+        assert_eq!(
+            (a.client.as_str(), a.label.as_str(), a.name.as_str(), a.email.as_str()),
+            ("Evolution", "Company Account", "John Doe", "me@example.com")
+        );
         assert!(!a.pop3);
         assert!(!a.oauth, "plain/password is an ordinary password");
         assert_eq!(srv(a.imap.as_ref()), ("imap.example.com", "993", "me@example.com"));
@@ -2579,7 +2912,9 @@ Method=ssl-on-alternate-port
                 ("0-ac-002".to_string(), EVO_IDENTITY.to_string()),
                 ("0-ac-003".to_string(), EVO_TRANSPORT.to_string()),
             ])
-            .into_iter().next().unwrap()
+            .into_iter()
+            .next()
+            .unwrap()
         };
         // STARTTLS on 143: incoming mail only speaks implicit TLS.
         let a = one(EVO_ACCOUNT
@@ -2591,9 +2926,12 @@ Method=ssl-on-alternate-port
         assert_eq!(one(EVO_ACCOUNT.replace("Method=ssl-on-alternate-port", "Method=none")).imap_issue, "plain");
         // Outgoing: STARTTLS on 587 is one of the two ways this app can send.
         let mut files = evo_files();
-        files[2] = ("0-ac-003".to_string(), EVO_TRANSPORT
-            .replace("Method=ssl-on-alternate-port", "Method=starttls-on-standard-port")
-            .replace("Port=465", "Port=587"));
+        files[2] = (
+            "0-ac-003".to_string(),
+            EVO_TRANSPORT
+                .replace("Method=ssl-on-alternate-port", "Method=starttls-on-standard-port")
+                .replace("Port=465", "Port=587"),
+        );
         let a = parse_evolution(&files).remove(0);
         assert_eq!(srv(a.smtp.as_ref()), ("smtp.example.com", "587", "me@example.com"));
         // A POP3 account is shown but cannot be added, a token login is told.
@@ -2604,8 +2942,9 @@ Method=ssl-on-alternate-port
         // An account with no transport of its own still comes as an incoming one.
         let a = parse_evolution(&[
             ("0-ac-001".to_string(), EVO_ACCOUNT.to_string()),
-            ("0-ac-002".to_string(), EVO_IDENTITY.replace("TransportUid=0-ac-003", "TransportUid="),),
-        ])[0].clone();
+            ("0-ac-002".to_string(), EVO_IDENTITY.replace("TransportUid=0-ac-003", "TransportUid=")),
+        ])[0]
+            .clone();
         assert!(a.smtp.is_none());
         assert_eq!(a.smtp_issue, "");
         assert_eq!(srv(a.imap.as_ref()), ("imap.example.com", "993", "me@example.com"));
@@ -2620,7 +2959,18 @@ Method=ssl-on-alternate-port
         let found = scan();
         println!("{} account(s) found", found.len());
         for a in &found {
-            println!("{} | {} | {} | pop3={} oauth={} imap={:?} ({}) smtp={:?} ({})", a.client, a.label, a.email, a.pop3, a.oauth, srv(a.imap.as_ref()), a.imap_issue, srv(a.smtp.as_ref()), a.smtp_issue);
+            println!(
+                "{} | {} | {} | pop3={} oauth={} imap={:?} ({}) smtp={:?} ({})",
+                a.client,
+                a.label,
+                a.email,
+                a.pop3,
+                a.oauth,
+                srv(a.imap.as_ref()),
+                a.imap_issue,
+                srv(a.smtp.as_ref()),
+                a.smtp_issue
+            );
         }
     }
 
@@ -2673,19 +3023,38 @@ Method=ssl-on-alternate-port
         let empty = Config::load_from(&path).unwrap();
         let accounts = vec![
             AccountDto {
-                label: "Work".into(), imap_host: "imap.work.test".into(), imap_port: "993".into(),
-                imap_user: "remi@work.test".into(), imap_pass: "imap-secret".into(), imap_mailbox: "INBOX".into(),
-                imap_fetch: "75".into(), smtp_host: "smtp.work.test".into(), smtp_port: "465".into(),
-                smtp_user: "remi@work.test".into(), smtp_pass: "smtp-secret".into(),
-                smtp_from: "\"Remi Work\" <remi@work.test>".into(), signature_file: "signature-abc123.html".into(),
-                signature_on_new: true, signature_on_reply: false,
+                label: "Work".into(),
+                imap_host: "imap.work.test".into(),
+                imap_port: "993".into(),
+                imap_user: "remi@work.test".into(),
+                imap_pass: "imap-secret".into(),
+                imap_mailbox: "INBOX".into(),
+                imap_fetch: "75".into(),
+                smtp_host: "smtp.work.test".into(),
+                smtp_port: "465".into(),
+                smtp_user: "remi@work.test".into(),
+                smtp_pass: "smtp-secret".into(),
+                smtp_from: "\"Remi Work\" <remi@work.test>".into(),
+                signature_file: "signature-abc123.html".into(),
+                signature_on_new: true,
+                signature_on_reply: false,
             },
             AccountDto {
-                label: "Personal".into(), imap_host: "imap.personal.test".into(), imap_port: "".into(),
-                imap_user: "me@personal.test".into(), imap_pass: "shared-secret".into(), imap_mailbox: "".into(),
-                imap_fetch: "".into(), smtp_host: "smtp.personal.test".into(), smtp_port: "".into(),
-                smtp_user: "".into(), smtp_pass: "".into(), smtp_from: "".into(), signature_file: String::new(),
-                signature_on_new: false, signature_on_reply: true,
+                label: "Personal".into(),
+                imap_host: "imap.personal.test".into(),
+                imap_port: "".into(),
+                imap_user: "me@personal.test".into(),
+                imap_pass: "shared-secret".into(),
+                imap_mailbox: "".into(),
+                imap_fetch: "".into(),
+                smtp_host: "smtp.personal.test".into(),
+                smtp_port: "".into(),
+                smtp_user: "".into(),
+                smtp_pass: "".into(),
+                smtp_from: "".into(),
+                signature_file: String::new(),
+                signature_on_new: false,
+                signature_on_reply: true,
             },
         ];
         let ai = AiSettingsDto {
@@ -2699,13 +3068,26 @@ Method=ssl-on-alternate-port
             ]),
         };
         let mut configured = crate::settings::apply_to_config(
-            empty, None, &accounts, &ai, " custom-giphy ", 1.25, Some("aero"), Some("fr"), None,
+            empty,
+            None,
+            &accounts,
+            &ai,
+            " custom-giphy ",
+            1.25,
+            Some("aero"),
+            Some("fr"),
+            None,
         );
         configured.projects = vec![
-            ProjectConfig { name: "Research".into(), description: "Paper and experiments".into(), urgency: "high".into() },
+            ProjectConfig {
+                name: "Research".into(),
+                description: "Paper and experiments".into(),
+                urgency: "high".into(),
+            },
             ProjectConfig { name: "Home".into(), description: "Personal work".into(), urgency: "normal".into() },
         ];
-        configured.supabase = Some(SupabaseConfig { url: "https://cloud.example".into(), anon_key: "public-key".into() });
+        configured.supabase =
+            Some(SupabaseConfig { url: "https://cloud.example".into(), anon_key: "public-key".into() });
 
         crate::config::write_to(&configured, &path).unwrap();
         let restarted = Config::load_from(&path).unwrap();
@@ -2743,9 +3125,7 @@ Method=ssl-on-alternate-port
         original.user.language = "ja".into();
         original.ai.provider = "mistral".into();
         let ai = AiSettingsDto { provider: "evil-provider".into(), ..Default::default() };
-        let updated = crate::settings::apply_to_config(
-            original, None, &[], &ai, "", 1.0, None, Some("xx"), None,
-        );
+        let updated = crate::settings::apply_to_config(original, None, &[], &ai, "", 1.0, None, Some("xx"), None);
         assert_eq!(updated.user.language, "ja");
         assert_eq!(updated.ai.provider(), "mistral");
     }
@@ -2755,7 +3135,15 @@ Method=ssl-on-alternate-port
         use crate::dto::AiSettingsDto;
         for (language, _) in crate::i18n::LANGUAGES {
             let updated = crate::settings::apply_to_config(
-                Config::default(), None, &[], &AiSettingsDto::default(), "", 1.0, None, Some(language), None,
+                Config::default(),
+                None,
+                &[],
+                &AiSettingsDto::default(),
+                "",
+                1.0,
+                None,
+                Some(language),
+                None,
             );
             assert_eq!(&updated.user.language, language);
         }
@@ -2764,8 +3152,11 @@ Method=ssl-on-alternate-port
     #[test]
     fn test_account_defaults_are_applied_to_invalid_numeric_input() {
         let dto = AccountDto {
-            label: "Defaults".into(), imap_port: "not-a-port".into(), imap_fetch: "NaN".into(),
-            smtp_port: "70000".into(), ..Default::default()
+            label: "Defaults".into(),
+            imap_port: "not-a-port".into(),
+            imap_fetch: "NaN".into(),
+            smtp_port: "70000".into(),
+            ..Default::default()
         };
         let account = crate::settings::account_from_dto(&dto);
         assert_eq!(account.imap.port, 993);
@@ -2792,7 +3183,9 @@ Method=ssl-on-alternate-port
     fn test_legacy_single_account_file_migrates_without_losing_projects() {
         let dir = isolated_test_dir("legacy-config");
         let path = dir.join("config.toml");
-        std::fs::write(&path, r#"
+        std::fs::write(
+            &path,
+            r#"
 [user]
 display_name = "Legacy User"
 
@@ -2820,7 +3213,9 @@ max_tokens = 222
 name = "Legacy project"
 description = "Keep me"
 urgency = "high"
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let migrated = Config::load_from(&path).unwrap();
         assert_eq!(migrated.accounts.len(), 1);
         assert_eq!(migrated.accounts[0].name, "Default");
@@ -2840,4 +3235,3 @@ urgency = "high"
         let _ = std::fs::remove_dir_all(dir);
     }
 }
-

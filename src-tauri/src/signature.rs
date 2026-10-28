@@ -32,9 +32,8 @@ pub fn decode_html(bytes: &[u8]) -> String {
             .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
             .collect::<String>()
     });
-    let encoding = label
-        .and_then(|l| encoding_rs::Encoding::for_label(l.as_bytes()))
-        .unwrap_or(encoding_rs::WINDOWS_1252);
+    let encoding =
+        label.and_then(|l| encoding_rs::Encoding::for_label(l.as_bytes())).unwrap_or(encoding_rs::WINDOWS_1252);
     let (text, _, _) = encoding.decode(bytes);
     text.into_owned()
 }
@@ -86,16 +85,16 @@ fn unescape_src(v: &str) -> String {
 /// Where a local image src points to, if it is local at all.
 fn local_path(src: &str, base_dir: &Path) -> Option<PathBuf> {
     let lower = src.to_lowercase();
-    if lower.starts_with("http:") || lower.starts_with("https:") || lower.starts_with("data:")
-        || lower.starts_with("cid:") || lower.starts_with("//")
+    if lower.starts_with("http:")
+        || lower.starts_with("https:")
+        || lower.starts_with("data:")
+        || lower.starts_with("cid:")
+        || lower.starts_with("//")
     {
         return None;
     }
     let raw = unescape_src(src);
-    let raw = raw
-        .strip_prefix("file://localhost")
-        .or_else(|| raw.strip_prefix("file://"))
-        .unwrap_or(&raw);
+    let raw = raw.strip_prefix("file://localhost").or_else(|| raw.strip_prefix("file://")).unwrap_or(&raw);
     // file:///C:/… on Windows
     let raw = if raw.len() > 3 && raw.starts_with('/') && raw.as_bytes()[2] == b':' { &raw[1..] } else { raw };
     let p = PathBuf::from(raw);
@@ -112,10 +111,16 @@ pub fn embed_local_images(html: &str, base_dir: &Path, max_bytes: u64) -> String
         out.push_str(before);
         let quote = match after.chars().next() {
             Some(c @ ('"' | '\'')) => c,
-            _ => { rest = after; continue; }
+            _ => {
+                rest = after;
+                continue;
+            }
         };
         let value_start = &after[1..];
-        let Some(end) = value_start.find(quote) else { rest = after; continue; };
+        let Some(end) = value_start.find(quote) else {
+            rest = after;
+            continue;
+        };
         let value = &value_start[..end];
         let embedded = local_path(value, base_dir).and_then(|path| {
             let mime = image_mime(&path)?;
@@ -150,10 +155,7 @@ pub fn is_signature_file(name: &str) -> bool {
 
 /// A file name not used yet in `dir`.
 fn new_file_name(dir: &Path) -> String {
-    let mut n = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
+    let mut n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
     loop {
         let name = format!("signature-{:x}.html", n);
         if !dir.join(&name).exists() {

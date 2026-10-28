@@ -73,21 +73,18 @@ pub fn encode(ai: &AiConfig, req: &Request) -> Encoded {
 /// The answer text from a successful response.
 pub fn decode(ai: &AiConfig, body: &Value) -> Result<String> {
     let text = if is_anthropic(ai) {
-        body.get("content")
-            .and_then(Value::as_array)
-            .map(|blocks| {
-                blocks
-                    .iter()
-                    .filter(|b| b.get("type").and_then(Value::as_str) == Some("text"))
-                    .filter_map(|b| b.get("text").and_then(Value::as_str))
-                    .collect::<Vec<_>>()
-                    .join("")
-            })
+        body.get("content").and_then(Value::as_array).map(|blocks| {
+            blocks
+                .iter()
+                .filter(|b| b.get("type").and_then(Value::as_str) == Some("text"))
+                .filter_map(|b| b.get("text").and_then(Value::as_str))
+                .collect::<Vec<_>>()
+                .join("")
+        })
     } else {
         body.pointer("/choices/0/message/content").and_then(Value::as_str).map(str::to_string)
     };
-    text.filter(|t| !t.trim().is_empty())
-        .ok_or_else(|| anyhow!("The AI returned an empty answer"))
+    text.filter(|t| !t.trim().is_empty()).ok_or_else(|| anyhow!("The AI returned an empty answer"))
 }
 
 /// A readable message from an error response body (each provider shapes it differently).
@@ -151,7 +148,7 @@ fn check_ready(ai: &AiConfig) -> Result<String> {
 /// otherwise what to fill in.
 pub fn readiness(ai: &AiConfig) -> Result<()> {
     if ai.uses_claude_code() {
-        return Ok(());   // no URL or key; an empty model means Claude Code's default
+        return Ok(()); // no URL or key; an empty model means Claude Code's default
     }
     check_ready(ai).map(|_| ())
 }

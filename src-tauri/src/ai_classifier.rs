@@ -6,10 +6,6 @@ use tracing::{debug, warn};
 use crate::config::{AiConfig, ProjectConfig};
 use crate::models::{Priority, RawEmail};
 
-
-
-
-
 #[derive(Deserialize)]
 struct ClassificationResult {
     priority: String,
@@ -89,16 +85,12 @@ For the meeting_link field: if the email body contains a video meeting URL (Zoom
     if !projects.is_empty() {
         prompt.push_str("\nFor the project field, assign the email to one of these user-defined projects if it matches, otherwise null:\n");
         for p in projects {
-            prompt.push_str(&format!(
-                "- \"{}\": {} (urgency: {})\n",
-                p.name, p.description, p.urgency
-            ));
+            prompt.push_str(&format!("- \"{}\": {} (urgency: {})\n", p.name, p.description, p.urgency));
         }
         prompt.push_str("\nIf none match, use null for project.\n");
     } else {
         prompt.push_str("\nFor the project field: always use null (no projects configured).\n");
     }
-
 
     prompt.push_str(&format!(
         "\nWrite the summary and the task in {}, whatever the language of the email.\n",
@@ -109,16 +101,9 @@ For the meeting_link field: if the email body contains a video meeting URL (Zoom
 
 /// Fails only when the AI can't be reached (the error says why); an answer that can't be
 /// read gives a placeholder result.
-pub async fn classify(
-    ai: &AiConfig,
-    email: &RawEmail,
-    projects: &[ProjectConfig],
-) -> Result<ClassifiedEmail> {
+pub async fn classify(ai: &AiConfig, email: &RawEmail, projects: &[ProjectConfig]) -> Result<ClassifiedEmail> {
     let body_snippet: String = email.body_text.chars().take(800).collect();
-    let user_content = format!(
-        "Subject: {}\nFrom: {}\nBody:\n{}",
-        email.subject, email.from, body_snippet
-    );
+    let user_content = format!("Subject: {}\nFrom: {}\nBody:\n{}", email.subject, email.from, body_snippet);
     let system_prompt = build_system_prompt(projects);
     let placeholder = |summary: &str| ClassifiedEmail {
         priority: Priority::Information,
@@ -129,12 +114,10 @@ pub async fn classify(
         meeting_link: None,
     };
 
-    let text = match crate::ai::complete(ai, crate::ai::Request {
-        system: &system_prompt,
-        user: &user_content,
-        max_tokens: ai.max_tokens,
-        json: true,
-    })
+    let text = match crate::ai::complete(
+        ai,
+        crate::ai::Request { system: &system_prompt, user: &user_content, max_tokens: ai.max_tokens, json: true },
+    )
     .await
     {
         Ok(t) => t,
@@ -149,10 +132,7 @@ pub async fn classify(
     match serde_json::from_str::<ClassificationResult>(crate::ai::extract_json(&text)) {
         Ok(result) => {
             let priority = Priority::from_str(&result.priority);
-            let deadline = result
-                .deadline
-                .as_deref()
-                .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
+            let deadline = result.deadline.as_deref().and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
             Ok(ClassifiedEmail {
                 priority,
                 summary: result.summary,
@@ -210,12 +190,7 @@ Respond ONLY with a JSON object (no explanation, no markdown, no code fences):
 
 /// Parse the model's answer into (uid, verdict) pairs, ignoring ids that are not open tasks.
 pub fn parse_task_check(text: &str, open_uids: &[u64]) -> Vec<(u64, &'static str)> {
-    let trimmed = text
-        .trim()
-        .trim_start_matches("```json")
-        .trim_start_matches("```")
-        .trim_end_matches("```")
-        .trim();
+    let trimmed = text.trim().trim_start_matches("```json").trim_start_matches("```").trim_end_matches("```").trim();
     let result: TaskCheckResult = match serde_json::from_str(trimmed) {
         Ok(r) => r,
         Err(e) => {
@@ -238,11 +213,7 @@ pub fn parse_task_check(text: &str, open_uids: &[u64]) -> Vec<(u64, &'static str
 }
 
 /// Ask Claude which open tasks are already done or no longer relevant.
-pub async fn check_tasks(
-    ai: &AiConfig,
-    tasks: &[OpenTask],
-    recent: &[RecentMail],
-) -> Result<Vec<(u64, &'static str)>> {
+pub async fn check_tasks(ai: &AiConfig, tasks: &[OpenTask], recent: &[RecentMail]) -> Result<Vec<(u64, &'static str)>> {
     if tasks.is_empty() || recent.is_empty() {
         return Ok(vec![]);
     }
@@ -262,12 +233,10 @@ pub async fn check_tasks(
         ));
     }
 
-    let text = crate::ai::complete(ai, crate::ai::Request {
-        system: TASK_CHECK_PROMPT,
-        user: &user_content,
-        max_tokens: 500,
-        json: true,
-    })
+    let text = crate::ai::complete(
+        ai,
+        crate::ai::Request { system: TASK_CHECK_PROMPT, user: &user_content, max_tokens: 500, json: true },
+    )
     .await?;
     debug!("Task check raw response: {}", text);
 

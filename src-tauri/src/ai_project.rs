@@ -118,15 +118,18 @@ pub fn parse(text: &str) -> Option<ProjectDraft> {
 /// `me`: the user's name and addresses.
 pub async fn draft(ai: &AiConfig, request: &str, me: &str, emails: &[EmailCard]) -> Result<ProjectDraft> {
     // Same language as the rest of the app (the classifier's summaries), whatever the emails'.
-    let system = format!("{}\n- Write the name, summary, people's roles and keywords in {}.", PROMPT, crate::i18n::ai_language());
-    let text = crate::ai::complete(ai, crate::ai::Request {
-        system: &system,
-        user: &user_content(request, me, emails),
-        max_tokens: 600,
-        json: true,
-    })
+    let system = format!(
+        "{}\n- Write the name, summary, people's roles and keywords in {}.",
+        PROMPT,
+        crate::i18n::ai_language()
+    );
+    let text = crate::ai::complete(
+        ai,
+        crate::ai::Request { system: &system, user: &user_content(request, me, emails), max_tokens: 600, json: true },
+    )
     .await?;
-    parse(&text).ok_or_else(|| anyhow!("The AI's answer could not be used: {}", text.chars().take(200).collect::<String>()))
+    parse(&text)
+        .ok_or_else(|| anyhow!("The AI's answer could not be used: {}", text.chars().take(200).collect::<String>()))
 }
 
 // ── Filing the emails already there ─────────────────────────────────────────
@@ -153,7 +156,12 @@ pub fn match_content(name: &str, description: &str, emails: &[EmailCard]) -> Str
         };
         out.push_str(&format!(
             "[{}] From: {} <{}> | Subject: {} | project now: {} | {}\n",
-            c.uid, c.from_name, c.from_email, c.subject, c.project.as_deref().unwrap_or("none"), gist
+            c.uid,
+            c.from_name,
+            c.from_email,
+            c.subject,
+            c.project.as_deref().unwrap_or("none"),
+            gist
         ));
     }
     out
@@ -166,7 +174,9 @@ pub fn parse_ids(text: &str, offered: &[u64]) -> Option<Vec<u64>> {
         ids: Vec<serde_json::Value>,
     }
     let ids: Ids = serde_json::from_str(crate::ai::extract_json(text)).ok()?;
-    let mut out: Vec<u64> = ids.ids.iter()
+    let mut out: Vec<u64> = ids
+        .ids
+        .iter()
         .filter_map(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().trim_matches(['[', ']']).parse().ok())))
         .filter(|n| offered.contains(n))
         .collect();
@@ -180,12 +190,15 @@ pub async fn matching_emails(ai: &AiConfig, name: &str, description: &str, email
     if emails.is_empty() {
         return Ok(Vec::new());
     }
-    let text = crate::ai::complete(ai, crate::ai::Request {
-        system: MATCH_PROMPT,
-        user: &match_content(name, description, emails),
-        max_tokens: 1000,
-        json: true,
-    })
+    let text = crate::ai::complete(
+        ai,
+        crate::ai::Request {
+            system: MATCH_PROMPT,
+            user: &match_content(name, description, emails),
+            max_tokens: 1000,
+            json: true,
+        },
+    )
     .await?;
     let offered: Vec<u64> = emails.iter().map(|c| c.uid).collect();
     parse_ids(&text, &offered)

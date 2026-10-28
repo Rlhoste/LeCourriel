@@ -47,7 +47,8 @@ impl Config {
         if !name.is_empty() {
             return name.to_string();
         }
-        self.accounts.first()
+        self.accounts
+            .first()
             .and_then(|a| a.smtp.from_address.split_once('<'))
             .map(|(name, _)| name.trim().trim_matches('"').trim().to_string())
             .unwrap_or_default()
@@ -72,7 +73,9 @@ pub struct SignatureConfig {
     pub on_reply: bool,
 }
 
-fn yes() -> bool { true }
+fn yes() -> bool {
+    true
+}
 
 impl Default for SignatureConfig {
     fn default() -> Self {
@@ -96,7 +99,11 @@ impl GifConfig {
     /// The key to use: the user's, else the built-in one.
     pub fn key(&self) -> &str {
         let own = self.giphy_api_key.trim();
-        if own.is_empty() { DEFAULT_GIPHY_KEY } else { own }
+        if own.is_empty() {
+            DEFAULT_GIPHY_KEY
+        } else {
+            own
+        }
     }
 }
 
@@ -117,9 +124,15 @@ pub struct UserConfig {
     pub notify_new_mail: bool,
 }
 
-fn default_font_scale() -> f32 { 1.0 }
-fn default_theme() -> String { "brutalist".to_string() }
-fn default_language() -> String { "en".to_string() }
+fn default_font_scale() -> f32 {
+    1.0
+}
+fn default_theme() -> String {
+    "brutalist".to_string()
+}
+fn default_language() -> String {
+    "en".to_string()
+}
 
 impl Default for UserConfig {
     fn default() -> Self {
@@ -160,7 +173,8 @@ impl AccountConfig {
             let email = smtp.username.trim();
             if email.contains('@') {
                 let name = display_name.trim().replace(['"', '<', '>'], "");
-                smtp.from_address = if name.is_empty() { email.to_string() } else { format!("\"{}\" <{}>", name, email) };
+                smtp.from_address =
+                    if name.is_empty() { email.to_string() } else { format!("\"{}\" <{}>", name, email) };
             }
         }
         smtp
@@ -196,7 +210,9 @@ pub struct ClaudeConfig {
     pub max_tokens: u32,
 }
 
-fn default_model() -> String { "claude-opus-4-6".to_string() }
+fn default_model() -> String {
+    "claude-opus-4-6".to_string()
+}
 
 /// AI providers. Anthropic has its own API; "claude_code" goes through the user's Claude Code
 /// (their Claude subscription); all the others speak the OpenAI Chat Completions format.
@@ -234,7 +250,11 @@ impl Default for AiConfig {
 
 impl AiConfig {
     pub fn provider(&self) -> &str {
-        if self.provider.is_empty() { "anthropic" } else { &self.provider }
+        if self.provider.is_empty() {
+            "anthropic"
+        } else {
+            &self.provider
+        }
     }
 
     /// "Claude (subscription)": requests go through the user's Claude Code, not an API.
@@ -265,7 +285,9 @@ pub fn default_base_url(provider: &str) -> &'static str {
         _ => "https://api.anthropic.com/v1",
     }
 }
-fn default_max_tokens() -> u32 { 300 }
+fn default_max_tokens() -> u32 {
+    300
+}
 
 impl Default for ClaudeConfig {
     fn default() -> Self {
@@ -313,25 +335,18 @@ impl Config {
 
         // Try new format first. Only a file with a top-level [imap] is the legacy format.
         if let Ok(cfg) = toml::from_str::<Config>(&content) {
-            let legacy_shape = toml::from_str::<toml::Value>(&content)
-                .map(|v| v.get("imap").is_some())
-                .unwrap_or(false);
+            let legacy_shape =
+                toml::from_str::<toml::Value>(&content).map(|v| v.get("imap").is_some()).unwrap_or(false);
             if !cfg.accounts.is_empty() || !legacy_shape {
                 return Ok(cfg.migrated());
             }
         }
 
         // Fall back to legacy single-account format and migrate.
-        let legacy: LegacyConfig = toml::from_str(&content)
-            .context("Failed to parse config.toml")?;
+        let legacy: LegacyConfig = toml::from_str(&content).context("Failed to parse config.toml")?;
 
         let account = if let (Some(imap), Some(smtp)) = (legacy.imap, legacy.smtp) {
-            vec![AccountConfig {
-                name: "Default".to_string(),
-                imap,
-                smtp,
-                signature: SignatureConfig::default(),
-            }]
+            vec![AccountConfig { name: "Default".to_string(), imap, smtp, signature: SignatureConfig::default() }]
         } else {
             vec![]
         };

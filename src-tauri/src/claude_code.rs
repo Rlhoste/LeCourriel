@@ -19,15 +19,26 @@ pub const MODELS: [&str; 3] = ["haiku", "sonnet", "opus"];
 /// Command-line arguments for one question. The system prompt goes in a file and the
 /// email on stdin: an npm install is a .cmd script, which can't take long or multi-line arguments.
 pub fn args(model: &str, system_file: &str) -> Vec<String> {
-    let mut a: Vec<String> = ["-p", "--output-format", "json", "--system-prompt-file", system_file]
-        .iter().map(|s| s.to_string()).collect();
+    let mut a: Vec<String> =
+        ["-p", "--output-format", "json", "--system-prompt-file", system_file].iter().map(|s| s.to_string()).collect();
     if !model.trim().is_empty() {
         a.extend(["--model".to_string(), model.trim().to_string()]);
     }
     // A plain question and answer: no tools, and none of the user's own settings,
     // hooks, MCP servers or commands (--bare would also do it, but it ignores the subscription login).
-    a.extend(["--tools", "", "--setting-sources", "", "--strict-mcp-config", "--disable-slash-commands",
-        "--no-session-persistence"].iter().map(|s| s.to_string()));
+    a.extend(
+        [
+            "--tools",
+            "",
+            "--setting-sources",
+            "",
+            "--strict-mcp-config",
+            "--disable-slash-commands",
+            "--no-session-persistence",
+        ]
+        .iter()
+        .map(|s| s.to_string()),
+    );
     a
 }
 
@@ -102,11 +113,14 @@ fn spawn<S: AsRef<std::ffi::OsStr>>(args: &[S], wait: bool) -> Result<tokio::pro
 fn kill_tree(pid: Option<u32>) {
     #[cfg(windows)]
     if let Some(pid) = pid {
-        let _ = command("taskkill").args(["/F", "/T", "/PID", &pid.to_string()])
-            .stdout(Stdio::null()).stderr(Stdio::null()).spawn();
+        let _ = command("taskkill")
+            .args(["/F", "/T", "/PID", &pid.to_string()])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
     }
     #[cfg(not(windows))]
-    let _ = pid;   // kill_on_drop is enough: there is no wrapper script
+    let _ = pid; // kill_on_drop is enough: there is no wrapper script
 }
 
 /// Send one question through Claude Code and return the answer text.
@@ -116,7 +130,7 @@ pub async fn complete(model: &str, req: &Request<'_>) -> Result<String> {
     // In the app's own data folder, not the shared temp folder.
     let file = crate::paths::file(&format!("claude-prompt-{}.txt", n));
     std::fs::write(&file, req.system).context("Could not write the AI prompt")?;
-    let file = std::path::absolute(&file).unwrap_or(file);   // claude runs in another folder
+    let file = std::path::absolute(&file).unwrap_or(file); // claude runs in another folder
     let result = run(model, &file, req.user).await;
     std::fs::remove_file(&file).ok();
     result
@@ -171,7 +185,8 @@ pub fn sign_in() -> Result<()> {
 /// `claude auth logout`: signs Claude Code out on this computer.
 pub async fn sign_out() -> Result<()> {
     let child = spawn(&["auth", "logout"], true)?;
-    let out = tokio::time::timeout(std::time::Duration::from_secs(20), child.wait_with_output()).await
+    let out = tokio::time::timeout(std::time::Duration::from_secs(20), child.wait_with_output())
+        .await
         .map_err(|_| anyhow!("Claude Code took too long to sign out"))??;
     if !out.status.success() {
         bail!("Claude Code: {}", String::from_utf8_lossy(&out.stderr).trim());

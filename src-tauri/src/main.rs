@@ -30,11 +30,10 @@ mod ai_classifier;
 mod ai_project;
 mod ai_writer;
 mod app_state;
-mod claude_code;
 mod auto_scan;
 mod auto_setup;
-#[cfg(test)]
-mod tests;
+mod claude_code;
+mod cloud;
 mod config;
 mod dismissals;
 mod dto;
@@ -45,12 +44,13 @@ mod models;
 mod overrides;
 mod paths;
 mod search;
-mod cloud;
 mod settings;
 mod signature;
 mod smtp_sender;
 mod state;
 mod tasks;
+#[cfg(test)]
+mod tests;
 
 use config::Config;
 use state::AppState;
@@ -97,12 +97,7 @@ async fn open_compose_window(app: AppHandle, args: serde_json::Value, title: Str
 async fn check_for_update(app: AppHandle) -> Result<UpdateInfo, String> {
     use tauri_plugin_updater::UpdaterExt;
     let current_version = app.package_info().version.to_string();
-    let update = app
-        .updater()
-        .map_err(|e| e.to_string())?
-        .check()
-        .await
-        .map_err(|e| e.to_string())?;
+    let update = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())?;
     Ok(match update {
         Some(update) => UpdateInfo {
             current_version,
@@ -138,15 +133,25 @@ async fn install_update(app: AppHandle) -> Result<(), String> {
         .download_and_install(
             move |chunk, total| {
                 downloaded += chunk as u64;
-                progress_app.emit("update-progress", serde_json::json!({
-                    "downloaded": downloaded,
-                    "total": total,
-                })).ok();
+                progress_app
+                    .emit(
+                        "update-progress",
+                        serde_json::json!({
+                            "downloaded": downloaded,
+                            "total": total,
+                        }),
+                    )
+                    .ok();
             },
             move || {
-                finished_app.emit("update-progress", serde_json::json!({
-                    "finished": true,
-                })).ok();
+                finished_app
+                    .emit(
+                        "update-progress",
+                        serde_json::json!({
+                            "finished": true,
+                        }),
+                    )
+                    .ok();
             },
         )
         .await
@@ -155,10 +160,7 @@ async fn install_update(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn app_ready(
-    app: AppHandle,
-    shared: State<'_, SharedState>,
-) -> Result<(), String> {
+async fn app_ready(app: AppHandle, shared: State<'_, SharedState>) -> Result<(), String> {
     let (cfg, startup_error) = {
         let s = shared.lock().unwrap();
         (s.cfg.clone(), s.startup_error.clone())
@@ -194,7 +196,7 @@ fn start_auto_refresh(app: AppHandle, shared: SharedState) {
     tauri::async_runtime::spawn(async move {
         let mut tick = tokio::time::interval(std::time::Duration::from_secs(120));
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-        tick.tick().await;   // the first tick is immediate; the startup refresh just ran
+        tick.tick().await; // the first tick is immediate; the startup refresh just ran
         loop {
             tick.tick().await;
             let cfg = shared.lock().unwrap().cfg.clone();
@@ -256,10 +258,7 @@ async fn sync_from_database(app: &AppHandle, shared: &SharedState) -> Option<Arc
 }
 
 #[tauri::command]
-async fn refresh_emails(
-    app: AppHandle,
-    shared: State<'_, SharedState>,
-) -> Result<(), String> {
+async fn refresh_emails(app: AppHandle, shared: State<'_, SharedState>) -> Result<(), String> {
     let cfg = {
         let s = shared.lock().unwrap();
         s.cfg.clone()
@@ -318,9 +317,7 @@ async fn send_email(
     let account = cfg.accounts.get(index).ok_or("No accounts configured")?;
     let mail = smtp_sender::OutgoingMail { to, cc, bcc, subject, html, in_reply_to };
     let smtp = account.smtp_for_sending(&cfg.user_name());
-    let raw = smtp_sender::send_message(&smtp, &mail)
-        .await
-        .map_err(|e| format!("{:#}", e))?;
+    let raw = smtp_sender::send_message(&smtp, &mail).await.map_err(|e| format!("{:#}", e))?;
     // The SMTP relay doesn't keep a copy, so store one in Sent ourselves.
     if let Err(e) = imap_client::append_sent(&account.imap, &sent_folder, &raw).await {
         tracing::warn!("Could not save a copy to {}: {:#}", sent_folder, e);
@@ -349,8 +346,17 @@ fn save_settings(
 ) -> Result<(), String> {
     let giphy_key = giphy_key.unwrap_or_default();
     let old_accounts = shared.lock().unwrap().cfg.accounts.clone();
-    settings::save_config(display_name.as_deref(), &accounts, &ai, &giphy_key, font_scale, theme.as_deref(), language.as_deref(), notify_new_mail)
-        .map_err(|e| e.to_string())?;
+    settings::save_config(
+        display_name.as_deref(),
+        &accounts,
+        &ai,
+        &giphy_key,
+        font_scale,
+        theme.as_deref(),
+        language.as_deref(),
+        notify_new_mail,
+    )
+    .map_err(|e| e.to_string())?;
     // Reload config into shared state.
     match Config::load() {
         Ok(new_cfg) => {
@@ -364,9 +370,11 @@ fn save_settings(
             // (A login set up twice, e.g. for two mailboxes, pairs in order.)
             let mut new_index: Vec<Option<usize>> = Vec::new();
             for old in &old_accounts {
-                let found = new_cfg.accounts.iter().enumerate().position(|(i, a)| !new_index.contains(&Some(i))
-                    && a.imap.host.eq_ignore_ascii_case(&old.imap.host)
-                    && a.imap.username.eq_ignore_ascii_case(&old.imap.username));
+                let found = new_cfg.accounts.iter().enumerate().position(|(i, a)| {
+                    !new_index.contains(&Some(i))
+                        && a.imap.host.eq_ignore_ascii_case(&old.imap.host)
+                        && a.imap.username.eq_ignore_ascii_case(&old.imap.username)
+                });
                 new_index.push(found);
             }
             if new_index.iter().enumerate().any(|(i, n)| *n != Some(i)) {
@@ -407,15 +415,18 @@ fn signature_get(file: String) -> String {
 fn compose_accounts(shared: State<'_, SharedState>) -> Vec<dto::ComposeAccountDto> {
     let cfg = shared.lock().unwrap().cfg.clone();
     let dir = signature::data_dir();
-    cfg.accounts.iter().map(|a| {
-        let from = a.smtp_for_sending(&cfg.user_name()).from_address;
-        dto::ComposeAccountDto {
-            from: if from.trim().is_empty() { a.name.clone() } else { from },
-            signature_html: signature::load(&dir, &a.signature.file),
-            signature_on_new: a.signature.on_new,
-            signature_on_reply: a.signature.on_reply,
-        }
-    }).collect()
+    cfg.accounts
+        .iter()
+        .map(|a| {
+            let from = a.smtp_for_sending(&cfg.user_name()).from_address;
+            dto::ComposeAccountDto {
+                from: if from.trim().is_empty() { a.name.clone() } else { from },
+                signature_html: signature::load(&dir, &a.signature.file),
+                signature_on_new: a.signature.on_new,
+                signature_on_reply: a.signature.on_reply,
+            }
+        })
+        .collect()
 }
 
 // ── AI provider ────────────────────────────────────────────────────────────
@@ -436,9 +447,7 @@ fn ai_config_from(provider: &str, model: &str, base_url: &str, api_key: &str) ->
 
 #[tauri::command]
 async fn ai_list_models(provider: String, base_url: String, api_key: String) -> Result<Vec<String>, String> {
-    ai::list_models(&ai_config_from(&provider, "", &base_url, &api_key))
-        .await
-        .map_err(|e| format!("{:#}", e))
+    ai::list_models(&ai_config_from(&provider, "", &base_url, &api_key)).await.map_err(|e| format!("{:#}", e))
 }
 
 /// Settings → AI → Claude (subscription): is Claude Code installed and signed in?
@@ -502,12 +511,15 @@ fn scan_mail_clients() -> Vec<dto::FoundAccountDto> {
 async fn ai_test(provider: String, model: String, base_url: String, api_key: String) -> Result<(String, u64), String> {
     let cfg = ai_config_from(&provider, &model, &base_url, &api_key);
     let started = std::time::Instant::now();
-    let answer = ai::complete(&cfg, ai::Request {
-        system: "You are a connectivity check. Reply with the single word OK.",
-        user: "Reply with OK.",
-        max_tokens: 20,
-        json: false,
-    })
+    let answer = ai::complete(
+        &cfg,
+        ai::Request {
+            system: "You are a connectivity check. Reply with the single word OK.",
+            user: "Reply with OK.",
+            max_tokens: 20,
+            json: false,
+        },
+    )
     .await
     .map_err(|e| format!("{:#}", e))?;
     Ok((answer.trim().chars().take(60).collect(), started.elapsed().as_millis() as u64))
@@ -538,7 +550,10 @@ async fn search_server(query: String, shared: State<'_, SharedState>) -> Result<
     for (index, account) in cfg.accounts.iter().enumerate() {
         // One unreachable account keeps the other accounts' results.
         match imap_client::search_server(&account.imap, &terms, filters.after, 20).await {
-            Ok(found) => raws.extend(found.into_iter().map(|mut r| { r.uid = models::mail_id(index, r.uid as u32); r })),
+            Ok(found) => raws.extend(found.into_iter().map(|mut r| {
+                r.uid = models::mail_id(index, r.uid as u32);
+                r
+            })),
             Err(e) => failed.push(format!("{}: {:#}", account.name, e)),
         }
     }
@@ -546,13 +561,13 @@ async fn search_server(query: String, shared: State<'_, SharedState>) -> Result<
         return Err(failed.join("\n"));
     }
     let mut s = shared.lock().unwrap();
-    let cached: std::collections::HashSet<u64> = s.search_index.iter()
-        .filter(|(f, _)| *f == search::Folder::Inbox).map(|(_, c)| c.uid).collect();
+    let cached: std::collections::HashSet<u64> =
+        s.search_index.iter().filter(|(f, _)| *f == search::Folder::Inbox).map(|(_, c)| c.uid).collect();
     s.search_index.retain(|(f, _)| *f != search::Folder::Server);
     let mut hits = Vec::new();
     for raw in raws {
         if cached.contains(&raw.uid) {
-            continue;   // already in the local results
+            continue; // already in the local results
         }
         let card = app_state::raw_to_card(raw);
         let (matched, score) = search::score(&card, &terms);
@@ -593,34 +608,46 @@ async fn ai_assist(
         picked.extend(selected_ids.iter().filter_map(|id| find(id)));
     } else {
         for hit in search::search_local(&index, &query, 25) {
-            if let Some(e) = find(&hit.id) { picked.push(e); }
+            if let Some(e) = find(&hit.id) {
+                picked.push(e);
+            }
         }
         // Few keyword matches (natural-language request): add the most recent emails.
         if picked.len() < 8 {
-            let mut recent: Vec<&(search::Folder, models::EmailCard)> = index.iter()
+            let mut recent: Vec<&(search::Folder, models::EmailCard)> = index
+                .iter()
                 .filter(|(f, _)| matches!(f, search::Folder::Inbox | search::Folder::Sent | search::Folder::Server))
                 .collect();
             recent.sort_by(|a, b| b.1.date_ts.cmp(&a.1.date_ts));
             for e in recent {
-                if picked.len() >= 25 { break; }
-                if !picked.iter().any(|p| p.0 == e.0 && p.1.uid == e.1.uid) { picked.push(e); }
+                if picked.len() >= 25 {
+                    break;
+                }
+                if !picked.iter().any(|p| p.0 == e.0 && p.1.uid == e.1.uid) {
+                    picked.push(e);
+                }
             }
         }
     }
-    let candidates: Vec<ai_assistant::Candidate> = picked.iter().map(|(f, c)| ai_assistant::Candidate {
-        id: search::make_id(*f, c.uid),
-        date: if c.date_full.is_empty() { c.date_str.clone() } else { c.date_full.clone() },
-        from: if c.from_email.is_empty() { c.from_name.clone() } else { format!("{} <{}>", c.from_name, c.from_email) },
-        to: c.to.clone(),
-        subject: c.subject.clone(),
-        summary: c.summary.clone(),
-        body: c.body_text.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(700).collect(),
-    }).collect();
+    let candidates: Vec<ai_assistant::Candidate> = picked
+        .iter()
+        .map(|(f, c)| ai_assistant::Candidate {
+            id: search::make_id(*f, c.uid),
+            date: if c.date_full.is_empty() { c.date_str.clone() } else { c.date_full.clone() },
+            from: if c.from_email.is_empty() {
+                c.from_name.clone()
+            } else {
+                format!("{} <{}>", c.from_name, c.from_email)
+            },
+            to: c.to.clone(),
+            subject: c.subject.clone(),
+            summary: c.summary.clone(),
+            body: c.body_text.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(700).collect(),
+        })
+        .collect();
     let contacts = search::contacts(&index, 60);
     let today = chrono::Local::now().format("%Y-%m-%d (%A)").to_string();
-    ai_assistant::assist(&cfg, &query, &mode, &candidates, &contacts, &today)
-        .await
-        .map_err(|e| format!("{:#}", e))
+    ai_assistant::assist(&cfg, &query, &mode, &candidates, &contacts, &today).await.map_err(|e| format!("{:#}", e))
 }
 
 // ── Cloud sync (Supabase) ──────────────────────────────────────────────────
@@ -635,11 +662,8 @@ fn cloud_status() -> cloud::CloudStatus {
 fn set_cloud(url: String, anon_key: String, shared: State<'_, SharedState>) -> Result<cloud::CloudStatus, String> {
     let mut cfg = (*shared.lock().unwrap().cfg).clone();
     let (url, anon_key) = (url.trim().to_string(), anon_key.trim().to_string());
-    cfg.supabase = if url.is_empty() && anon_key.is_empty() {
-        None
-    } else {
-        Some(config::SupabaseConfig { url, anon_key })
-    };
+    cfg.supabase =
+        if url.is_empty() && anon_key.is_empty() { None } else { Some(config::SupabaseConfig { url, anon_key }) };
     config::write_local(&cfg).map_err(|e| e.to_string())?;
     cloud::configure(&cfg);
     shared.lock().unwrap().cfg = Arc::new(cfg);
@@ -770,11 +794,7 @@ async fn add_project(
 }
 
 #[tauri::command]
-fn rename_project(
-    name: String,
-    new_name: String,
-    shared: State<'_, SharedState>,
-) -> Result<String, String> {
+fn rename_project(name: String, new_name: String, shared: State<'_, SharedState>) -> Result<String, String> {
     let new_name = new_name.split_whitespace().collect::<Vec<_>>().join(" ");
     if new_name.is_empty() {
         return Err("Project name cannot be empty".into());
@@ -783,11 +803,9 @@ fn rename_project(
         let s = shared.lock().unwrap();
         (*s.cfg).clone()
     };
-    let project = cfg.projects.iter().position(|p| p.name == name)
-        .ok_or_else(|| format!("Unknown project: {}", name))?;
-    if cfg.projects.iter().enumerate().any(|(i, p)| {
-        i != project && p.name.eq_ignore_ascii_case(&new_name)
-    }) {
+    let project =
+        cfg.projects.iter().position(|p| p.name == name).ok_or_else(|| format!("Unknown project: {}", name))?;
+    if cfg.projects.iter().enumerate().any(|(i, p)| i != project && p.name.eq_ignore_ascii_case(&new_name)) {
         return Err(format!("A project named \"{}\" already exists", new_name));
     }
     cfg.projects[project].name = new_name.clone();
@@ -868,15 +886,26 @@ fn delete_project(name: String, shared: State<'_, SharedState>) -> Result<(), St
 
 /// The account an email id belongs to (as of the refresh that fetched the email, so an
 /// account removed or reordered since cannot catch it), its folders, and the IMAP UID.
-fn account_of(shared: &SharedState, id: u64) -> Result<(config::AccountConfig, app_state::SpecialFolders, u32), String> {
+fn account_of(
+    shared: &SharedState,
+    id: u64,
+) -> Result<(config::AccountConfig, app_state::SpecialFolders, u32), String> {
     let (index, uid) = models::split_mail_id(id);
     let s = shared.lock().unwrap();
     let found = match s.mailboxes.get(index) {
         Some(m) => Some(m.clone()),
         // Emails shown from the cache before the first refresh: the settings' accounts.
-        None if s.mailboxes.is_empty() => s.cfg.accounts.get(index).map(|a| (a.clone(), app_state::SpecialFolders {
-            sent: "Sent".into(), drafts: "Drafts".into(), trash: "Trash".into(), spam: None,
-        })),
+        None if s.mailboxes.is_empty() => s.cfg.accounts.get(index).map(|a| {
+            (
+                a.clone(),
+                app_state::SpecialFolders {
+                    sent: "Sent".into(),
+                    drafts: "Drafts".into(),
+                    trash: "Trash".into(),
+                    spam: None,
+                },
+            )
+        }),
         None => None,
     };
     let (account, folders) = found.ok_or("This email's account was removed")?;
@@ -891,9 +920,7 @@ fn spam_name(folders: &app_state::SpecialFolders) -> String {
 /// Move an inbox email to another folder, then forget it locally.
 async fn move_email(shared: &SharedState, uid: u64, folder: String) -> Result<(), String> {
     let (account, _, imap_uid) = account_of(shared, uid)?;
-    imap_client::move_message(&account.imap, imap_uid, &folder)
-        .await
-        .map_err(|e| format!("{:#}", e))?;
+    imap_client::move_message(&account.imap, imap_uid, &folder).await.map_err(|e| format!("{:#}", e))?;
     {
         let mut s = shared.lock().unwrap();
         s.emails.retain(|e| e.uid != uid);
@@ -917,9 +944,7 @@ async fn not_spam_email(uid: u64, shared: State<'_, SharedState>) -> Result<(), 
     let (account, folders, imap_uid) = account_of(shared.inner(), uid)?;
     // move_message moves from the configured mailbox: point it at the spam folder.
     let from_spam = config::ImapConfig { mailbox: spam_name(&folders), ..account.imap.clone() };
-    imap_client::move_message(&from_spam, imap_uid, &account.imap.mailbox)
-        .await
-        .map_err(|e| format!("{:#}", e))?;
+    imap_client::move_message(&from_spam, imap_uid, &account.imap.mailbox).await.map_err(|e| format!("{:#}", e))?;
     // Spam UIDs have their own numbering: forget only the spam entry. The email comes
     // back in the inbox at the next refresh.
     let mut s = shared.lock().unwrap();
@@ -933,9 +958,7 @@ async fn spam_email(uid: u64, shared: State<'_, SharedState>) -> Result<(), Stri
     let (account, folders, _) = account_of(shared.inner(), uid)?;
     let folder = spam_name(&folders);
     // Many mailboxes have no spam folder: create it the first time, like other mail clients.
-    imap_client::ensure_folder(&account.imap, &folder)
-        .await
-        .map_err(|e| format!("{:#}", e))?;
+    imap_client::ensure_folder(&account.imap, &folder).await.map_err(|e| format!("{:#}", e))?;
     move_email(shared.inner(), uid, folder).await
 }
 
@@ -943,9 +966,7 @@ async fn spam_email(uid: u64, shared: State<'_, SharedState>) -> Result<(), Stri
 #[tauri::command]
 async fn set_read(uid: u64, read: bool, shared: State<'_, SharedState>) -> Result<(), String> {
     let (account, _, imap_uid) = account_of(shared.inner(), uid)?;
-    imap_client::set_seen(&account.imap, imap_uid, read)
-        .await
-        .map_err(|e| format!("{:#}", e))?;
+    imap_client::set_seen(&account.imap, imap_uid, read).await.map_err(|e| format!("{:#}", e))?;
     {
         let mut s = shared.lock().unwrap();
         if let Some(c) = s.emails.iter_mut().find(|e| e.uid == uid) {
@@ -961,11 +982,7 @@ async fn set_read(uid: u64, read: bool, shared: State<'_, SharedState>) -> Resul
 
 /// Re-tag an inbox email (and the tasks taken from it) to another project, or none.
 #[tauri::command]
-fn set_email_project(
-    uid: u64,
-    project: Option<String>,
-    shared: State<'_, SharedState>,
-) -> Result<(), String> {
+fn set_email_project(uid: u64, project: Option<String>, shared: State<'_, SharedState>) -> Result<(), String> {
     let project = project.filter(|p| !p.is_empty());
     if let Some(p) = &project {
         if !shared.lock().unwrap().cfg.projects.iter().any(|cp| &cp.name == p) {
@@ -1002,10 +1019,8 @@ fn set_project_in_memory(shared: &SharedState, uids: &[u64], project: Option<&st
 async fn file_existing_emails(app: &AppHandle, shared: &SharedState, name: &str) -> Result<usize, String> {
     let (cfg, inbox) = {
         let s = shared.lock().unwrap();
-        let inbox: Vec<models::EmailCard> = s.search_index.iter()
-            .filter(|(f, _)| *f == search::Folder::Inbox)
-            .map(|(_, c)| c.clone())
-            .collect();
+        let inbox: Vec<models::EmailCard> =
+            s.search_index.iter().filter(|(f, _)| *f == search::Folder::Inbox).map(|(_, c)| c.clone()).collect();
         (s.cfg.clone(), inbox)
     };
     let Some(project) = cfg.projects.iter().find(|p| p.name == name) else { return Ok(0) };
@@ -1042,9 +1057,7 @@ async fn save_email(uid: u64, folder: String, path: String, shared: State<'_, Sh
         _ => account.imap.mailbox.clone(),
     };
     let from = config::ImapConfig { mailbox, ..account.imap.clone() };
-    let raw = imap_client::fetch_raw(&from, imap_uid)
-        .await
-        .map_err(|e| format!("{:#}", e))?;
+    let raw = imap_client::fetch_raw(&from, imap_uid).await.map_err(|e| format!("{:#}", e))?;
     std::fs::write(&path, raw).map_err(|e| format!("Could not write {}: {}", path, e))
 }
 
@@ -1075,9 +1088,7 @@ async fn ai_compose(
         date: original_date.unwrap_or_default(),
         text,
     });
-    ai_writer::run(&cfg, &action, &html, original)
-        .await
-        .map_err(|e| format!("{:#}", e))
+    ai_writer::run(&cfg, &action, &html, original).await.map_err(|e| format!("{:#}", e))
 }
 
 // ── GIFs ──────────────────────────────────────────────────────────────────
@@ -1092,20 +1103,14 @@ async fn search_gifs(query: String, shared: State<'_, SharedState>) -> Result<Ve
 // Each command returns the whole board so the UI can re-render from it.
 
 #[tauri::command]
-fn create_task(
-    title: String,
-    project: Option<String>,
-    due_date: Option<String>,
-) -> Result<Vec<tasks::Task>, String> {
+fn create_task(title: String, project: Option<String>, due_date: Option<String>) -> Result<Vec<tasks::Task>, String> {
     let title = title.trim().to_string();
     if title.is_empty() {
         return Err("Task title cannot be empty".into());
     }
     let project = project.filter(|p| !p.is_empty());
     let due_date = due_date.filter(|date| !date.is_empty());
-    if due_date.as_deref().is_some_and(|date| {
-        chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").is_err()
-    }) {
+    if due_date.as_deref().is_some_and(|date| chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").is_err()) {
         return Err("Invalid task date".into());
     }
     Ok(tasks::Board::update(|b| {
@@ -1130,8 +1135,7 @@ fn delete_task(id: u64) -> Result<Vec<tasks::Task>, String> {
 fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("courriel=debug".parse().unwrap()),
+            tracing_subscriber::EnvFilter::from_default_env().add_directive("courriel=debug".parse().unwrap()),
         )
         .init();
 

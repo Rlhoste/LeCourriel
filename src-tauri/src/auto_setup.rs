@@ -98,7 +98,11 @@ pub fn parse_autoconfig(xml: &str, email: &str) -> Result<MailSetupDto> {
                 text.clear();
                 if name == "incomingServer" || name == "outgoingServer" {
                     let kind = if name == "incomingServer" {
-                        if attribute(&e, "type") == "pop3" { "pop3" } else { "imap" }
+                        if attribute(&e, "type") == "pop3" {
+                            "pop3"
+                        } else {
+                            "imap"
+                        }
                     } else {
                         "smtp"
                     };
@@ -143,14 +147,28 @@ pub fn parse_autoconfig(xml: &str, email: &str) -> Result<MailSetupDto> {
     let mut out = MailSetupDto { provider, ..Default::default() };
     for e in entries.iter().filter(|e| e.kind == "imap") {
         match usable_port("imap", &e.socket, &e.port) {
-            Ok(port) => { out.imap = Some(server(e, port, email)); break; }
-            Err(why) => if out.imap_issue.is_empty() { out.imap_issue = why.to_string() },
+            Ok(port) => {
+                out.imap = Some(server(e, port, email));
+                break;
+            }
+            Err(why) => {
+                if out.imap_issue.is_empty() {
+                    out.imap_issue = why.to_string()
+                }
+            }
         }
     }
     for e in entries.iter().filter(|e| e.kind == "smtp") {
         match usable_port("smtp", &e.socket, &e.port) {
-            Ok(port) => { out.smtp = Some(server(e, port, email)); break; }
-            Err(why) => if out.smtp_issue.is_empty() { out.smtp_issue = why.to_string() },
+            Ok(port) => {
+                out.smtp = Some(server(e, port, email));
+                break;
+            }
+            Err(why) => {
+                if out.smtp_issue.is_empty() {
+                    out.smtp_issue = why.to_string()
+                }
+            }
         }
     }
     Ok(out)
@@ -199,7 +217,11 @@ fn username(user: &str, email: &str) -> String {
         .replace("%EMAILDOMAIN%", &domain_of(email))
         .trim()
         .to_string();
-    if filled.is_empty() { email.to_string() } else { filled }
+    if filled.is_empty() {
+        email.to_string()
+    } else {
+        filled
+    }
 }
 
 /// The five entities XML defines by default; any other reference brings nothing.

@@ -16,9 +16,19 @@ static LANG_CODE: std::sync::RwLock<String> = std::sync::RwLock::new(String::new
 
 /// UI languages: code and English name (the name is what the AI is asked to write in).
 pub const LANGUAGES: [(&str, &str); 13] = [
-    ("en", "English"), ("fr", "French"), ("zh", "Simplified Chinese"), ("hi", "Hindi"),
-    ("es", "Spanish"), ("ar", "Modern Standard Arabic"), ("bn", "Bengali"), ("ru", "Russian"),
-    ("pt", "Portuguese"), ("ur", "Urdu"), ("id", "Indonesian"), ("de", "German"), ("ja", "Japanese"),
+    ("en", "English"),
+    ("fr", "French"),
+    ("zh", "Simplified Chinese"),
+    ("hi", "Hindi"),
+    ("es", "Spanish"),
+    ("ar", "Modern Standard Arabic"),
+    ("bn", "Bengali"),
+    ("ru", "Russian"),
+    ("pt", "Portuguese"),
+    ("ur", "Urdu"),
+    ("id", "Indonesian"),
+    ("de", "German"),
+    ("ja", "Japanese"),
 ];
 
 pub fn is_supported(code: &str) -> bool {
@@ -40,19 +50,31 @@ pub fn ai_language() -> &'static str {
 }
 
 pub fn lang() -> Lang {
-    if LANG.load(Ordering::Relaxed) == 1 { Lang::Fr } else { Lang::En }
+    if LANG.load(Ordering::Relaxed) == 1 {
+        Lang::Fr
+    } else {
+        Lang::En
+    }
 }
 
 const FR_DAYS: [&str; 7] = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
 const FR_DAYS_SHORT: [&str; 7] = ["lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."];
 const FR_MONTHS: [&str; 12] = [
-    "janvier", "février", "mars", "avril", "mai", "juin",
-    "juillet", "août", "septembre", "octobre", "novembre", "décembre",
+    "janvier",
+    "février",
+    "mars",
+    "avril",
+    "mai",
+    "juin",
+    "juillet",
+    "août",
+    "septembre",
+    "octobre",
+    "novembre",
+    "décembre",
 ];
-const FR_MONTHS_SHORT: [&str; 12] = [
-    "janv.", "févr.", "mars", "avr.", "mai", "juin",
-    "juil.", "août", "sept.", "oct.", "nov.", "déc.",
-];
+const FR_MONTHS_SHORT: [&str; 12] =
+    ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
 
 /// Short weekday: "Tue" / "mar.".
 pub fn short_day(d: &impl Datelike, l: Lang) -> String {
@@ -81,14 +103,25 @@ pub fn full_datetime<T: Datelike + Timelike>(dt: &T, l: Lang) -> String {
     match l {
         Lang::En => {
             let days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-            let months = ["January", "February", "March", "April", "May", "June", "July",
-                "August", "September", "October", "November", "December"];
+            let months = [
+                "January",
+                "February",
+                "March",
+                "April",
+                "May",
+                "June",
+                "July",
+                "August",
+                "September",
+                "October",
+                "November",
+                "December",
+            ];
             format!("{} {:02} {} {}, {:02}:{:02}", days[wd], dt.day(), months[m], dt.year(), dt.hour(), dt.minute())
         }
-        Lang::Fr => format!(
-            "{} {} {} {}, {:02}:{:02}",
-            FR_DAYS[wd], dt.day(), FR_MONTHS[m], dt.year(), dt.hour(), dt.minute()
-        ),
+        Lang::Fr => {
+            format!("{} {} {} {}, {:02}:{:02}", FR_DAYS[wd], dt.day(), FR_MONTHS[m], dt.year(), dt.hour(), dt.minute())
+        }
     }
 }
 
@@ -96,12 +129,22 @@ pub fn greeting(hour: u32, name: &str, l: Lang) -> String {
     let name = name.trim();
     let base = match l {
         Lang::En => {
-            let w = if hour < 12 { "morning" } else if hour < 17 { "afternoon" } else { "evening" };
+            let w = if hour < 12 {
+                "morning"
+            } else if hour < 17 {
+                "afternoon"
+            } else {
+                "evening"
+            };
             format!("Good {}", w)
         }
         Lang::Fr => (if hour < 18 { "Bonjour" } else { "Bonsoir" }).to_string(),
     };
-    if name.is_empty() { format!("{}.", base) } else { format!("{}, {}.", base, name) }
+    if name.is_empty() {
+        format!("{}.", base)
+    } else {
+        format!("{}, {}.", base, name)
+    }
 }
 
 /// "3 require your attention" / "3 e-mails demandent votre attention".
@@ -133,16 +176,21 @@ pub fn briefing_cached(n: usize, l: Lang) -> String {
 pub fn classifying(n: usize, l: Lang) -> String {
     match l {
         Lang::En => format!("Classifying {} new email{} with AI…", n, if n == 1 { "" } else { "s" }),
-        Lang::Fr => if n == 1 {
-            "Classement d'un nouvel e-mail par l'IA…".to_string()
-        } else {
-            format!("Classement de {} nouveaux e-mails par l'IA…", n)
-        },
+        Lang::Fr => {
+            if n == 1 {
+                "Classement d'un nouvel e-mail par l'IA…".to_string()
+            } else {
+                format!("Classement de {} nouveaux e-mails par l'IA…", n)
+            }
+        }
     }
 }
 
 pub fn up_to_date(l: Lang) -> &'static str {
-    match l { Lang::En => "Up to date.", Lang::Fr => "À jour." }
+    match l {
+        Lang::En => "Up to date.",
+        Lang::Fr => "À jour.",
+    }
 }
 
 /// Title of the notification for several new emails at once.
@@ -154,6 +202,8 @@ pub fn new_emails(n: usize, l: Lang) -> String {
 }
 
 pub fn unknown_date(l: Lang) -> &'static str {
-    match l { Lang::En => "Unknown", Lang::Fr => "Inconnue" }
+    match l {
+        Lang::En => "Unknown",
+        Lang::Fr => "Inconnue",
+    }
 }
-
