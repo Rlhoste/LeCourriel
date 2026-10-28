@@ -524,7 +524,7 @@ function discussionItem(item, index) {
   }
   if (item.kind === 'draft') {
     return `
-    <div class="dm-row me first draft">
+    <div class="dm-row me first last draft">
       <div class="dm-av-slot"></div>
       <div class="dm-msg">
         <div class="dm-bubble">${esc(item.text)}</div>
@@ -542,10 +542,10 @@ function discussionItem(item, index) {
   if (!content) return '';
   const s = item.sender;
   return `
-    <div class="dm-row${item.mine ? ' me' : ''}${item.first ? ' first' : ''}${item.kind === 'page' ? ' page' : ''}" style="--pc:${s.colour}" data-folder="${esc(item.folder)}" data-uid="${esc(item.email.uid)}">
+    <div class="dm-row${item.mine ? ' me' : ''}${item.first ? ' first' : ''}${item.last ? ' last' : ''}${item.kind === 'page' ? ' page' : ''}" style="--pc:${s.colour}" data-folder="${esc(item.folder)}" data-uid="${esc(item.email.uid)}">
       <div class="dm-av-slot">${!item.mine && item.last ? avatar(s) : ''}</div>
       <div class="dm-msg">
-        ${!item.mine && item.first ? `<div class="dm-name">${esc(s.name || s.address)}</div>` : ''}
+        <div class="dm-name">${esc(s.name || s.address)}</div>
         ${content}
         <div class="dm-time">${esc(fmt({ hour: '2-digit', minute: '2-digit' }).format(time(item.date_ts)))}</div>
       </div>
