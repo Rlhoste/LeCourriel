@@ -323,6 +323,15 @@ test('a newer email in Trash or Spam is neither the last message of the line nor
   assert.deepEqual(addresses(line.reply.to), ['leo@d.com']);
 });
 
+test('discussions without Message-ID get distinct ids even when an Inbox and a Sent email share a uid', () => {
+  const list = buildDiscussions({
+    inbox: [mail(1, { subject: 'Lunch' })],
+    sent: [mail(1, { subject: 'Invoice', from_email: 'me@work.com', to: 'leo@d.com' })],
+  }, ME);
+  assert.equal(list.length, 2);
+  assert.notEqual(list[0].id, list[1].id);
+});
+
 test('a line without unread emails has no priority mark', () => {
   const [line] = buildDiscussions({ inbox: [mail(1, { priority: 'urgent', is_read: true, from_name: 'Ann' })] }, ME);
   assert.equal(line.unread, 0);

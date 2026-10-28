@@ -138,7 +138,8 @@
     const others = [...people.values()];
     const messages = discussionItems(emails, isMine, people, context.now ?? Date.now(), folderOf, texts, taskOf);
     return {
-      id: String(emails[0].message_id || emails[0].uid),
+      // A uid is only unique within its folder.
+      id: String(emails[0].message_id || `${folderOf.get(emails[0])}:${emails[0].uid}`),
       people: others,
       title: others.slice(0, 2).map(p => p.short).join(', ') + (others.length > 2 ? ` +${others.length - 2}` : ''),
       subject: emails[0].subject || '',
