@@ -101,7 +101,7 @@ STRINGS.hi = {
     'nav.discussions': 'बातचीत', 'dm.new': 'नया संदेश', 'dm.today': 'आज', 'dm.you': 'आप: {text}',
     'dm.reply': 'जवाब लिखें…', 'dm.add': 'प्रति, Cc या Bcc जोड़ें', 'dm.remove': 'हटाएँ',
     'dm.find': "इस बातचीत में खोजें", 'dm.findCount': "{total} में से {n}", 'dm.findNone': "कोई मिलान नहीं", 'dm.findPrev': "पिछला", 'dm.findNext': "अगला",
-    'dm.earlier': 'पिछले संदेश लोड नहीं हुए हैं', 'dm.draft': 'ड्राफ़्ट', 'dm.cc': '{name} (Cc)',
+    'dm.earlier': 'पिछले संदेश लोड नहीं हुए हैं', 'dm.draft': 'ड्राफ़्ट', 'dm.file': 'संलग्न फ़ाइल', 'dm.cc': '{name} (Cc)',
     'dm.added': '{who} ने {names} को जोड़ा', 'dm.removed': '{who} ने {names} को हटाया', 'dm.youAdded': 'आपने {names} को जोड़ा', 'dm.youRemoved': 'आपने {names} को हटाया',
     'set.fontScale': 'फ़ॉन्ट आकार', 'set.theme': 'थीम', 'set.language': 'भाषा',
     "set.signature": "हस्ताक्षर", "set.sigChoose": "📄 HTML फ़ाइल चुनें…", "set.sigRemove": "हटाएँ", "set.sigOnNew": "नए संदेशों में जोड़ें", "set.sigOnReply": "जवाबों और फ़ॉरवर्ड में जोड़ें", "set.sigHint": "अभी कोई हस्ताक्षर नहीं है। इसे अपने मेल क्लाइंट (Outlook, Gmail…) से HTML फ़ाइल के रूप में निर्यात करें, या किसी हस्ताक्षर जनरेटर से बनाएँ।", "set.sigImported": "हस्ताक्षर आयात किया गया", "set.sigRemoved": "हस्ताक्षर हटाया गया", "set.sigFileFilter": "HTML फ़ाइलें",

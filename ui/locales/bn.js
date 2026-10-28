@@ -101,7 +101,7 @@ STRINGS.bn = {
     'nav.discussions': 'কথোপকথন', 'dm.new': 'নতুন বার্তা', 'dm.today': 'আজ', 'dm.you': 'আপনি: {text}',
     'dm.reply': 'উত্তর লিখুন…', 'dm.add': 'প্রাপক, Cc বা Bcc যোগ করুন', 'dm.remove': 'সরান',
     'dm.find': "এই কথোপকথনে খুঁজুন", 'dm.findCount': "{total}-এর মধ্যে {n}", 'dm.findNone': "কোনো মিল নেই", 'dm.findPrev': "আগের", 'dm.findNext': "পরের",
-    'dm.earlier': 'আগের বার্তাগুলো লোড হয়নি', 'dm.draft': 'খসড়া', 'dm.cc': '{name} (Cc)',
+    'dm.earlier': 'আগের বার্তাগুলো লোড হয়নি', 'dm.draft': 'খসড়া', 'dm.file': 'সংযুক্ত ফাইল', 'dm.cc': '{name} (Cc)',
     'dm.added': '{who} {names}-কে যোগ করেছেন', 'dm.removed': '{who} {names}-কে সরিয়েছেন', 'dm.youAdded': 'আপনি {names}-কে যোগ করেছেন', 'dm.youRemoved': 'আপনি {names}-কে সরিয়েছেন',
     'set.fontScale': 'ফন্টের আকার', 'set.theme': 'থিম', 'set.language': 'ভাষা',
     "set.signature": "স্বাক্ষর", "set.sigChoose": "📄 একটি HTML ফাইল বেছে নিন…", "set.sigRemove": "সরান", "set.sigOnNew": "নতুন বার্তায় যোগ করুন", "set.sigOnReply": "উত্তর ও ফরোয়ার্ডে যোগ করুন", "set.sigHint": "এখনও কোনো স্বাক্ষর নেই। আপনার মেইল ক্লায়েন্ট (Outlook, Gmail…) থেকে HTML ফাইল হিসেবে রপ্তানি করুন, অথবা যেকোনো স্বাক্ষর জেনারেটর দিয়ে তৈরি করুন।", "set.sigImported": "স্বাক্ষর আমদানি হয়েছে", "set.sigRemoved": "স্বাক্ষর সরানো হয়েছে", "set.sigFileFilter": "HTML ফাইল",

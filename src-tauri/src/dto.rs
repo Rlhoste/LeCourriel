@@ -27,6 +27,9 @@ pub struct EmailCardDto {
     /// Files attached to the email: `{ name, size, mime }`, size in bytes.
     #[serde(default)]
     pub attachments: Vec<crate::models::Attachment>,
+    /// HTML body but no plain-text part: discussion mode shows it as a page.
+    #[serde(default)]
+    pub html_only: bool,
     pub meeting_link: String,
 }
 

@@ -101,7 +101,7 @@ STRINGS.de = {
     'nav.discussions': 'Unterhaltungen', 'dm.new': 'Neue Nachricht', 'dm.today': 'Heute', 'dm.you': 'Du: {text}',
     'dm.reply': 'Antwort schreiben…', 'dm.add': 'An, Cc oder Bcc hinzufügen', 'dm.remove': 'Entfernen',
     'dm.find': "In dieser Unterhaltung suchen", 'dm.findCount': "{n} von {total}", 'dm.findNone': "Kein Treffer", 'dm.findPrev': "Vorheriger", 'dm.findNext': "Nächster",
-    'dm.earlier': 'Frühere Nachrichten sind nicht geladen', 'dm.draft': 'Entwurf', 'dm.cc': '{name} (Cc)',
+    'dm.earlier': 'Frühere Nachrichten sind nicht geladen', 'dm.draft': 'Entwurf', 'dm.file': 'Angehängte Datei', 'dm.cc': '{name} (Cc)',
     'dm.added': '{who} hat {names} hinzugefügt', 'dm.removed': '{who} hat {names} entfernt', 'dm.youAdded': 'Du hast {names} hinzugefügt', 'dm.youRemoved': 'Du hast {names} entfernt',
     'set.fontScale': 'Schriftgröße', 'set.theme': 'Design', 'set.language': 'Sprache',
     "set.signature": "Signatur", "set.sigChoose": "📄 HTML-Datei auswählen…", "set.sigRemove": "Entfernen", "set.sigOnNew": "Zu neuen Nachrichten hinzufügen", "set.sigOnReply": "Zu Antworten und Weiterleitungen hinzufügen", "set.sigHint": "Noch keine Signatur. Exportieren Sie sie aus Ihrem Mailprogramm (Outlook, Gmail…) als HTML-Datei oder erstellen Sie eine mit einem Signaturgenerator.", "set.sigImported": "Signatur importiert", "set.sigRemoved": "Signatur entfernt", "set.sigFileFilter": "HTML-Dateien",

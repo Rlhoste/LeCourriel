@@ -70,6 +70,8 @@ pub struct RawEmail {
     pub body_text: String,
     pub body_html: Option<String>,
     pub attachments: Vec<Attachment>,
+    /// HTML body but no plain-text part: laid out as a page.
+    pub html_only: bool,
 }
 
 /// A file attached to an email (images shown in the body are not counted).
@@ -121,6 +123,9 @@ pub struct EmailCard {
     /// Older caches have no list: none.
     #[serde(default)]
     pub attachments: Vec<Attachment>,
+    /// HTML body but no plain-text part (older caches: false until the next refresh).
+    #[serde(default)]
+    pub html_only: bool,
     /// Project this email was assigned to, if any.
     pub project: Option<String>,
     /// Deadline extracted from email content.

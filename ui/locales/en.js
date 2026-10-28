@@ -109,7 +109,7 @@ STRINGS.en = {
     'nav.discussions': 'Discussions', 'dm.new': 'New message', 'dm.today': 'Today', 'dm.you': 'You: {text}',
     'dm.reply': 'Write a reply…', 'dm.add': 'Add To, Cc or Bcc', 'dm.remove': 'Remove',
     'dm.find': "Find in this discussion", 'dm.findCount': "{n} of {total}", 'dm.findNone': "No match", 'dm.findPrev': "Previous", 'dm.findNext': "Next",
-    'dm.earlier': 'Earlier messages aren’t loaded', 'dm.draft': 'Draft', 'dm.cc': '{name} (Cc)',
+    'dm.earlier': 'Earlier messages aren’t loaded', 'dm.draft': 'Draft', 'dm.file': 'Attached file', 'dm.cc': '{name} (Cc)',
     'dm.added': '{who} added {names}', 'dm.removed': '{who} removed {names}', 'dm.youAdded': 'You added {names}', 'dm.youRemoved': 'You removed {names}',
     'set.fontScale': 'Font Scale', 'set.theme': 'Theme', 'set.language': 'Language',
     "set.signature": "Signature", "set.sigChoose": "📄 Choose an HTML file…", "set.sigRemove": "Remove", "set.sigOnNew": "Add to new messages", "set.sigOnReply": "Add to replies and forwards", "set.sigHint": "No signature yet. Export it from your mail client (Outlook, Gmail…) as an HTML file, or create one with any signature generator.", "set.sigImported": "Signature imported", "set.sigRemoved": "Signature removed", "set.sigFileFilter": "HTML files",

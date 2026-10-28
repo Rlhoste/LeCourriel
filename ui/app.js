@@ -232,13 +232,14 @@ function openDiscussion(d, landOn = null) {
   openDiscussionId = d.id;
   dmLandOn = landOn;
   dmFind.at = -1;
-  for (const item of d.items) if (item.kind === 'message') setRead(item.email, true);
+  const emails = new Set(d.items.filter(i => i.email && i.kind !== 'draft').map(i => i.email));
+  for (const email of emails) setRead(email, true);
   switchPanel('discussions');
 }
 
 // A search result in discussion mode: its discussion, scrolled to it. False if it is in none.
 function openHitInDiscussion(h) {
-  const isHit = i => i.kind === 'message' && i.folder === h.folder && i.email.uid === h.uid;
+  const isHit = i => i.email && i.kind !== 'draft' && i.folder === h.folder && i.email.uid === h.uid;
   const d = discussionList().find(d => d.items.some(isHit));
   if (d) openDiscussion(d, { folder: h.folder, uid: h.uid });
   return !!d;
@@ -293,6 +294,7 @@ function renderDiscussion(d) {
   }
   const scroll = conv.querySelector('.dm-scroll');
   scroll.scrollTop = scroll.scrollHeight;
+  conv.querySelectorAll('.dm-page').forEach(frame => showPage(frame, d.items[frame.dataset.item].email, scroll));
   scroll.addEventListener('click', ev => {   // on the scroll: the find bar rebuilds the bubbles
     const a = ev.target.closest('a[data-url]');
     if (!a) return;
@@ -501,7 +503,7 @@ async function sendReply(bar) {
 }
 
 // One item of a discussion: a note, a day separator or a bubble (name once and avatar once per run).
-function discussionItem(item) {
+function discussionItem(item, index) {
   const time = ts => new Date(ts * 1000);
   if (item.kind === 'earlier') return `<div class="dm-earlier">${esc(t('dm.earlier'))}</div>`;
   if (item.kind === 'day') {
@@ -530,17 +532,41 @@ function discussionItem(item) {
       </div>
     </div>`;
   }
-  if (item.kind !== 'message') return '';
+  // Images, files and pages stay out of .dm-bubble: the find bar marks text inside bubbles.
+  const content = item.kind === 'message' ? `<div class="dm-bubble">${bubbleHtml(item.text)}</div>`
+    : item.kind === 'image' ? `<img class="dm-image" src="${esc(item.src)}" alt="" />`
+    : item.kind === 'attachment' ? `<div class="dm-file"><span class="dm-file-icon">📎</span>`
+      + `<span class="dm-file-name">${esc(item.name || t('dm.file'))}</span><span class="dm-file-size">${esc(fmtBytes(item.size))}</span></div>`
+    : item.kind === 'page' ? `<iframe class="dm-page" sandbox="allow-same-origin" data-item="${index}" title="${esc(item.email.subject || '')}"></iframe>`
+    : null;
+  if (!content) return '';
   const s = item.sender;
   return `
-    <div class="dm-row${item.mine ? ' me' : ''}${item.first ? ' first' : ''}${item.last ? ' last' : ''}" style="--pc:${s.colour}" data-folder="${esc(item.folder)}" data-uid="${esc(item.email.uid)}">
+    <div class="dm-row${item.mine ? ' me' : ''}${item.first ? ' first' : ''}${item.last ? ' last' : ''}${item.kind === 'page' ? ' page' : ''}" style="--pc:${s.colour}" data-folder="${esc(item.folder)}" data-uid="${esc(item.email.uid)}">
       <div class="dm-av-slot">${!item.mine && item.last ? avatar(s) : ''}</div>
       <div class="dm-msg">
         <div class="dm-name">${esc(s.name || s.address)}</div>
-        <div class="dm-bubble">${bubbleHtml(item.text)}</div>
+        ${content}
         <div class="dm-time">${esc(fmt({ hour: '2-digit', minute: '2-digit' }).format(time(item.date_ts)))}</div>
       </div>
     </div>`;
+}
+
+// A file size the way the language writes it: 12 B, 51 kB, 1.2 MB.
+function fmtBytes(n) {
+  const [unit, value] = n >= 1e6 ? ['megabyte', n / 1e6] : n >= 1e3 ? ['kilobyte', n / 1e3] : ['byte', n];
+  return new Intl.NumberFormat(langInfo().locale, { style: 'unit', unit, unitDisplay: 'short', maximumFractionDigits: value < 10 ? 1 : 0 }).format(value);
+}
+
+// A page-layout email rendered as it is, as tall as its content; the discussion stays at the bottom.
+function showPage(frame, email, scroll) {
+  frame.addEventListener('load', () => {
+    const atBottom = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 4;
+    const doc = frame.contentDocument;
+    if (doc?.documentElement) frame.style.height = `${doc.documentElement.scrollHeight}px`;
+    if (atBottom) scroll.scrollTop = scroll.scrollHeight;
+  });
+  setIframeContent(frame, email);
 }
 
 const avatar = p => `<span class="dm-av" style="--pc:${p.colour}" title="${esc(p.name || p.address)}">${esc(p.initials)}</span>`;

@@ -211,6 +211,7 @@ api_key = "k" model = "m" max_tokens = 100
             body_text: "Plain body".to_string(),
             body_html: "<p>HTML body</p>".to_string(),
             attachments: vec![attachment("a.pdf", 9, "application/pdf")],
+            html_only: true,
             project: Some("MyProject".to_string()),
             deadline: None,
             task: Some("Do something".to_string()),
@@ -227,12 +228,15 @@ api_key = "k" model = "m" max_tokens = 100
         assert_eq!(restored.project, Some("MyProject".to_string()));
         assert_eq!(restored.task, Some("Do something".to_string()));
         assert_eq!(restored.attachments, vec![attachment("a.pdf", 9, "application/pdf")]);
+        assert!(restored.html_only);
 
         // A card cached before attachments were listed still loads, with none.
         let mut old: serde_json::Value = serde_json::from_str(&json).unwrap();
         old.as_object_mut().unwrap().remove("attachments");
+        old.as_object_mut().unwrap().remove("html_only");
         let restored: EmailCard = serde_json::from_value(old).unwrap();
         assert!(restored.attachments.is_empty());
+        assert!(!restored.html_only);
     }
 
     #[test]
@@ -367,6 +371,7 @@ api_key = "k" model = "m" max_tokens = 100
             body_text: "Body".to_string(),
             body_html: String::new(),
             attachments: vec![],
+            html_only: false,
             project: None,
             deadline: None,
             task: None,
@@ -898,6 +903,7 @@ max_tokens = 10
             body_text: "Help".into(),
             body_html: None,
             attachments: vec![],
+            html_only: false,
         };
         let err = crate::ai_classifier::classify(&AiConfig::default(), &email, &[]).await.unwrap_err();
         assert!(format!("{:#}", err).contains("Choose an AI model"), "{:#}", err);
@@ -925,6 +931,7 @@ max_tokens = 10
             body_text: "Jury".into(),
             body_html: None,
             attachments: vec![],
+            html_only: false,
         };
         let projects = vec![ProjectConfig { name: "Thesis".into(), description: "PhD".into(), urgency: "high".into() }];
         let cases: [(&'static str, &[ProjectConfig], bool); 3] = [
@@ -1507,7 +1514,7 @@ max_tokens = 10
             "iVBORw0KGgo=\r\n--b--\r\n",
         );
         let parsed = mailparse::parse_mail(raw.as_bytes()).unwrap();
-        let (_, html, attachments) = crate::imap_client::extract_bodies(&parsed);
+        let (_, html, attachments, _) = crate::imap_client::extract_bodies(&parsed);
         let html = html.unwrap();
         assert!(html.contains("src=\"data:image/png;base64,iVBORw0KGgo=\""), "{html}");
         assert!(!html.contains("cid:"));
@@ -1518,6 +1525,25 @@ max_tokens = 10
 
     fn attachments_of(raw: &str) -> Vec<crate::models::Attachment> {
         crate::imap_client::extract_bodies(&mailparse::parse_mail(raw.as_bytes()).unwrap()).2
+    }
+
+    fn is_html_only(raw: &str) -> bool {
+        crate::imap_client::extract_bodies(&mailparse::parse_mail(raw.as_bytes()).unwrap()).3
+    }
+
+    #[test]
+    fn test_email_without_plain_text_part_is_html_only() {
+        let html_only = "Subject: News\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>Hi</p>\r\n";
+        let both = concat!(
+            "Subject: Hi\r\nMIME-Version: 1.0\r\n",
+            "Content-Type: multipart/alternative; boundary=\"b\"\r\n\r\n",
+            "--b\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nHi\r\n",
+            "--b\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>Hi</p>\r\n--b--\r\n",
+        );
+        let plain = "Subject: Hi\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nHi\r\n";
+        assert!(is_html_only(html_only));
+        assert!(!is_html_only(both));
+        assert!(!is_html_only(plain));
     }
 
     fn attachment(name: &str, size: u64, mime: &str) -> crate::models::Attachment {
@@ -2032,6 +2058,7 @@ max_tokens = 10
                     .into(),
             body_html: None,
             attachments: vec![],
+            html_only: false,
         };
         let projects = vec![ProjectConfig {
             name: "Thesis".into(),

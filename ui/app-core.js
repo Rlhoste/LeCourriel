@@ -229,15 +229,67 @@
       if (here) seen = here;
       const sameRun = prev && !note && prev.day === day && prev.item.sender.address.toLowerCase() === sender.address.toLowerCase();
       if (prev && !sameRun) prev.item.last = true;
-      const item = {
-        kind: 'message', email, folder: folderOf.get(email), mine: isMine(email), sender, date_ts: ts,
-        text: texts.get(email), first: !sameRun, last: false,
-      };
-      items.push(item);
-      prev = { day, item };
+      const parts = emailParts(email, texts.get(email)).map(part => ({ ...part, email, folder: folderOf.get(email), mine: isMine(email), sender, date_ts: ts, first: false, last: false }));
+      parts[0].first = !sameRun;
+      items.push(...parts);
+      prev = { day, item: parts[parts.length - 1] };
     }
     if (prev) prev.item.last = true;
     return items;
+  }
+
+  // What one email shows as: its text, split by each image of its body ('image' items,
+  // the cid: images the backend put in the HTML as data: URLs), then an 'attachment' item per file.
+  // An email laid out as a page (newsletter, invoice) is one 'page' card instead of its text and images.
+  const BODY_IMAGE = /<img\b[^>]*?\bsrc\s*=\s*(["'])(data:image\/[^"']*)\1[^>]*>/gi;
+  function emailParts(email, text) {
+    const html = String(email.body_html || '');
+    let parts = [];
+    let from = 0;
+    if (html && (email.html_only || mostlyTables(html))) parts.push({ kind: 'page' });
+    else for (const m of html.matchAll(BODY_IMAGE)) {
+      parts.push({ kind: 'message', text: htmlText(html.slice(from, m.index)) }, { kind: 'image', src: m[2] });
+      from = m.index + m[0].length;
+    }
+    if (parts[0]?.kind !== 'page') parts.push({ kind: 'message', text: parts.length ? htmlText(html.slice(from)) : text });
+    // Once a piece reaches the quoted history or the signature, the rest (its images too) goes.
+    const cut = parts.findIndex(p => p.kind === 'message' && p.text && cutText(p.text) !== p.text);
+    if (parts.length > 1 && cut >= 0) parts.splice(cut, parts.length, { kind: 'message', text: cutText(parts[cut].text) });
+    for (const a of email.attachments || []) parts.push({ kind: 'attachment', name: a.name, size: a.size, mime: a.mime });
+    if (parts.length > 1) parts = parts.filter(p => p.kind !== 'message' || p.text);
+    return parts;
+  }
+
+  // Most of the text sits in tables: a layout, not a written message (a signature table is not enough).
+  function mostlyTables(html) {
+    const letters = piece => htmlText(piece).replace(/\s/g, '').length;
+    let inside = 0, outside = 0, depth = 0, from = 0;
+    for (const m of html.matchAll(/<(\/?)table\b[^>]*>/gi)) {
+      if (depth > 0) inside += letters(html.slice(from, m.index)); else outside += letters(html.slice(from, m.index));
+      depth = Math.max(0, depth + (m[1] ? -1 : 1));
+      from = m.index + m[0].length;
+    }
+    if (depth > 0) inside += letters(html.slice(from)); else outside += letters(html.slice(from));
+    return inside > outside;
+  }
+
+  // Plain text of a piece of HTML: one line per block, entities decoded.
+  const ENTITIES = { nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+  function htmlText(html) {
+    return html
+      .replace(/\s+/g, ' ')
+      .replace(/<(head|style|script|title)\b[\s\S]*?<\/\1\s*>/gi, '')
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<br\b[^>]*>|<\/?(p|div|tr|li|ul|ol|table|blockquote|h[1-6])\b[^>]*>/gi, '\n')
+      .replace(/<[^>]*>/g, '')
+      .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
+        if (e[0] !== '#') return ENTITIES[e.toLowerCase()] ?? m;
+        const code = /x/i.test(e[1]) ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+        return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : m;
+      })
+      .split('\n').map(line => line.replace(/\s+/g, ' ').trim()).join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
   }
 
   // Only what the person newly wrote, cut by rules (no AI): the quoted history goes.
@@ -254,6 +306,11 @@
       .filter(line => { const m = /^\[(\d+)\]:\s*(\S+)\s*$/.exec(line); if (m) links.set(m[1], m[2]); return !m; })
       .join('\n');
     const whole = body.replace(/\[([^\]\n]*)\]\[(\d+)\]/g, (all, text, n) => (links.has(n) ? `[${text}](${links.get(n)})` : all)).trim();
+    return cutText(whole, signatures) || whole;
+  }
+
+  // What is left of a text once the quoted history and the signatures go ('' when nothing).
+  function cutText(whole, signatures = []) {
     const lines = whole.split('\n');
     const kept = [];
     for (let i = 0; i < lines.length; i++) {
@@ -265,7 +322,7 @@
     }
     for (const signature of signatures) cutBlock(kept, signature.split('\n'));
     while (kept.length && RULE_LINE.test(kept[kept.length - 1])) kept.pop();
-    return kept.join('\n').trim() || whole;
+    return kept.join('\n').trim();
   }
 
   // Each email's new text, then the last lines one sender ends 2+ of their emails with

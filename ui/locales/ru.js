@@ -105,7 +105,7 @@ STRINGS.ru = {
     'nav.discussions': 'Переписки', 'dm.new': 'Новое сообщение', 'dm.today': 'Сегодня', 'dm.you': 'Вы: {text}',
     'dm.reply': 'Напишите ответ…', 'dm.add': 'Добавить в Кому, Копия или Скрытая копия', 'dm.remove': 'Убрать',
     'dm.find': "Найти в этой переписке", 'dm.findCount': "{n} из {total}", 'dm.findNone': "Нет совпадений", 'dm.findPrev': "Предыдущее", 'dm.findNext': "Следующее",
-    'dm.earlier': 'Более ранние сообщения не загружены', 'dm.draft': 'Черновик', 'dm.cc': '{name} (копия)',
+    'dm.earlier': 'Более ранние сообщения не загружены', 'dm.draft': 'Черновик', 'dm.file': 'Вложенный файл', 'dm.cc': '{name} (копия)',
     'dm.added': '{who} добавляет: {names}', 'dm.removed': '{who} убирает: {names}', 'dm.youAdded': 'Вы добавили: {names}', 'dm.youRemoved': 'Вы убрали: {names}',
     'set.fontScale': 'Масштаб шрифта', 'set.theme': 'Тема', 'set.language': 'Язык',
     "set.signature": "Подпись", "set.sigChoose": "📄 Выбрать HTML-файл…", "set.sigRemove": "Удалить", "set.sigOnNew": "Добавлять в новые письма", "set.sigOnReply": "Добавлять в ответы и пересылки", "set.sigHint": "Подписи пока нет. Экспортируйте её из почтовой программы (Outlook, Gmail…) как HTML-файл или создайте в любом генераторе подписей.", "set.sigImported": "Подпись импортирована", "set.sigRemoved": "Подпись удалена", "set.sigFileFilter": "HTML-файлы",

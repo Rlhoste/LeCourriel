@@ -298,7 +298,7 @@ fn parse_fetch(fetch: &Fetch) -> Option<RawEmail> {
     let date: Option<DateTime<Utc>> =
         mailparse::dateparse(&date_str).ok().and_then(|ts| DateTime::from_timestamp(ts, 0));
 
-    let (body_text, body_html, attachments) = extract_bodies(&parsed);
+    let (body_text, body_html, attachments, html_only) = extract_bodies(&parsed);
 
     debug!("Parsed email uid={} subject={:?}", uid, subject);
 
@@ -318,18 +318,21 @@ fn parse_fetch(fetch: &Fetch) -> Option<RawEmail> {
         body_text,
         body_html,
         attachments,
+        html_only,
     })
 }
 
 /// Inline images bigger than this are left out (they would bloat the cache).
 const MAX_INLINE_IMAGE: usize = 3 * 1024 * 1024;
 
-/// The plain-text body, the HTML body (inline images embedded) and the attachments.
-pub(crate) fn extract_bodies(mail: &mailparse::ParsedMail) -> (String, Option<String>, Vec<Attachment>) {
+/// The plain-text body, the HTML body (inline images embedded), the attachments and
+/// whether the email has HTML but no plain-text part.
+pub(crate) fn extract_bodies(mail: &mailparse::ParsedMail) -> (String, Option<String>, Vec<Attachment>, bool) {
     let mut plain = String::new();
     let mut html: Option<String> = None;
     let mut inline = Vec::new();
     collect_parts(mail, &mut plain, &mut html, &mut inline);
+    let html_only = plain.is_empty() && html.is_some();
     if plain.is_empty() {
         if let Ok(body) = decode_text_body(mail) {
             plain = body;
@@ -337,7 +340,7 @@ pub(crate) fn extract_bodies(mail: &mailparse::ParsedMail) -> (String, Option<St
     }
     let mut attachments = Vec::new();
     collect_attachments(mail, &html.as_deref().unwrap_or_default().to_lowercase(), &mut attachments);
-    (plain, html.map(|h| embed_inline_images(h, inline)), attachments)
+    (plain, html.map(|h| embed_inline_images(h, inline)), attachments, html_only)
 }
 
 /// Leaf parts with a file name or `Content-Disposition: attachment`, except the images
