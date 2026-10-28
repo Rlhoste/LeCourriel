@@ -7,7 +7,7 @@ use native_tls::TlsConnector;
 use tracing::{debug, info, warn};
 
 use crate::config::ImapConfig;
-use crate::models::RawEmail;
+use crate::models::{Attachment, RawEmail};
 
 pub async fn fetch_folder(cfg: &ImapConfig, mailbox: &str) -> Result<Vec<RawEmail>> {
     let mut override_cfg = cfg.clone();
@@ -298,7 +298,7 @@ fn parse_fetch(fetch: &Fetch) -> Option<RawEmail> {
     let date: Option<DateTime<Utc>> =
         mailparse::dateparse(&date_str).ok().and_then(|ts| DateTime::from_timestamp(ts, 0));
 
-    let (body_text, body_html) = extract_bodies(&parsed);
+    let (body_text, body_html, attachments) = extract_bodies(&parsed);
 
     debug!("Parsed email uid={} subject={:?}", uid, subject);
 
@@ -317,13 +317,15 @@ fn parse_fetch(fetch: &Fetch) -> Option<RawEmail> {
         date,
         body_text,
         body_html,
+        attachments,
     })
 }
 
 /// Inline images bigger than this are left out (they would bloat the cache).
 const MAX_INLINE_IMAGE: usize = 3 * 1024 * 1024;
 
-pub(crate) fn extract_bodies(mail: &mailparse::ParsedMail) -> (String, Option<String>) {
+/// The plain-text body, the HTML body (inline images embedded) and the attachments.
+pub(crate) fn extract_bodies(mail: &mailparse::ParsedMail) -> (String, Option<String>, Vec<Attachment>) {
     let mut plain = String::new();
     let mut html: Option<String> = None;
     let mut inline = Vec::new();
@@ -333,7 +335,40 @@ pub(crate) fn extract_bodies(mail: &mailparse::ParsedMail) -> (String, Option<St
             plain = body;
         }
     }
-    (plain, html.map(|h| embed_inline_images(h, inline)))
+    let mut attachments = Vec::new();
+    collect_attachments(mail, &html.as_deref().unwrap_or_default().to_lowercase(), &mut attachments);
+    (plain, html.map(|h| embed_inline_images(h, inline)), attachments)
+}
+
+/// Leaf parts with a file name or `Content-Disposition: attachment`, except the images
+/// the HTML shows through `cid:` (`html_lower` is the HTML body, lowercased).
+fn collect_attachments(mail: &mailparse::ParsedMail, html_lower: &str, out: &mut Vec<Attachment>) {
+    if !mail.subparts.is_empty() {
+        for sub in &mail.subparts {
+            collect_attachments(sub, html_lower, out);
+        }
+        return;
+    }
+    let disposition = mail.get_content_disposition();
+    let name = disposition.params.get("filename").or_else(|| mail.ctype.params.get("name"));
+    if name.is_none() && disposition.disposition != mailparse::DispositionType::Attachment {
+        return;
+    }
+    let cid = content_id(mail).to_lowercase();
+    if !cid.is_empty() && html_lower.contains(&format!("cid:{cid}")) {
+        return;
+    }
+    out.push(Attachment {
+        name: name.cloned().unwrap_or_default(),
+        size: mail.get_body_raw().map(|b| b.len() as u64).unwrap_or(0),
+        mime: mail.ctype.mimetype.to_lowercase(),
+    });
+}
+
+/// The part's Content-ID without its angle brackets ("" when none).
+fn content_id(mail: &mailparse::ParsedMail) -> String {
+    let cid = mail.headers.get_first_value("Content-ID").unwrap_or_default();
+    cid.trim().trim_start_matches('<').trim_end_matches('>').trim().to_string()
 }
 
 /// Inline images (signatures, logos) are attached parts that the HTML points to with
@@ -393,8 +428,7 @@ fn collect_parts(
             }
         }
     } else if mail.subparts.is_empty() {
-        let cid = mail.headers.get_first_value("Content-ID").unwrap_or_default();
-        let cid = cid.trim().trim_start_matches('<').trim_end_matches('>').trim();
+        let cid = content_id(mail);
         if cid.is_empty() {
             return;
         }
@@ -403,7 +437,7 @@ fn collect_parts(
                 use base64::Engine;
                 let mime = if ctype.starts_with("image/") { ctype.as_str() } else { "application/octet-stream" };
                 let encoded = base64::engine::general_purpose::STANDARD.encode(&data);
-                inline.push((cid.to_string(), format!("data:{mime};base64,{encoded}")));
+                inline.push((cid, format!("data:{mime};base64,{encoded}")));
             }
         }
     } else {

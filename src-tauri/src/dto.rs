@@ -24,6 +24,9 @@ pub struct EmailCardDto {
     pub task: String,
     pub body_text: String,
     pub body_html: String,
+    /// Files attached to the email: `{ name, size, mime }`, size in bytes.
+    #[serde(default)]
+    pub attachments: Vec<crate::models::Attachment>,
     pub meeting_link: String,
 }
 
