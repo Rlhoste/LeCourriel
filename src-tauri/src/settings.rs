@@ -12,6 +12,7 @@ pub fn config_to_dto(cfg: &Config) -> SettingsDto {
         theme: cfg.user.theme.clone(),
         language: cfg.user.language.clone(),
         notify_new_mail: cfg.user.notify_new_mail,
+        discussion_mode: cfg.user.discussion_mode,
         ai: AiSettingsDto {
             provider: cfg.ai.provider().to_string(),
             model: cfg.ai.model.clone(),
@@ -54,6 +55,7 @@ pub fn save_config(
     theme: Option<&str>,
     language: Option<&str>,
     notify_new_mail: Option<bool>,
+    discussion_mode: Option<bool>,
 ) -> Result<()> {
     let cfg = apply_to_config(
         Config::load()?,
@@ -65,6 +67,7 @@ pub fn save_config(
         theme,
         language,
         notify_new_mail,
+        discussion_mode,
     );
     crate::config::save_config(&cfg)
 }
@@ -81,6 +84,7 @@ pub fn apply_to_config(
     theme: Option<&str>,
     language: Option<&str>,
     notify_new_mail: Option<bool>,
+    discussion_mode: Option<bool>,
 ) -> Config {
     cfg.user = UserConfig {
         // Not in Settings any more: keep the stored name (it may come from config.toml or the cloud).
@@ -92,6 +96,7 @@ pub fn apply_to_config(
             .map(str::to_string)
             .unwrap_or_else(|| cfg.user.language.clone()),
         notify_new_mail: notify_new_mail.unwrap_or(cfg.user.notify_new_mail),
+        discussion_mode: discussion_mode.unwrap_or(cfg.user.discussion_mode),
     };
 
     cfg.accounts = accounts.iter().map(account_from_dto).collect();

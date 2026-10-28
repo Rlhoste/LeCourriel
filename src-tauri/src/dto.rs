@@ -160,6 +160,7 @@ pub struct SettingsDto {
     pub theme: String,
     pub language: String,
     pub notify_new_mail: bool,
+    pub discussion_mode: bool,
     pub ai: AiSettingsDto,
     pub giphy_key: String,
     pub supabase_url: String,

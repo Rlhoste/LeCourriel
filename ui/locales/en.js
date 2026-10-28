@@ -105,6 +105,8 @@ STRINGS.en = {
     // Settings
     'set.title': 'Settings', 'set.general': 'General', 'set.accounts': 'Accounts', 'set.ai': 'AI',
     'set.notify': 'Notify me when new emails arrive',
+    'set.discussion': 'Discussion mode: show my emails like a messaging app',
+    'nav.discussions': 'Discussions', 'dm.new': 'New message', 'dm.today': 'Today', 'dm.you': 'You: {text}',
     'set.fontScale': 'Font Scale', 'set.theme': 'Theme', 'set.language': 'Language',
     "set.signature": "Signature", "set.sigChoose": "📄 Choose an HTML file…", "set.sigRemove": "Remove", "set.sigOnNew": "Add to new messages", "set.sigOnReply": "Add to replies and forwards", "set.sigHint": "No signature yet. Export it from your mail client (Outlook, Gmail…) as an HTML file, or create one with any signature generator.", "set.sigImported": "Signature imported", "set.sigRemoved": "Signature removed", "set.sigFileFilter": "HTML files",
     "set.incoming": "📥 Incoming mail (IMAP)", "set.outgoing": "📤 Outgoing mail (SMTP)", "set.server": "Server", "set.port": "Port", "set.username": "Username", "set.usernamePh": "you@example.com", "set.password": "Password", "set.sameAsIncoming": "Same as incoming", "set.advanced": "Advanced options", "set.imapMailbox": "Folder to check", "set.fetchCount": "Number of emails to fetch",

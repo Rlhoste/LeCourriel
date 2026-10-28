@@ -20,6 +20,7 @@
     <div id="sidebar-logo"><img src="logo.png" alt="" class="sidebar-logo-img" /><span>Le courriel</span></div>
 
     <button class="nav-btn active" data-panel="overview" data-i18n="nav.overview">Overview</button>
+    <button class="nav-btn" data-panel="discussions" data-i18n="nav.discussions">Discussions</button>
     <button class="nav-btn" data-panel="inbox" data-i18n="nav.inbox">Inbox</button>
     <button class="nav-btn" data-panel="important" data-i18n="nav.important">Important</button>
     <button class="nav-btn" data-panel="tasks" data-i18n="nav.tasks">Tasks</button>
@@ -91,6 +92,14 @@
     </section>
 
     <!-- ── Email list + reading pane (shared template) ────────────────────── -->
+    <!-- ── Discussion mode: discussion list + conversation ─────────────────── -->
+    <section id="panel-discussions" class="panel dm-panel">
+      <div class="dm-list">
+        <div class="dm-list-top"><button class="dm-new" id="dm-new" data-i18n="dm.new">New message</button></div>
+        <div class="dm-lines" id="dm-lines"></div>
+      </div>
+      <div class="dm-conv" id="dm-conv"></div>
+    </section>
     <section id="panel-inbox"     class="panel split-panel"></section>
     <section id="panel-important" class="panel split-panel"></section>
     <!-- ── Tasks (kanban) ──────────────────────────────────────────────────── -->
@@ -408,6 +417,10 @@
       <label class="checkbox-label">
         <input type="checkbox" id="s-notify" />
         <span data-i18n="set.notify">Notify me when new emails arrive</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="s-discussion" />
+        <span data-i18n="set.discussion">Discussion mode: show my emails like a messaging app</span>
       </label>
     </div>
 

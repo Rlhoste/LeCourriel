@@ -97,6 +97,8 @@ STRINGS.ja = {
 
     'set.title': '設定', 'set.general': '全般', 'set.accounts': 'アカウント', 'set.ai': 'AI',
     'set.notify': '新しいメールが届いたら通知する',
+    'set.discussion': '会話モード：メールをメッセージアプリのように表示する',
+    'nav.discussions': '会話', 'dm.new': '新しいメッセージ', 'dm.today': '今日', 'dm.you': 'あなた：{text}',
     'set.fontScale': '文字の大きさ', 'set.theme': 'テーマ', 'set.language': '言語',
     "set.signature": "署名", "set.sigChoose": "📄 HTML ファイルを選択…", "set.sigRemove": "削除", "set.sigOnNew": "新規メッセージに追加", "set.sigOnReply": "返信と転送に追加", "set.sigHint": "署名はまだありません。メールソフト（Outlook、Gmail など）から HTML ファイルとして書き出すか、署名作成ツールで作成してください。", "set.sigImported": "署名を読み込みました", "set.sigRemoved": "署名を削除しました", "set.sigFileFilter": "HTML ファイル",
     "set.incoming": "📥 受信 (IMAP)", "set.outgoing": "📤 送信 (SMTP)", "set.server": "サーバー", "set.port": "ポート", "set.username": "ユーザー名", "set.usernamePh": "you@example.com", "set.password": "パスワード", "set.sameAsIncoming": "受信と同じ", "set.advanced": "詳細オプション", "set.imapMailbox": "確認するフォルダー", "set.fetchCount": "取得するメール数",

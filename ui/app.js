@@ -62,6 +62,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     applyTheme(s.theme);
     if (s.language && s.language !== LANG) applyLanguage(s.language);
     await loadComposeAccounts();
+    applyDiscussionMode(!!s.discussion_mode);
     // First start (or no account yet): open Settings on Accounts, with the setup dialog on top.
     if (CourrielCore.needsAccountSetup(s)) {
       document.getElementById('ov-briefing').textContent = t('ov.noAccount');
@@ -92,6 +93,7 @@ function setupSidebar() {
 
   document.getElementById('btn-settings').addEventListener('click', openSettings);
   document.getElementById('btn-compose').addEventListener('click', () => openCompose());
+  document.getElementById('dm-new').addEventListener('click', () => openCompose());
   // Opens in the system browser (Tauri shell plugin), not inside the app window.
   document.getElementById('btn-sponsor').addEventListener('click', () =>
     window.__TAURI__.shell.open(SPONSOR_URL).catch(e => console.error('open sponsor page', e)));
@@ -196,9 +198,89 @@ function renderPanel(panel) {
   if (panel === 'calendar') { renderCalendar(); return; }
   if (panel === 'projects') { renderProjects(); return; }
   if (panel === 'tasks')    { renderKanban(); return; }
+  if (panel === 'discussions') { renderDiscussions(); return; }
   const meta = SPLIT_PANELS[panel];
   if (meta && appState) renderSplitPanel(panel, meta);
 }
+
+// ── Discussion mode ────────────────────────────────────────────────────────
+// The mailbox like a messaging app: the folders give way to one list of discussions.
+const DISCUSSION_HIDDEN_PANELS = ['inbox', 'sent', 'drafts', 'trash', 'spam'];
+let openDiscussionId = null;
+
+function applyDiscussionMode(on) {
+  document.body.classList.toggle('discussion-mode', on);
+  if (on && DISCUSSION_HIDDEN_PANELS.includes(activePanel)) switchPanel('discussions');
+  else if (!on && activePanel === 'discussions') switchPanel('inbox');
+}
+
+function renderDiscussions() {
+  if (!appState) return;
+  const me = composeAccounts.map(a => splitSender(a.from).email).filter(Boolean);
+  const list = CourrielCore.buildDiscussions({
+    inbox: appState.all_emails, sent: appState.sent_emails,
+    trash: appState.trash_emails, spam: appState.spam_emails,
+  }, { me, now: Date.now() });
+  const lines = document.getElementById('dm-lines');
+  lines.innerHTML = list.map(d => `
+    <div class="dm-line${d.id === openDiscussionId ? ' active' : ''}" data-id="${esc(d.id)}">
+      ${d.priority ? `<span class="dm-prio dm-prio-${esc(d.priority)}"></span>` : ''}
+      ${avatarStack(d.people)}
+      <span class="dm-who">${esc(d.title || d.subject)}</span>
+      <span class="dm-when">${esc(fmtShort(d.date_ts))}</span>
+      <span class="dm-subj">${esc(d.subject)}</span>
+      <span class="dm-last">${esc(d.preview.mine ? t('dm.you', { text: d.preview.text }) : d.preview.text)}</span>
+      ${d.unread ? `<span class="dm-badge">${fmtNumber(d.unread)}</span>` : ''}
+    </div>`).join('');
+  lines.querySelectorAll('.dm-line').forEach((line, i) => line.addEventListener('click', () => {
+    openDiscussionId = list[i].id;
+    // Opening a discussion reads it: every unread email, on the server too.
+    for (const item of list[i].items) if (item.kind === 'message') setRead(item.email, true);
+    renderDiscussions();
+  }));
+  renderDiscussion(list.find(d => d.id === openDiscussionId));
+}
+
+function renderDiscussion(d) {
+  const conv = document.getElementById('dm-conv');
+  if (!d) { conv.innerHTML = ''; return; }
+  conv.innerHTML = `
+    <div class="dm-head">
+      ${avatarStack(d.people)}
+      <div class="dm-titles">
+        <div class="dm-people">${esc(d.people.map(p => p.name || p.address).join(', '))}</div>
+        <div class="dm-subject">${esc(d.subject)}</div>
+      </div>
+    </div>
+    <div class="dm-scroll">${d.items.map(discussionItem).join('')}</div>`;
+  const scroll = conv.querySelector('.dm-scroll');
+  scroll.scrollTop = scroll.scrollHeight;
+}
+
+// One item of a discussion: a day separator or a bubble (name once and avatar once per run).
+function discussionItem(item) {
+  const time = ts => new Date(ts * 1000);
+  if (item.kind === 'day') {
+    const day = item.day === 'today' ? t('dm.today')
+      : item.day === 'weekday' ? fmt({ weekday: 'long' }).format(time(item.date_ts))
+      : fmtDay(item.date_ts);
+    return `<div class="dm-sep">${esc(day)}</div>`;
+  }
+  if (item.kind !== 'message') return '';
+  const s = item.sender;
+  return `
+    <div class="dm-row${item.mine ? ' me' : ''}${item.first ? ' first' : ''}" style="--pc:${s.colour}">
+      <div class="dm-av-slot">${!item.mine && item.last ? avatar(s) : ''}</div>
+      <div class="dm-msg">
+        ${!item.mine && item.first ? `<div class="dm-name">${esc(s.name || s.address)}</div>` : ''}
+        <div class="dm-bubble">${esc(item.text)}</div>
+        <div class="dm-time">${esc(fmt({ hour: '2-digit', minute: '2-digit' }).format(time(item.date_ts)))}</div>
+      </div>
+    </div>`;
+}
+
+const avatar = p => `<span class="dm-av" style="--pc:${p.colour}" title="${esc(p.name || p.address)}">${esc(p.initials)}</span>`;
+const avatarStack = people => `<span class="dm-av-stack">${people.slice(0, 3).map(avatar).join('')}</span>`;
 
 // ── Overview ────────────────────────────────────────────────────────────────
 function renderOverview() {
@@ -2394,6 +2476,7 @@ async function openSettings() {
   langSelect.innerHTML = LANGUAGES.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
   langSelect.value = LANG;
   document.getElementById('s-notify').checked = settingsData.notify_new_mail !== false;
+  document.getElementById('s-discussion').checked = !!settingsData.discussion_mode;
   savedFontScale = settingsData.font_scale || 1.0;
   renderThemePicker();
   fontScale = settingsData.font_scale;
@@ -3085,12 +3168,14 @@ async function saveSettings() {
       theme: document.documentElement.dataset.theme,
       language: LANG,
       notifyNewMail: document.getElementById('s-notify').checked,
+      discussionMode: document.getElementById('s-discussion').checked,
     });
     await saveCloudProject();   // Supabase settings are local-only: they have their own command
     savedTheme = document.documentElement.dataset.theme;
     savedFontScale = fontScale;
     savedLang = LANG;
     await loadComposeAccounts();   // senders and signatures may have changed
+    applyDiscussionMode(document.getElementById('s-discussion').checked);
     closeSettings();
   } catch (e) {
     showToast(t('set.saveFailed', { err: e }));   // alert() is not shown in the app window
@@ -3450,6 +3535,7 @@ function settingsSnapshot() {
   return {
     theme: document.documentElement.dataset.theme, fontScale, language: LANG,
     notify: document.getElementById('s-notify').checked,
+    discussion: document.getElementById('s-discussion').checked,
     accounts: collectAccounts(),
     // A provider only looked at leaves an empty key behind: not a change.
     ai: JSON.stringify(collectAiSettings(), (k, v) => v === '' ? undefined : v),
@@ -3469,6 +3555,7 @@ function unsavedChanges() {
   if (b.fontScale !== a.fontScale) lines.push(t('set.fontScale'));
   if (b.language !== a.language) lines.push(t('set.language'));
   if (b.notify !== a.notify) lines.push(t('set.notify'));
+  if (b.discussion !== a.discussion) lines.push(t('set.discussion'));
   const name = (acc, i) => acc.label || t('set.account', { n: i + 1 });
   const before = new Map(a.accounts.map((acc, i) => [name(acc, i), JSON.stringify(acc)]));
   const after = new Map(b.accounts.map((acc, i) => [name(acc, i), JSON.stringify(acc)]));
