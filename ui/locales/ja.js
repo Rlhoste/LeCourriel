@@ -100,7 +100,7 @@ STRINGS.ja = {
     'set.discussion': '会話モード：メールをメッセージアプリのように表示する',
     'nav.discussions': '会話', 'dm.new': '新しいメッセージ', 'dm.today': '今日', 'dm.you': 'あなた：{text}',
     'dm.find': "この会話を検索", 'dm.findCount': "{n} / {total}", 'dm.findNone': "一致なし", 'dm.findPrev': "前へ", 'dm.findNext': "次へ",
-    'dm.earlier': '以前のメッセージは読み込まれていません', 'dm.draft': '下書き', 'dm.cc': '{name}（Cc）',
+    'dm.earlier': '以前のメッセージは読み込まれていません', 'dm.draft': '下書き', 'dm.file': '添付ファイル', 'dm.cc': '{name}（Cc）',
     'dm.added': '{who}が{names}を追加しました', 'dm.removed': '{who}が{names}を外しました', 'dm.youAdded': '{names}を追加しました', 'dm.youRemoved': '{names}を外しました',
     'set.fontScale': '文字の大きさ', 'set.theme': 'テーマ', 'set.language': '言語',
     "set.signature": "署名", "set.sigChoose": "📄 HTML ファイルを選択…", "set.sigRemove": "削除", "set.sigOnNew": "新規メッセージに追加", "set.sigOnReply": "返信と転送に追加", "set.sigHint": "署名はまだありません。メールソフト（Outlook、Gmail など）から HTML ファイルとして書き出すか、署名作成ツールで作成してください。", "set.sigImported": "署名を読み込みました", "set.sigRemoved": "署名を削除しました", "set.sigFileFilter": "HTML ファイル",

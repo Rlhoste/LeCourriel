@@ -100,7 +100,7 @@ STRINGS.ur = {
     'set.discussion': 'گفتگو موڈ: میری ای میلز کو میسجنگ ایپ کی طرح دکھائیں',
     'nav.discussions': 'گفتگو', 'dm.new': 'نیا پیغام', 'dm.today': 'آج', 'dm.you': 'آپ: {text}',
     'dm.find': "اس گفتگو میں تلاش کریں", 'dm.findCount': "{total} میں سے {n}", 'dm.findNone': "کوئی نتیجہ نہیں", 'dm.findPrev': "پچھلا", 'dm.findNext': "اگلا",
-    'dm.earlier': 'پچھلے پیغامات لوڈ نہیں ہوئے', 'dm.draft': 'مسودہ', 'dm.cc': '{name} (Cc)',
+    'dm.earlier': 'پچھلے پیغامات لوڈ نہیں ہوئے', 'dm.draft': 'مسودہ', 'dm.file': 'منسلک فائل', 'dm.cc': '{name} (Cc)',
     'dm.added': '{who} نے {names} کو شامل کیا', 'dm.removed': '{who} نے {names} کو ہٹایا', 'dm.youAdded': 'آپ نے {names} کو شامل کیا', 'dm.youRemoved': 'آپ نے {names} کو ہٹایا',
     'set.fontScale': 'فونٹ کا پیمانہ', 'set.theme': 'تھیم', 'set.language': 'زبان',
     "set.signature": "دستخط", "set.sigChoose": "📄 HTML فائل منتخب کریں…", "set.sigRemove": "ہٹائیں", "set.sigOnNew": "نئے پیغامات میں شامل کریں", "set.sigOnReply": "جوابات اور فارورڈ میں شامل کریں", "set.sigHint": "ابھی کوئی دستخط نہیں۔ اسے اپنے میل کلائنٹ (Outlook، Gmail…) سے HTML فائل کے طور پر برآمد کریں، یا کسی دستخط جنریٹر سے بنائیں۔", "set.sigImported": "دستخط درآمد ہو گیا", "set.sigRemoved": "دستخط ہٹا دیا گیا", "set.sigFileFilter": "HTML فائلیں",
