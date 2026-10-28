@@ -99,6 +99,7 @@ STRINGS.pt = {
     'set.notify': 'Avisar-me quando chegarem novos e-mails',
     'set.discussion': 'Modo conversa: mostrar os meus e-mails como uma app de mensagens',
     'nav.discussions': 'Conversas', 'dm.new': 'Nova mensagem', 'dm.today': 'Hoje', 'dm.you': 'Você: {text}',
+    'dm.reply': 'Escreva uma resposta…', 'dm.add': 'Adicionar em Para, Cc ou Cco', 'dm.remove': 'Remover',
     'set.fontScale': 'Tamanho do texto', 'set.theme': 'Tema', 'set.language': 'Idioma',
     "set.signature": "Assinatura", "set.sigChoose": "📄 Escolher um arquivo HTML…", "set.sigRemove": "Remover", "set.sigOnNew": "Adicionar às novas mensagens", "set.sigOnReply": "Adicionar às respostas e encaminhamentos", "set.sigHint": "Ainda não há assinatura. Exporte-a do seu cliente de e-mail (Outlook, Gmail…) como arquivo HTML, ou crie uma com qualquer gerador de assinaturas.", "set.sigImported": "Assinatura importada", "set.sigRemoved": "Assinatura removida", "set.sigFileFilter": "Arquivos HTML",
     "set.incoming": "📥 Recebimento (IMAP)", "set.outgoing": "📤 Envio (SMTP)", "set.server": "Servidor", "set.port": "Porta", "set.username": "Usuário", "set.usernamePh": "voce@exemplo.com", "set.password": "Senha", "set.sameAsIncoming": "Igual ao recebimento", "set.advanced": "Opções avançadas", "set.imapMailbox": "Pasta a verificar", "set.fetchCount": "Número de e-mails a buscar",
