@@ -64,6 +64,10 @@ pub struct Task {
     /// added by hand. 0 = unknown (hand-made tasks from before dates were kept).
     #[serde(default)]
     pub created_ts: i64,
+    /// Added by hand from an email ("Add as task"): linked to it, but the AI neither
+    /// moves it nor stops finding tasks in that email once it is deleted.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub by_hand: bool,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -128,7 +132,26 @@ impl Board {
             source_subject: String::new(),
             ai_verdict: None,
             created_ts: chrono::Utc::now().timestamp(),
+            by_hand: false,
         });
+        id
+    }
+
+    /// A task the user made from an email ("Add as task"), linked back to it.
+    pub fn add_from_email(
+        &mut self,
+        title: String,
+        project: Option<String>,
+        due_date: Option<String>,
+        email: &EmailCard,
+    ) -> u64 {
+        let id = self.add_dated(title, project, due_date);
+        if let Some(t) = self.tasks.iter_mut().find(|t| t.id == id) {
+            t.source_uid = Some(email.uid);
+            t.source_from = email.from_name.clone();
+            t.source_subject = email.subject.clone();
+            t.by_hand = true;
+        }
         id
     }
 
@@ -141,7 +164,7 @@ impl Board {
     pub fn delete(&mut self, id: u64) -> Result<(), String> {
         let pos = self.tasks.iter().position(|t| t.id == id).ok_or("Task not found")?;
         let t = self.tasks.remove(pos);
-        if let Some(uid) = t.source_uid {
+        if let (Some(uid), false) = (t.source_uid, t.by_hand) {
             self.deleted_sources.insert(uid);
         }
         Ok(())
@@ -196,6 +219,7 @@ impl Board {
                 ai_verdict: verdict,
                 // The task appeared with its email (now, if the email has no date).
                 created_ts: if c.date_ts != 0 { c.date_ts } else { chrono::Utc::now().timestamp() },
+                by_hand: false,
             });
             added = true;
         }

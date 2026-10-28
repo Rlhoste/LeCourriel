@@ -1061,7 +1061,7 @@ async fn check_open_tasks(
     });
     let open: Vec<OpenTask> = board
         .iter()
-        .filter(|t| t.status.is_open())
+        .filter(|t| t.status.is_open() && !t.by_hand)
         .filter_map(|t| {
             let uid = t.source_uid?;
             let card = cards.iter().find(|c| c.uid == uid)?;
@@ -1106,7 +1106,8 @@ async fn check_open_tasks(
                 continue;
             }
             // Only move tasks still open: the user may have moved one meanwhile.
-            if let Some(t) = b.tasks.iter_mut().find(|t| t.source_uid == Some(uid) && t.status.is_open()) {
+            if let Some(t) = b.tasks.iter_mut().find(|t| t.source_uid == Some(uid) && t.status.is_open() && !t.by_hand)
+            {
                 info!("Task uid={} is {}", uid, verdict);
                 t.status = if verdict == "done" { Status::Done } else { Status::GivenUp };
                 t.ai_verdict = Some(verdict.to_string());
