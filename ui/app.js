@@ -207,6 +207,7 @@ function renderPanel(panel) {
 // The mailbox like a messaging app: the folders give way to one list of discussions.
 const DISCUSSION_HIDDEN_PANELS = ['inbox', 'sent', 'drafts', 'trash', 'spam'];
 let openDiscussionId = null;
+const dmFind = { open: false, query: '', at: -1 };   // the Ctrl+F bar of the open discussion
 
 function applyDiscussionMode(on) {
   document.body.classList.toggle('discussion-mode', on);
@@ -214,13 +215,36 @@ function applyDiscussionMode(on) {
   else if (!on && activePanel === 'discussions') switchPanel('inbox');
 }
 
-function renderDiscussions() {
-  if (!appState) return;
+function discussionList() {
   const me = composeAccounts.map(a => splitSender(a.from).email).filter(Boolean);
-  const list = CourrielCore.buildDiscussions({
+  return CourrielCore.buildDiscussions({
     inbox: appState.all_emails, sent: appState.sent_emails,
     trash: appState.trash_emails, spam: appState.spam_emails,
   }, { me, now: Date.now() });
+}
+
+// Opening a discussion reads it: every unread email, on the server too.
+// `landOn` ({ folder, uid }) scrolls to that message and highlights it instead of the newest one.
+let dmLandOn = null;
+function openDiscussion(d, landOn = null) {
+  openDiscussionId = d.id;
+  dmLandOn = landOn;
+  dmFind.at = -1;
+  for (const item of d.items) if (item.kind === 'message') setRead(item.email, true);
+  switchPanel('discussions');
+}
+
+// A search result in discussion mode: its discussion, scrolled to it. False if it is in none.
+function openHitInDiscussion(h) {
+  const isHit = i => i.kind === 'message' && i.folder === h.folder && i.email.uid === h.uid;
+  const d = discussionList().find(d => d.items.some(isHit));
+  if (d) openDiscussion(d, { folder: h.folder, uid: h.uid });
+  return !!d;
+}
+
+function renderDiscussions() {
+  if (!appState) return;
+  const list = discussionList();
   const lines = document.getElementById('dm-lines');
   lines.innerHTML = list.map(d => `
     <div class="dm-line${d.id === openDiscussionId ? ' active' : ''}" data-id="${esc(d.id)}">
@@ -232,18 +256,14 @@ function renderDiscussions() {
       <span class="dm-last">${esc(d.preview.mine ? t('dm.you', { text: d.preview.text }) : d.preview.text)}</span>
       ${d.unread ? `<span class="dm-badge">${fmtNumber(d.unread)}</span>` : ''}
     </div>`).join('');
-  lines.querySelectorAll('.dm-line').forEach((line, i) => line.addEventListener('click', () => {
-    openDiscussionId = list[i].id;
-    // Opening a discussion reads it: every unread email, on the server too.
-    for (const item of list[i].items) if (item.kind === 'message') setRead(item.email, true);
-    renderDiscussions();
-  }));
+  lines.querySelectorAll('.dm-line').forEach((line, i) => line.addEventListener('click', () => openDiscussion(list[i])));
   renderDiscussion(list.find(d => d.id === openDiscussionId));
 }
 
 function renderDiscussion(d) {
   const conv = document.getElementById('dm-conv');
   if (!d) { conv.innerHTML = ''; return; }
+  const finding = document.activeElement?.classList.contains('dm-find-input');
   conv.innerHTML = `
     <div class="dm-head">
       ${avatarStack(d.people)}
@@ -252,9 +272,71 @@ function renderDiscussion(d) {
         <div class="dm-subject">${esc(d.subject)}</div>
       </div>
     </div>
+    <div class="dm-find${dmFind.open ? '' : ' hidden'}">
+      <input class="dm-find-input" type="text" placeholder="${esc(t('dm.find'))}" value="${esc(dmFind.query)}" />
+      <span class="dm-find-count"></span>
+      <button class="dm-find-prev" title="${esc(t('dm.findPrev'))}">↑</button>
+      <button class="dm-find-next" title="${esc(t('dm.findNext'))}">↓</button>
+      <button class="dm-find-close" title="${esc(t('cmp.close'))}">✕</button>
+    </div>
     <div class="dm-scroll">${d.items.map(discussionItem).join('')}</div>`;
   const scroll = conv.querySelector('.dm-scroll');
   scroll.scrollTop = scroll.scrollHeight;
+  setupDiscussionFind(conv);
+  if (dmFind.open) runDiscussionFind(0, !dmLandOn);
+  if (finding) conv.querySelector('.dm-find-input').focus();
+  const landed = dmLandOn && conv.querySelector(`.dm-row[data-folder="${dmLandOn.folder}"][data-uid="${dmLandOn.uid}"]`);
+  dmLandOn = null;
+  if (landed) {
+    landed.classList.add('dm-landed');
+    landed.scrollIntoView({ block: 'center' });
+  }
+}
+
+// Ctrl+F: find in the open discussion, jumping between matches (Enter / Shift+Enter, ↓ / ↑).
+document.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'f' || activePanel !== 'discussions') return;
+  const input = document.querySelector('#dm-conv .dm-find-input');
+  if (!input) return;
+  e.preventDefault();
+  dmFind.open = true;
+  input.parentElement.classList.remove('hidden');
+  input.focus();
+  input.select();
+  runDiscussionFind(0);
+});
+
+function setupDiscussionFind(conv) {
+  const input = conv.querySelector('.dm-find-input');
+  input.addEventListener('input', () => { dmFind.query = input.value; dmFind.at = -1; runDiscussionFind(0); });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); runDiscussionFind(e.shiftKey ? -1 : 1); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeDiscussionFind(); }
+  });
+  conv.querySelector('.dm-find-prev').addEventListener('click', () => runDiscussionFind(-1));
+  conv.querySelector('.dm-find-next').addEventListener('click', () => runDiscussionFind(1));
+  conv.querySelector('.dm-find-close').addEventListener('click', closeDiscussionFind);
+}
+
+function closeDiscussionFind() {
+  dmFind.open = false;
+  document.querySelector('#dm-conv .dm-find')?.classList.add('hidden');
+  runDiscussionFind(0);
+}
+
+// Marks every match in the bubbles; the current one starts at the newest and is scrolled to.
+function runDiscussionFind(move, scrollTo = true) {
+  const conv = document.getElementById('dm-conv');
+  const q = dmFind.open ? dmFind.query.trim() : '';
+  conv.querySelectorAll('.dm-bubble').forEach(b => { b.innerHTML = highlight(b.textContent, q ? [q] : []); });
+  const count = conv.querySelector('.dm-find-count');
+  const marks = [...conv.querySelectorAll('.dm-bubble mark')];
+  if (!marks.length) { if (count) count.textContent = q ? t('dm.findNone') : ''; return; }
+  if (dmFind.at < 0 || dmFind.at >= marks.length) dmFind.at = marks.length - 1;
+  else dmFind.at = (dmFind.at + move + marks.length) % marks.length;
+  marks[dmFind.at].classList.add('current');
+  if (scrollTo) marks[dmFind.at].scrollIntoView({ block: 'center' });
+  count.textContent = t('dm.findCount', { n: fmtNumber(dmFind.at + 1), total: fmtNumber(marks.length) });
 }
 
 // One item of a discussion: a day separator or a bubble (name once and avatar once per run).
@@ -269,7 +351,7 @@ function discussionItem(item) {
   if (item.kind !== 'message') return '';
   const s = item.sender;
   return `
-    <div class="dm-row${item.mine ? ' me' : ''}${item.first ? ' first' : ''}" style="--pc:${s.colour}">
+    <div class="dm-row${item.mine ? ' me' : ''}${item.first ? ' first' : ''}" style="--pc:${s.colour}" data-folder="${esc(item.folder)}" data-uid="${esc(item.email.uid)}">
       <div class="dm-av-slot">${!item.mine && item.last ? avatar(s) : ''}</div>
       <div class="dm-msg">
         ${!item.mine && item.first ? `<div class="dm-name">${esc(s.name || s.address)}</div>` : ''}
@@ -1061,6 +1143,8 @@ async function openSearchHit(h) {
     return;
   }
   closeSearch();
+  // Discussion mode: the result opens its discussion, scrolled to it and highlighted.
+  if (document.body.classList.contains('discussion-mode') && openHitInDiscussion(h)) return;
   const panel = { inbox: 'inbox', sent: 'sent', drafts: 'drafts', trash: 'trash', spam: 'spam' }[h.folder] || 'inbox';
   openEmailIn(panel, h.uid);
 }

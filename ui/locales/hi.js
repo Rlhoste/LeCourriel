@@ -99,6 +99,7 @@ STRINGS.hi = {
     'set.notify': 'नए ईमेल आने पर मुझे सूचित करें',
     'set.discussion': 'बातचीत मोड: मेरे ईमेल को मैसेजिंग ऐप की तरह दिखाएँ',
     'nav.discussions': 'बातचीत', 'dm.new': 'नया संदेश', 'dm.today': 'आज', 'dm.you': 'आप: {text}',
+    'dm.find': "इस बातचीत में खोजें", 'dm.findCount': "{total} में से {n}", 'dm.findNone': "कोई मिलान नहीं", 'dm.findPrev': "पिछला", 'dm.findNext': "अगला",
     'set.fontScale': 'फ़ॉन्ट आकार', 'set.theme': 'थीम', 'set.language': 'भाषा',
     "set.signature": "हस्ताक्षर", "set.sigChoose": "📄 HTML फ़ाइल चुनें…", "set.sigRemove": "हटाएँ", "set.sigOnNew": "नए संदेशों में जोड़ें", "set.sigOnReply": "जवाबों और फ़ॉरवर्ड में जोड़ें", "set.sigHint": "अभी कोई हस्ताक्षर नहीं है। इसे अपने मेल क्लाइंट (Outlook, Gmail…) से HTML फ़ाइल के रूप में निर्यात करें, या किसी हस्ताक्षर जनरेटर से बनाएँ।", "set.sigImported": "हस्ताक्षर आयात किया गया", "set.sigRemoved": "हस्ताक्षर हटाया गया", "set.sigFileFilter": "HTML फ़ाइलें",
     "set.incoming": "📥 आने वाली मेल (IMAP)", "set.outgoing": "📤 जाने वाली मेल (SMTP)", "set.server": "सर्वर", "set.port": "पोर्ट", "set.username": "उपयोगकर्ता नाम", "set.usernamePh": "aap@udaharan.com", "set.password": "पासवर्ड", "set.sameAsIncoming": "आने वाली मेल जैसा", "set.advanced": "उन्नत विकल्प", "set.imapMailbox": "जाँचने वाला फ़ोल्डर", "set.fetchCount": "लाए जाने वाले ईमेल की संख्या",
