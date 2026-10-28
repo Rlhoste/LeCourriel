@@ -29,3 +29,13 @@ _Avoid_: Model (that is one choice inside a provider), AI connection, backend
 **Subscription sign-in**:
 Using an AI provider through the user's existing chat plan (Claude Pro, Max, Team or Enterprise), approved once in the browser, instead of an API key.
 _Avoid_: Anthropic connection, OAuth, login
+
+## Reading
+
+**Discussion**:
+An email and every email linked to it as a reply, in any folder and from any of the user's accounts. A single email with no replies is a discussion of one.
+_Avoid_: Thread, conversation, chain
+
+**Discussion mode**:
+A setting that shows the mailbox like a messaging app: a list of discussions, newest first, each opening as messages from each person, the user's own on one side.
+_Avoid_: Conversation view, chat mode, SMS mode
