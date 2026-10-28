@@ -219,7 +219,7 @@ function renderDiscussions() {
   const me = composeAccounts.map(a => splitSender(a.from).email).filter(Boolean);
   const list = CourrielCore.buildDiscussions({
     inbox: appState.all_emails, sent: appState.sent_emails,
-    trash: appState.trash_emails, spam: appState.spam_emails,
+    trash: appState.trash_emails, spam: appState.spam_emails, drafts: appState.drafts_emails,
   }, { me, now: Date.now() });
   const lines = document.getElementById('dm-lines');
   lines.innerHTML = list.map(d => `
@@ -257,14 +257,35 @@ function renderDiscussion(d) {
   scroll.scrollTop = scroll.scrollHeight;
 }
 
-// One item of a discussion: a day separator or a bubble (name once and avatar once per run).
+// One item of a discussion: a note, a day separator or a bubble (name once and avatar once per run).
 function discussionItem(item) {
   const time = ts => new Date(ts * 1000);
+  if (item.kind === 'earlier') return `<div class="dm-earlier">${esc(t('dm.earlier'))}</div>`;
   if (item.kind === 'day') {
     const day = item.day === 'today' ? t('dm.today')
       : item.day === 'weekday' ? fmt({ weekday: 'long' }).format(time(item.date_ts))
       : fmtDay(item.date_ts);
     return `<div class="dm-sep">${esc(day)}</div>`;
+  }
+  if (item.kind === 'people') {
+    const names = list => new Intl.ListFormat(langInfo().locale, { type: 'conjunction' })
+      .format(list.map(p => (p.cc ? t('dm.cc', { name: p.short }) : p.short)));
+    const who = item.by.short;
+    const lines = [
+      item.added.length && t(item.mine ? 'dm.youAdded' : 'dm.added', { who, names: names(item.added) }),
+      item.removed.length && t(item.mine ? 'dm.youRemoved' : 'dm.removed', { who, names: names(item.removed) }),
+    ].filter(Boolean);
+    return lines.map(line => `<div class="dm-people-note">${esc(line)}</div>`).join('');
+  }
+  if (item.kind === 'draft') {
+    return `
+    <div class="dm-row me first draft">
+      <div class="dm-av-slot"></div>
+      <div class="dm-msg">
+        <div class="dm-bubble">${esc(item.text)}</div>
+        <div class="dm-time">${esc(t('dm.draft'))}</div>
+      </div>
+    </div>`;
   }
   if (item.kind !== 'message') return '';
   const s = item.sender;

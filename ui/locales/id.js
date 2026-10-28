@@ -99,6 +99,8 @@ STRINGS.id = {
     'set.notify': 'Beri tahu saya saat email baru masuk',
     'set.discussion': 'Mode percakapan: tampilkan email saya seperti aplikasi pesan',
     'nav.discussions': 'Percakapan', 'dm.new': 'Pesan baru', 'dm.today': 'Hari ini', 'dm.you': 'Anda: {text}',
+    'dm.earlier': 'Pesan sebelumnya belum dimuat', 'dm.draft': 'Draf', 'dm.cc': '{name} (Cc)',
+    'dm.added': '{who} menambahkan {names}', 'dm.removed': '{who} menghapus {names}', 'dm.youAdded': 'Anda menambahkan {names}', 'dm.youRemoved': 'Anda menghapus {names}',
     'set.fontScale': 'Ukuran Teks', 'set.theme': 'Tema', 'set.language': 'Bahasa',
     "set.signature": "Tanda tangan", "set.sigChoose": "📄 Pilih file HTML…", "set.sigRemove": "Hapus", "set.sigOnNew": "Tambahkan ke pesan baru", "set.sigOnReply": "Tambahkan ke balasan dan penerusan", "set.sigHint": "Belum ada tanda tangan. Ekspor dari aplikasi email Anda (Outlook, Gmail…) sebagai file HTML, atau buat dengan generator tanda tangan apa pun.", "set.sigImported": "Tanda tangan diimpor", "set.sigRemoved": "Tanda tangan dihapus", "set.sigFileFilter": "File HTML",
     "set.incoming": "📥 Email masuk (IMAP)", "set.outgoing": "📤 Email keluar (SMTP)", "set.server": "Server", "set.port": "Port", "set.username": "Nama pengguna", "set.usernamePh": "anda@contoh.com", "set.password": "Kata sandi", "set.sameAsIncoming": "Sama dengan email masuk", "set.advanced": "Opsi lanjutan", "set.imapMailbox": "Folder yang diperiksa", "set.fetchCount": "Jumlah email yang diambil",

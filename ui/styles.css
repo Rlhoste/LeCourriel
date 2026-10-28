@@ -2169,6 +2169,12 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 }
 .dm-row.me .dm-bubble { background: var(--accent); color: var(--on-accent); }
 .dm-time { font-size: 0.72rem; color: var(--text-dim); margin: 2px 10px 0; }
+.dm-people-note { align-self: center; margin: 6px 0; font-size: 0.8rem; font-style: italic; color: var(--text-dim); }
+.dm-earlier {
+  align-self: center; margin-bottom: 4px; padding: 4px 10px; font-size: 0.8rem; color: var(--text-dim);
+  border: 1px dashed var(--border); border-radius: 999px;
+}
+.dm-row.draft .dm-bubble { background: transparent; color: var(--text-dim); border: 1px dashed var(--text-dim); }
 
 /* Rows with an importance bar keep it when selected (instead of the accent bar). Last in the
    file so it wins over the theme and right-to-left rules for .email-row.active. */
