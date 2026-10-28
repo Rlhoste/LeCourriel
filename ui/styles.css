@@ -1119,12 +1119,16 @@ input::-ms-reveal, input::-ms-clear { display: none; }
   border-radius: var(--radius-sm);
   padding: 8px 10px;
   cursor: grab;
+  user-select: none;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 .kanban-card:hover   { border-color: var(--text-faint); }
 .kanban-card.dragging { opacity: 0.4; }
+/* The copy that follows the pointer while a task is dragged. */
+.kanban-ghost { position: fixed; z-index: 1000; pointer-events: none; opacity: 0.9; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important; }
+body.task-dragging, body.task-dragging * { cursor: grabbing !important; }
 .kanban-col[data-status="done"] .kanban-card-title,
 .kanban-col[data-status="given_up"] .kanban-card-title { color: var(--text-dim); text-decoration: line-through; }
 

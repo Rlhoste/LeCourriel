@@ -1228,7 +1228,7 @@ function renderCalendarEvents(cell, events, past, urgencyOf, expanded = false) {
 
 // ── Tasks kanban ───────────────────────────────────────────────────────────
 let activeBoard = null;   // null = "All tasks", otherwise a project name
-let draggedTaskId = null;
+let taskJustDropped = false;  // swallows the click that ends a drag
 
 function setupKanban() {
   const input = document.getElementById('kanban-new-title');
@@ -1243,23 +1243,6 @@ function setupKanban() {
     } catch (err) {
       input.placeholder = String(err);
     }
-  });
-
-  // Drop targets: each column.
-  document.querySelectorAll('.kanban-col').forEach(col => {
-    col.addEventListener('dragover', e => {
-      if (draggedTaskId === null) return;
-      e.preventDefault();
-      col.classList.add('drop-target');
-    });
-    col.addEventListener('dragleave', e => {
-      if (!col.contains(e.relatedTarget)) col.classList.remove('drop-target');
-    });
-    col.addEventListener('drop', e => {
-      e.preventDefault();
-      col.classList.remove('drop-target');
-      if (draggedTaskId !== null) setTaskStatus(draggedTaskId, col.dataset.status);
-    });
   });
 }
 
@@ -1308,7 +1291,6 @@ function renderKanban() {
 function kanbanCard(task) {
   const card = document.createElement('div');
   card.className = 'kanban-card';
-  card.draggable = true;
 
   const chips = [];
   if (activeBoard === null && task.project) chips.push(`<span class="kanban-chip">${esc(task.project)}</span>`);
@@ -1332,16 +1314,56 @@ function kanbanCard(task) {
     ${chips.length ? `<div class="kanban-chips">${chips.join('')}</div>` : ''}
   `;
 
-  card.addEventListener('dragstart', e => {
-    draggedTaskId = task.id;
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(task.id));
-    card.classList.add('dragging');
-  });
-  card.addEventListener('dragend', () => {
-    draggedTaskId = null;
-    card.classList.remove('dragging');
-    document.querySelectorAll('.kanban-col.drop-target').forEach(c => c.classList.remove('drop-target'));
+  // Dragged with the pointer, not the browser's drag and drop, which draws its own cursor:
+  // the hand stays "grabbing" until the task is dropped on a column (#18).
+  card.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || e.target.closest('.kanban-delete')) return;
+    const r = card.getBoundingClientRect();
+    const dx = e.clientX - r.left, dy = e.clientY - r.top;
+    let ghost = null, over = null;
+    const move = ev => {
+      if (!(ev.buttons & 1)) return end(ev); // the release was lost (e.g. alt-tab): cancel
+      if (!ghost) {
+        if (Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 5) return;
+        ghost = card.cloneNode(true);
+        ghost.classList.add('kanban-ghost');
+        ghost.style.width = r.width + 'px';
+        document.body.appendChild(ghost);
+        document.body.classList.add('task-dragging');
+        card.classList.add('dragging');
+      }
+      ghost.style.left = (ev.clientX - dx) + 'px';
+      ghost.style.top = (ev.clientY - dy) + 'px';
+      const col = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('.kanban-col') ?? null;
+      if (col !== over) {
+        over?.classList.remove('drop-target');
+        col?.classList.add('drop-target');
+        over = col;
+      }
+    };
+    const escape = ev => { if (ev.key === 'Escape') end(ev); };
+    const end = ev => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      window.removeEventListener('blur', end);
+      window.removeEventListener('keydown', escape);
+      if (!ghost) return;
+      ghost.remove();
+      document.body.classList.remove('task-dragging');
+      card.classList.remove('dragging');
+      over?.classList.remove('drop-target');
+      taskJustDropped = true;
+      setTimeout(() => { taskJustDropped = false; });
+      if (ev.type === 'pointerup' && over && over.dataset.status !== task.status) {
+        setTaskStatus(task.id, over.dataset.status);
+      }
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    window.addEventListener('blur', end);
+    window.addEventListener('keydown', escape);
   });
 
   card.querySelector('.kanban-delete').addEventListener('click', async e => {
@@ -1349,7 +1371,7 @@ function kanbanCard(task) {
     setTasks(await cmd('delete_task', { id: task.id }));
   });
   const src = card.querySelector('.kanban-source');
-  if (src) src.addEventListener('click', () => switchToEmail(task.source_uid));
+  if (src) src.addEventListener('click', () => { if (!taskJustDropped) switchToEmail(task.source_uid); });
   return card;
 }
 
