@@ -345,6 +345,7 @@ fn save_settings(
     shared: State<'_, SharedState>,
 ) -> Result<(), String> {
     let giphy_key = giphy_key.unwrap_or_default();
+    let old_accounts = shared.lock().unwrap().cfg.accounts.clone();
     settings::save_config(display_name.as_deref(), &accounts, &ai, &giphy_key, font_scale, theme.as_deref(), language.as_deref(), notify_new_mail)
         .map_err(|e| e.to_string())?;
     // Reload config into shared state.
@@ -355,6 +356,19 @@ fn save_settings(
             cloud::configure(&new_cfg);
             let new_cfg = Arc::new(new_cfg);
             shared.lock().unwrap().cfg = new_cfg.clone();
+            // An account is the same one while its server and login are: its emails keep
+            // their tasks; a removed account's emails and tasks go with it.
+            // (A login set up twice, e.g. for two mailboxes, pairs in order.)
+            let mut new_index: Vec<Option<usize>> = Vec::new();
+            for old in &old_accounts {
+                let found = new_cfg.accounts.iter().enumerate().position(|(i, a)| !new_index.contains(&Some(i))
+                    && a.imap.host.eq_ignore_ascii_case(&old.imap.host)
+                    && a.imap.username.eq_ignore_ascii_case(&old.imap.username));
+                new_index.push(found);
+            }
+            if new_index.iter().enumerate().any(|(i, n)| *n != Some(i)) {
+                app_state::forget_accounts(&new_index, &new_cfg, &app, shared.inner());
+            }
             // Apply the new settings straight away: the first account on a new computer
             // fetches its mail, a newly set up AI sorts the emails waiting for it.
             if !new_cfg.accounts.is_empty() {

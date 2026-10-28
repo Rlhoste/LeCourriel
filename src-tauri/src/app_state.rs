@@ -237,7 +237,13 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
         Briefing { kind: "up_to_date", ..Default::default() }
     };
     // From here the emails shown carry this refresh's ids: actions resolve them with its accounts.
-    state.lock().unwrap().mailboxes = mailboxes;
+    {
+        let mut s = state.lock().unwrap();
+        if accounts_changed(&s.cfg, cfg) {
+            return Ok(()); // accounts changed while fetching: the refresh runs again
+        }
+        s.mailboxes = mailboxes;
+    }
     populate(cfg, app, state, pre_cards, sent_cards_pre.clone(), drafts_cards_pre.clone(), trash_cards_pre.clone(), spam_cards_pre.clone(), Some(briefing_pre));
 
     // Classify only new emails.
@@ -359,6 +365,11 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     let trash_cards: Vec<EmailCard> = trash_raw.into_iter().map(raw_to_card).collect();
     let spam_cards: Vec<EmailCard> = spam_raw.into_iter().map(raw_to_card).collect();
 
+    // Accounts changed while the AI was sorting: these ids are stale. Keep nothing; the
+    // refresh runs again with the new settings.
+    if accounts_changed(&state.lock().unwrap().cfg, cfg) {
+        return Ok(());
+    }
     save_cache(&cards);
 
     if ai_ready.is_ok() {
@@ -376,6 +387,9 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     let live_briefing = ai_notice.unwrap_or_else(||
         refresh_briefing(&ai_ready, ai_failures, first_ai_error, unsorted, attention, now.hour(), now.minute()));
 
+    if accounts_changed(&state.lock().unwrap().cfg, cfg) {
+        return Ok(()); // accounts changed during the task check
+    }
     populate(cfg, app, state, cards, sent_cards, drafts_cards, trash_cards, spam_cards, Some(live_briefing));
     Ok(())
 }
@@ -727,6 +741,67 @@ fn migrate_account_ids(cached: &mut [EmailCard], raw: &[RawEmail]) {
     crate::overrides::Overrides::update(|o| {
         o.projects = std::mem::take(&mut o.projects).into_iter().map(|(u, v)| (id(u), v)).collect();
     });
+}
+
+/// Whether the accounts (server, login, mailbox, in order) differ: a refresh begun with the
+/// old ones has ids that no longer match (`models::mail_id`).
+fn accounts_changed(now: &Config, began: &Config) -> bool {
+    let key = |c: &Config| c.accounts.iter()
+        .map(|a| (a.imap.host.to_lowercase(), a.imap.username.to_lowercase(), a.imap.mailbox.clone()))
+        .collect::<Vec<_>>();
+    key(now) != key(began)
+}
+
+/// An email id once accounts were removed or reordered: `new_index[a]` is the new position of
+/// the account at position `a`, None when it was removed (then the email goes too).
+pub fn remap_id(new_index: &[Option<usize>], id: u64) -> Option<u64> {
+    let (account, uid) = crate::models::split_mail_id(id);
+    new_index.get(account).copied().flatten().map(|n| crate::models::mail_id(n, uid))
+}
+
+/// After accounts were removed or reordered in Settings: forget what came from a removed
+/// account (its emails, the tasks taken from them, dismissals, project choices) and give the
+/// other accounts' emails their new ids. Hand-made tasks stay.
+pub fn forget_accounts(new_index: &[Option<usize>], cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>) {
+    let id = |u: u64| remap_id(new_index, u);
+    let cache: Vec<EmailCard> = load_cache().into_iter()
+        .filter_map(|mut c| { c.uid = id(c.uid)?; Some(c) })
+        .collect();
+    save_cache(&cache);
+    Board::update(|b| {
+        b.tasks.retain_mut(|t| match t.source_uid {
+            Some(u) => id(u).map(|n| t.source_uid = Some(n)).is_some(),
+            None => true,
+        });
+        b.deleted_sources = std::mem::take(&mut b.deleted_sources).into_iter().filter_map(id).collect();
+    });
+    Dismissals::update(|d| {
+        for set in [&mut d.tasks, &mut d.deadlines, &mut d.meetings] {
+            *set = std::mem::take(set).into_iter().filter_map(id).collect();
+        }
+        d.task_check = std::mem::take(&mut d.task_check).into_iter()
+            .filter_map(|(u, v)| Some((id(u)?, v))).collect();
+    });
+    crate::overrides::Overrides::update(|o| {
+        o.projects = std::mem::take(&mut o.projects).into_iter()
+            .filter_map(|(u, v)| Some((id(u)?, v))).collect();
+    });
+    {
+        let mut s = state.lock().unwrap();
+        s.emails = std::mem::take(&mut s.emails).into_iter()
+            .filter_map(|mut c| { c.uid = id(c.uid)?; Some(c) }).collect();
+        s.search_index = std::mem::take(&mut s.search_index).into_iter()
+            .filter_map(|(f, mut c)| { c.uid = id(c.uid)?; Some((f, c)) }).collect();
+        let mut kept: Vec<_> = std::mem::take(&mut s.mailboxes).into_iter().enumerate()
+            .filter_map(|(a, m)| Some((new_index.get(a).copied().flatten()?, m))).collect();
+        kept.sort_by_key(|(n, _)| *n);
+        s.mailboxes = kept.into_iter().map(|(_, m)| m).collect();
+        let mut sent: Vec<_> = std::mem::take(&mut s.sent_folders).into_iter().enumerate()
+            .filter_map(|(a, f)| Some((new_index.get(a).copied().flatten()?, f))).collect();
+        sent.sort_by_key(|(n, _)| *n);
+        s.sent_folders = sent.into_iter().map(|(_, f)| f).collect();
+    }
+    redisplay(cfg, app, state);
 }
 
 fn load_cache() -> Vec<EmailCard> {

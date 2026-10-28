@@ -1441,6 +1441,18 @@ max_tokens = 10
     }
 
     #[test]
+    fn test_remap_id_drops_removed_account() {
+        use crate::models::mail_id;
+        // First of three accounts removed: the second becomes first, the third second.
+        let new_index = [None, Some(0), Some(1)];
+        let remap = |id| crate::app_state::remap_id(&new_index, id);
+        assert_eq!(remap(mail_id(0, 7)), None);
+        assert_eq!(remap(mail_id(1, 7)), Some(7));
+        assert_eq!(remap(mail_id(2, 9)), Some(mail_id(1, 9)));
+        assert_eq!(remap(mail_id(3, 1)), None);
+    }
+
+    #[test]
     fn test_moved_ids_finds_second_account_emails() {
         use crate::models::mail_id;
         let cached = [(7, "<a@x>"), (8, "<b@x>"), (9, ""), (mail_id(1, 5), "<c@x>")];
