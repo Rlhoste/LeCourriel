@@ -105,28 +105,36 @@
     for (const name of ['inbox', 'sent', 'trash', 'spam']) for (const e of folders?.[name] || []) folderOf.set(e, name);
     const drafts = new Set(folders?.drafts || []);
     const texts = newTexts([...folderOf.keys()], context.signatures || []);
+    // A task taken from an email names it by its inbox id (other folders number theirs apart).
+    const tasks = new Map((context.tasks || []).filter(t => t.source_uid != null).map(t => [t.source_uid, t]));
+    const taskOf = email => (folderOf.get(email) === 'inbox' ? tasks.get(email.uid) : undefined);
     return groupThreads(sortEmails([...folderOf.keys(), ...drafts]))
       .map(({ lead, replies }) => [lead, ...replies].reverse())
       .filter(emails => emails.some(e => listed.has(e)))
-      .map(emails => discussion(emails.filter(e => !drafts.has(e)), emails.filter(e => drafts.has(e)), context, folderOf, texts))
+      .map(emails => discussion(emails.filter(e => !drafts.has(e)), emails.filter(e => drafts.has(e)), context, folderOf, texts, taskOf))
       .sort((a, b) => b.date_ts - a.date_ts);
   }
 
-  function discussion(emails, drafts, context, folderOf, texts) {
+  function discussion(emails, drafts, context, folderOf, texts, taskOf) {
     const own = new Set((context.me || []).map(a => String(a || '').trim().toLowerCase()).filter(Boolean));
     const isMine = email => own.has(String(email.from_email || '').trim().toLowerCase());
     const last = emails[emails.length - 1];
     const unread = emails.filter(e => !e.is_read && !isMine(e));
     const people = new Map();
+    const everyone = new Map();   // the details sheet: me too
     const meet = (name, address) => {
       const key = String(address || '').trim().toLowerCase();
-      if (key && !own.has(key) && !people.has(key)) people.set(key, person(name, address.trim()));
+      if (!key || everyone.has(key)) return;
+      const p = person(name, address.trim());
+      everyone.set(key, own.has(key) ? { ...p, mine: true } : p);
+      if (!own.has(key)) people.set(key, p);
     };
     for (const e of emails) {
       meet(e.from_name, e.from_email);
       for (const a of [...splitAddresses(e.to), ...splitAddresses(e.cc)]) meet(a.name, a.address);
     }
     const others = [...people.values()];
+    const messages = discussionItems(emails, isMine, people, context.now ?? Date.now(), folderOf, texts, taskOf);
     return {
       id: String(emails[0].message_id || emails[0].uid),
       people: others,
@@ -138,11 +146,35 @@
       priority: unread.reduce((top, e) => (top && PRIORITY_ORDER[top] <= (PRIORITY_ORDER[e.priority] ?? 99) ? top : e.priority), null) ?? null,
       items: [
         ...(missesEarlier(emails) ? [{ kind: 'earlier' }] : []),
-        ...discussionItems(emails, isMine, people, context.now ?? Date.now(), folderOf, texts),
+        ...messages,
         ...drafts.map(email => ({ kind: 'draft', email, text: String(email.body_text || '').trim(), date_ts: Number(email.date_ts) || 0 })),
       ],
       reply: replyAll(last, context.me || []),
+      info: {
+        people: [...everyone.values()],
+        subjects: [...new Set(emails.map(e => String(e.subject || '').trim()).filter(Boolean))],
+        where: whereKept([...emails.map(e => [e, folderOf.get(e)]), ...drafts.map(e => [e, 'drafts'])]),
+        summary: String(emails.findLast(e => String(e.summary || '').trim())?.summary || '').trim(),
+        files: messages.filter(i => i.kind === 'image' || i.kind === 'attachment'),
+      },
     };
+  }
+
+  // The details sheet's "where": per account (its position, from the email id's bits above 32),
+  // how many of the discussion's emails each folder holds. `kept` is [email, folder] pairs.
+  const FOLDER_ORDER = ['inbox', 'sent', 'trash', 'spam', 'drafts'];
+  function whereKept(kept) {
+    const accounts = new Map();
+    for (const [email, folder] of kept) {
+      const account = Math.floor((Number(email.uid) || 0) / 2 ** 32);
+      if (!accounts.has(account)) accounts.set(account, new Map());
+      const counts = accounts.get(account);
+      counts.set(folder, (counts.get(folder) || 0) + 1);
+    }
+    return [...accounts].sort(([a], [b]) => a - b).map(([account, counts]) => ({
+      account,
+      folders: FOLDER_ORDER.filter(f => counts.has(f)).map(folder => ({ folder, count: counts.get(folder) })),
+    }));
   }
 
   // True when an email refers to one that is not among the discussion's emails (not on this computer).
@@ -206,7 +238,7 @@
   // Messages in a row from the same person on the same day stack: `first` / `last` of the run.
   // A 'people' note before a message says whom its sender `added` (`cc` when only in Cc) or `removed`.
   // A message's `text` is only what its sender newly wrote (see newTexts).
-  function discussionItems(emails, isMine, people, now, folderOf, texts) {
+  function discussionItems(emails, isMine, people, now, folderOf, texts, taskOf = () => undefined) {
     const items = [];
     const today = startOfDay(now);
     let prev = null;
@@ -231,6 +263,8 @@
       if (prev && !sameRun) prev.item.last = true;
       const parts = emailParts(email, texts.get(email)).map(part => ({ ...part, email, folder: folderOf.get(email), mine: isMine(email), sender, date_ts: ts, first: false, last: false }));
       parts[0].first = !sameRun;
+      const task = taskOf(email);
+      if (task) parts[parts.length - 1].task = task;
       items.push(...parts);
       prev = { day, item: parts[parts.length - 1] };
     }

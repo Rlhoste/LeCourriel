@@ -592,3 +592,62 @@ test('a draft of the discussion shows as an unsent message at the bottom', () =>
   assert.equal(d.items.at(-2).last, true);
   assert.deepEqual([d.date_ts, d.preview.text], [at(27, 9), 'Soon.'], 'the list line ignores the draft');
 });
+
+test('the details sheet lists everyone in the discussion with their full address, me included', () => {
+  const [d] = buildDiscussions({
+    inbox: [mail(1, { message_id: '<a@x>', from_name: 'Leo B', from_email: 'leo@d.com', to: 'Me <ME@work.com>', cc: 'paul@d.com' })],
+    sent: [mail(2, { references: '<a@x>', from_name: 'Me', from_email: 'me@work.com', to: 'Leo B <leo@d.com>' })],
+  }, ME);
+  assert.deepEqual(d.info.people.map(p => [p.name, p.address, !!p.mine]), [
+    ['Leo B', 'leo@d.com', false],
+    ['Me', 'ME@work.com', true],
+    ['', 'paul@d.com', false],
+  ]);
+});
+
+test('the details sheet lists the subjects used, and how many emails each account keeps in each folder', () => {
+  const second = 2 ** 32;   // an email id carries its account above bit 32
+  const [d] = buildDiscussions({
+    inbox: [
+      mail(1, { message_id: '<a@x>', subject: 'Caméra LDV - REX' }),
+      mail(3, { references: '<a@x>', subject: 'RE: Caméra LDV - REX' }),
+      mail(second + 4, { references: '<a@x>', subject: 'RE: Caméra LDV - REX', date_ts: 40 }),
+    ],
+    sent: [mail(2, { references: '<a@x>', from_email: 'me@work.com', subject: 'RE: Caméra LDV - REX' })],
+    trash: [mail(5, { references: '<a@x>', subject: 'Re: Caméra LDV - REX' })],
+    drafts: [mail(6, { references: '<a@x>', from_email: 'me@work.com', subject: 'RE: Caméra LDV - REX' })],
+  }, ME);
+  assert.deepEqual(d.info.subjects, ['Caméra LDV - REX', 'RE: Caméra LDV - REX', 'Re: Caméra LDV - REX']);
+  assert.deepEqual(d.info.where, [
+    { account: 0, folders: [{ folder: 'inbox', count: 2 }, { folder: 'sent', count: 1 }, { folder: 'trash', count: 1 }, { folder: 'drafts', count: 1 }] },
+    { account: 1, folders: [{ folder: 'inbox', count: 1 }] },
+  ]);
+});
+
+test('the details sheet gives the AI summary of the latest summarised email, and every image and file shared', () => {
+  const [d] = buildDiscussions({
+    inbox: [
+      mail(1, { message_id: '<a@x>', summary: 'Leo asks for the camera report.', body_html: '<p>Look</p><img src="data:image/png;base64,AAA"><p>ok</p>' }),
+      mail(2, { references: '<a@x>', summary: 'Paul sends the report.', attachments: [{ name: 'rex.pdf', size: 51000, mime: 'application/pdf' }] }),
+      mail(3, { references: '<a@x>', summary: '' }),
+    ],
+  }, ME);
+  assert.equal(d.info.summary, 'Paul sends the report.');
+  assert.deepEqual(d.info.files.map(f => [f.kind, f.src || f.name, f.email.uid]), [
+    ['image', 'data:image/png;base64,AAA', 1],
+    ['attachment', 'rex.pdf', 2],
+  ]);
+});
+
+test('a received email the board took a task from carries the task, once, after its last piece', () => {
+  const task = { id: 7, title: 'Send the REX', status: 'todo', source_uid: 1 };
+  const [d] = buildDiscussions({
+    inbox: [mail(1, { message_id: '<a@x>', body_text: 'Can you?', attachments: [{ name: 'a.pdf', size: 1, mime: 'application/pdf' }] })],
+    sent: [mail(1, { references: '<a@x>', from_email: 'me@work.com', body_text: 'Sure.', date_ts: 20 })],   // same UID, other folder
+  }, { ...ME, tasks: [task, { id: 8, title: 'Hand-made', status: 'todo', source_uid: null }] });
+  assert.deepEqual(d.items.filter(i => i.email).map(i => [i.folder, i.kind, i.task?.id ?? null]), [
+    ['inbox', 'message', null],
+    ['inbox', 'attachment', 7],
+    ['sent', 'message', null],
+  ]);
+});
