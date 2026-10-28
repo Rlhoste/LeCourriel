@@ -1373,6 +1373,81 @@ max_tokens = 10
         assert!(c.contains(&"Jury <jury@univ.fr>".to_string())); // display name preferred
         assert!(c.contains(&r#""Lhoste, Remi" <remi@example.com>"#.to_string())); // comma inside quotes
         assert_eq!(c.len(), 3);
+
+        // One address, several forms: counted once, the first form with a name kept.
+        let mut d = search_card(3, "", "d", "", 3);
+        d.from_email = "jury@univ.fr".into();
+        d.to = "Jury Board <jury@univ.fr>, A <a@x.fr>, B <b@x.fr>".into();
+        let c = contacts(&[(Folder::Inbox, d), (Folder::Inbox, search_card(4, "Jury", "e", "", 4))], 10);
+        assert_eq!(c, vec!["Jury Board <jury@univ.fr>", "A <a@x.fr>", "B <b@x.fr>"]);
+        // A '>' before the '<' is not an address in brackets.
+        let mut e = search_card(5, "X", "e", "", 5);
+        e.to = "a>b<c@x.fr".into();
+        assert!(contacts(&[(Folder::Inbox, e)], 10).contains(&"a>b<c@x.fr".to_string()));
+    }
+
+    #[test]
+    fn test_search_split_addresses() {
+        use crate::search::split_addresses;
+        assert_eq!(split_addresses("a@x.fr, b@x.fr"), vec!["a@x.fr", "b@x.fr"]);
+        assert_eq!(split_addresses(r#"<odd,box@x.fr>, "a<b", c@x.fr"#), vec!["<odd,box@x.fr>", r#""a<b""#, "c@x.fr"]);
+        // A quoted '>' does not close the brackets.
+        assert_eq!(split_addresses(r#"<a "q>" ,b@x.fr>"#).len(), 1);
+    }
+
+    #[test]
+    fn test_search_query_details() {
+        use crate::search::{parse_query, Folder};
+        for (name, folder) in [
+            ("brouillons", Folder::Drafts),
+            ("corbeille", Folder::Trash),
+            ("indésirables", Folder::Spam),
+            ("serveur", Folder::Server),
+        ] {
+            assert_eq!(Folder::parse(name), Some(folder));
+        }
+        // A quote starts a new term; "non" alone is a word, not "non lu"; punctuation is dropped.
+        let (terms, f) = parse_query(r#"devis"budget 2026" non merci (facture), @acme à:remi"#);
+        assert_eq!(terms, vec!["devis", "budget 2026", "non", "merci", "facture", "@acme"]);
+        assert!(!f.unread);
+        assert_eq!(f.to, vec!["remi"]);
+    }
+
+    #[test]
+    fn test_search_word_start_scores_more() {
+        use crate::search::score;
+        let card = |subject: &str| search_card(1, "X", subject, "", 1);
+        let terms = vec!["manus".to_string()];
+        assert_eq!(score(&card("a manus"), &terms), (1, 3.0)); // word start: subject weight 3
+        assert_eq!(score(&card("xmanus"), &terms), (1, 1.5)); // inside a word: half
+        assert_eq!(score(&card("xmanus manus"), &terms), (1, 3.0)); // the best match counts
+    }
+
+    #[test]
+    fn test_search_project_and_date_filters() {
+        use crate::search::search_local;
+        let ids = |index: &[(crate::search::Folder, EmailCard)], q: &str| -> Vec<String> {
+            search_local(index, q, 10).into_iter().map(|h| h.id).collect()
+        };
+        let mut index = search_index();
+        assert_eq!(ids(&index, "projet:thesis"), vec!["inbox:3"]);
+        // All test emails are from 1970-01-01; an email without a date never passes a date filter.
+        index.push((crate::search::Folder::Trash, search_card(9, "Nodate", "x", "", 0)));
+        assert_eq!(ids(&index, "avant:1970-01-02").len(), 4);
+        assert_eq!(ids(&index, "après:1969-12-31").len(), 4);
+        assert!(ids(&index, "avant:1970-01-01").is_empty());
+        assert!(ids(&index, "après:1970-01-01").is_empty());
+    }
+
+    #[test]
+    fn test_search_snippet_ellipses() {
+        use crate::search::{make_hit, Folder};
+        let terms = vec!["needle".to_string()];
+        let long = format!("{} needle {}", "a ".repeat(100), "b ".repeat(100));
+        let s = make_hit(Folder::Inbox, &search_card(1, "X", "s", &long, 1), &terms, 1, 1.0).snippet;
+        assert!(s.starts_with('…') && s.ends_with('…') && s.contains("needle"), "{s}");
+        let s = make_hit(Folder::Inbox, &search_card(1, "X", "s", "short needle", 1), &terms, 1, 1.0).snippet;
+        assert_eq!(s, "short needle");
     }
 
     #[test]
