@@ -103,6 +103,8 @@ STRINGS.ja = {
     'dm.find': "この会話を検索", 'dm.findCount': "{n} / {total}", 'dm.findNone': "一致なし", 'dm.findPrev': "前へ", 'dm.findNext': "次へ",
     'dm.earlier': '以前のメッセージは読み込まれていません', 'dm.draft': '下書き', 'dm.file': '添付ファイル', 'dm.cc': '{name}（Cc）',
     'dm.added': '{who}が{names}を追加しました', 'dm.removed': '{who}が{names}を外しました', 'dm.youAdded': '{names}を追加しました', 'dm.youRemoved': '{names}を外しました',
+    'dm.details': "詳細", 'dm.archive': "アーカイブ", 'dm.people': "参加者", 'dm.subjects': "件名", 'dm.where': "保存場所", 'dm.summary': "AI 要約", 'dm.files': "共有ファイル",
+    'dm.me': "あなた", 'dm.addTask': "タスクとして追加", 'dm.taskAdded': "タスクに追加しました", 'dm.original': "元のメールを表示", 'dm.headers': "すべてのヘッダー", 'dm.openTask': "タスクを開く", 'dm.deleteAsk': "この会話を削除しますか？メールはゴミ箱に移動します：{n}",
     'set.fontScale': '文字の大きさ', 'set.theme': 'テーマ', 'set.language': '言語',
     "set.signature": "署名", "set.sigChoose": "📄 HTML ファイルを選択…", "set.sigRemove": "削除", "set.sigOnNew": "新規メッセージに追加", "set.sigOnReply": "返信と転送に追加", "set.sigHint": "署名はまだありません。メールソフト（Outlook、Gmail など）から HTML ファイルとして書き出すか、署名作成ツールで作成してください。", "set.sigImported": "署名を読み込みました", "set.sigRemoved": "署名を削除しました", "set.sigFileFilter": "HTML ファイル",
     "set.incoming": "📥 受信 (IMAP)", "set.outgoing": "📤 送信 (SMTP)", "set.server": "サーバー", "set.port": "ポート", "set.username": "ユーザー名", "set.usernamePh": "you@example.com", "set.password": "パスワード", "set.sameAsIncoming": "受信と同じ", "set.advanced": "詳細オプション", "set.imapMailbox": "確認するフォルダー", "set.fetchCount": "取得するメール数",

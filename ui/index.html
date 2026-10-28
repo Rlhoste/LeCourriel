@@ -99,6 +99,7 @@
         <div class="dm-lines" id="dm-lines"></div>
       </div>
       <div class="dm-conv" id="dm-conv"></div>
+      <aside class="dm-info hidden" id="dm-info"></aside>
     </section>
     <section id="panel-inbox"     class="panel split-panel"></section>
     <section id="panel-important" class="panel split-panel"></section>
@@ -587,6 +588,22 @@
       <button id="unsaved-discard" class="secondary-btn" data-i18n="set.unsavedDiscard">Don't save</button>
       <button id="unsaved-save" class="primary-btn" data-i18n="set.save">Save</button>
     </div>
+  </div>
+</div>
+
+<!-- ── Discussion mode: an email shown complete (headers, layout, quoted history) ── -->
+<div id="original-overlay" class="overlay hidden">
+  <div class="dialog original-dialog" role="dialog" aria-modal="true" aria-labelledby="original-subject">
+    <div class="dialog-header">
+      <span id="original-subject"></span>
+      <button id="original-close" class="close-btn" title="Close" data-i18n-title="cmp.close">×</button>
+    </div>
+    <div id="original-meta" class="original-meta"></div>
+    <details class="original-headers">
+      <summary data-i18n="dm.headers">All headers</summary>
+      <pre id="original-headers"></pre>
+    </details>
+    <iframe id="original-body" class="original-body" sandbox="allow-same-origin" title="Original"></iframe>
   </div>
 </div>
 
