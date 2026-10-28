@@ -200,14 +200,15 @@
     const account = address => (address ? mine.indexOf(address.trim().toLowerCase()) : -1);
     const fromMe = account(email.from_email);
     const sender = email.reply_to ? splitAddresses(email.reply_to) : [{ name: email.from_name || '', address: String(email.from_email || '').trim() }];
-    const received = [...splitAddresses(email.to), ...splitAddresses(email.cc)].map(a => account(a.address)).find(i => i >= 0);
+    // The account that received it is in its uid (mailing lists, Bcc and aliases hide it from To/Cc).
+    const received = Math.floor(Number(email.uid) / 2 ** 32);
     const subject = String(email.subject || '');
     const to = pick(fromMe >= 0 ? splitAddresses(email.to) : [...sender, ...splitAddresses(email.to)]);
     const cc = pick(splitAddresses(email.cc));
     bubbleLabels([...to, ...cc]);
     return {
       email,
-      from: fromMe >= 0 ? fromMe : received ?? 0,
+      from: fromMe >= 0 ? fromMe : received < me.length ? received : 0,
       to,
       cc,
       subject: /^re\s*:/i.test(subject) ? subject : `Re: ${subject}`,

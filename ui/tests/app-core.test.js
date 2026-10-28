@@ -481,9 +481,17 @@ test('the reply bar answers everyone on the latest message, never myself', () =>
 
 test('the reply goes to Reply-To when set, and From follows the account that received it', () => {
   const [d] = buildDiscussions({
-    inbox: [mail(1, { subject: 'Offer', from_email: 'news@shop.com', reply_to: 'Sales <sales@shop.com>', to: 'me@home.org' })],
+    inbox: [mail(2 ** 32 + 1, { subject: 'Offer', from_email: 'news@shop.com', reply_to: 'Sales <sales@shop.com>', to: 'me@home.org' })],
   }, ME);
   assert.deepEqual(addresses(d.reply.to), ['sales@shop.com']);
+  assert.equal(d.reply.from, 1);
+});
+
+test('From follows the account that received the email even when none of its addresses is in To or Cc', () => {
+  const second = 2 ** 32;   // emails of the second account
+  const [d] = buildDiscussions({
+    inbox: [mail(second + 5, { subject: 'Weekly news', from_email: 'leo@d.com', to: 'team@lists.org', cc: 'me@work.com' })],
+  }, ME);
   assert.equal(d.reply.from, 1);
 });
 

@@ -3681,8 +3681,11 @@ async function loadComposeAccounts() {
   $c('compose-from-row').classList.toggle('hidden', composeAccounts.length === 0);
 }
 
-// The account an email was sent to (its address in To or Cc), else the first.
+// The account that received an email: the one its uid belongs to (To/Cc miss mailing lists,
+// Bcc and aliases), else the one whose address is in To or Cc, else the first.
 function accountForEmail(email) {
+  const received = Math.floor(Number(email.uid) / 2 ** 32);
+  if (received >= 0 && received < composeAccounts.length) return received;
   const recipients = `${email.to || ''} ${email.cc || ''}`.toLowerCase();
   const i = composeAccounts.findIndex(a => {
     const address = splitSender(a.from).email.toLowerCase();
