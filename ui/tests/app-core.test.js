@@ -457,6 +457,18 @@ test('a message whose signature is a small table is still a message', () => {
   assert.deepEqual(d.items.slice(1).map(shown), [['message', 'Sure, the meeting is moved to Friday at ten, in the big room.\nLeo | CEO', 'FL']]);
 });
 
+test('a short reply quoting an email laid out in tables is still a message', () => {
+  const quoted = '<table><tr><td><h1>October invoice</h1><p>Total due before the end of the month: 1 200 euros.</p>'
+    + '<p>Pay online or by bank transfer to the account below.</p></td></tr></table>';
+  const [d] = buildDiscussions({
+    inbox: [mail(1, {
+      body_text: 'Paid, thanks.\n\nLe lun. 26 oct. 2026 à 09:12, Billing <billing@x.com> a écrit :\n> October invoice',
+      body_html: `<p>Paid, thanks.</p><div>Le lun. 26 oct. 2026 à 09:12, Billing &lt;billing@x.com&gt; a écrit :</div><blockquote>${quoted}</blockquote>`,
+    })],
+  }, ME);
+  assert.deepEqual(d.items.slice(1).map(shown), [['message', 'Paid, thanks.', 'FL']]);
+});
+
 test('in an email split by images, the quoted history and its images are cut too', () => {
   const [d] = buildDiscussions({
     inbox: [mail(1, {

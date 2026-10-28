@@ -299,15 +299,23 @@
   }
 
   // Most of the text sits in tables: a layout, not a written message (a signature table is not enough).
+  // Only the new text counts: the quoted history (a quoted newsletter, say) stops the count.
   function mostlyTables(html) {
-    const letters = piece => htmlText(piece).replace(/\s/g, '').length;
-    let inside = 0, outside = 0, depth = 0, from = 0;
+    let inside = 0, outside = 0, depth = 0, from = 0, ended = false;
+    const count = piece => {
+      if (ended) return;
+      const lines = htmlText(piece).split('\n');
+      const end = lines.findIndex((_, i) => historyStarts(lines, i));
+      ended = end >= 0;
+      const letters = (ended ? lines.slice(0, end) : lines).join('').replace(/\s/g, '').length;
+      if (depth > 0) inside += letters; else outside += letters;
+    };
     for (const m of html.matchAll(/<(\/?)table\b[^>]*>/gi)) {
-      if (depth > 0) inside += letters(html.slice(from, m.index)); else outside += letters(html.slice(from, m.index));
+      count(html.slice(from, m.index));
       depth = Math.max(0, depth + (m[1] ? -1 : 1));
       from = m.index + m[0].length;
     }
-    if (depth > 0) inside += letters(html.slice(from)); else outside += letters(html.slice(from));
+    count(html.slice(from));
     return inside > outside;
   }
 
@@ -347,16 +355,21 @@
     return cutText(whole, signatures) || whole;
   }
 
+  // Line i starts the quoted history (an Outlook header block, "Le … a écrit :") or the signature.
+  function historyStarts(lines, i) {
+    const line = lines[i];
+    return (QUOTE_FROM.test(line) && lines.slice(i + 1, i + 6).some(l => QUOTE_SUBJECT.test(l)))
+      || QUOTE_INTRO.test(line) || QUOTE_INTRO.test(`${line} ${lines[i + 1]}`)
+      || /^--\s?$/.test(line);   // signature delimiter "-- " (the space may be trimmed)
+  }
+
   // What is left of a text once the quoted history and the signatures go ('' when nothing).
   function cutText(whole, signatures = []) {
     const lines = whole.split('\n');
     const kept = [];
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (QUOTE_FROM.test(line) && lines.slice(i + 1, i + 6).some(l => QUOTE_SUBJECT.test(l))) break;
-      if (QUOTE_INTRO.test(line) || QUOTE_INTRO.test(`${line} ${lines[i + 1]}`)) break;
-      if (/^--\s?$/.test(line)) break;   // signature delimiter "-- " (the space may be trimmed)
-      if (!line.trimStart().startsWith('>')) kept.push(line);
+      if (historyStarts(lines, i)) break;
+      if (!lines[i].trimStart().startsWith('>')) kept.push(lines[i]);
     }
     for (const signature of signatures) cutBlock(kept, signature.split('\n'));
     while (kept.length && RULE_LINE.test(kept[kept.length - 1])) kept.pop();
