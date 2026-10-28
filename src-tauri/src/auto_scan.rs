@@ -15,6 +15,7 @@ type Prefs = BTreeMap<String, String>;
 
 /// The values of one registry key, by value name (lowercased): its type and its data as
 /// `reg query` writes them.
+#[cfg_attr(not(windows), allow(dead_code))] // the Outlook registry is read on Windows only
 type RegKey = BTreeMap<String, (String, String)>;
 
 /// The sections of a keyfile, by section name then by key name, both lowercased.
@@ -43,6 +44,7 @@ pub fn scan() -> Vec<FoundAccountDto> {
 /// The accounts classic Outlook keeps in the registry, none on the other systems. Its
 /// passwords sit under other keys, protected by DPAPI: never read here.
 fn outlook_accounts() -> Vec<FoundAccountDto> {
+    #[allow(unused_mut)] // filled on Windows only
     let mut out: Vec<FoundAccountDto> = Vec::new();
     #[cfg(windows)]
     for key in outlook_keys() {
@@ -394,6 +396,7 @@ fn or_else(value: String, fallback: &str) -> String {
 /// The accounts of a `reg query "…\Outlook\Profiles" /s` output. One key of that tree is
 /// one account; the values it holds say which kind it is. The value names are matched
 /// whatever their capitals, and a name Outlook never wrote simply brings nothing.
+#[cfg_attr(not(windows), allow(dead_code))] // the Outlook registry is read on Windows only
 pub fn parse_outlook_reg(output: &str) -> Vec<FoundAccountDto> {
     let mut out: Vec<FoundAccountDto> = Vec::new();
     for key in reg_blocks(output) {
@@ -458,6 +461,7 @@ pub fn parse_outlook_reg(output: &str) -> Vec<FoundAccountDto> {
 /// The keys of a `reg query … /s` output, each as its values. A line holding a key path
 /// opens one, an indented line adds a value to the one just opened. Anything else — the
 /// blank lines, the "End of search:" line — is passed over.
+#[cfg_attr(not(windows), allow(dead_code))] // the Outlook registry is read on Windows only
 fn reg_blocks(output: &str) -> Vec<RegKey> {
     let mut out: Vec<RegKey> = Vec::new();
     for line in output.lines() {
@@ -476,6 +480,7 @@ fn reg_blocks(output: &str) -> Vec<RegKey> {
 
 /// A value line of `reg query`: `    <name>    <TYPE>    <data>`. A name holds single
 /// spaces ("IMAP Use SSL"), never a run of them, so a run is what divides the three parts.
+#[cfg_attr(not(windows), allow(dead_code))] // the Outlook registry is read on Windows only
 fn reg_value(line: &str) -> Option<(String, String, String)> {
     let (name, rest) = split_gap(line.trim_start())?;
     let (kind, data) = match split_gap(rest) {
@@ -490,6 +495,7 @@ fn reg_value(line: &str) -> Option<(String, String, String)> {
 }
 
 /// The text before the first run of two spaces, and the text after it.
+#[cfg_attr(not(windows), allow(dead_code))] // the Outlook registry is read on Windows only
 fn split_gap(s: &str) -> Option<(&str, &str)> {
     let i = s.find("  ")?;
     Some((&s[..i], s[i..].trim_start()))
@@ -497,6 +503,7 @@ fn split_gap(s: &str) -> Option<(&str, &str)> {
 
 /// A value holding text: a REG_BINARY one is UTF-16LE written in hex, the others are text
 /// as it stands. A number is no text.
+#[cfg_attr(not(windows), allow(dead_code))] // the Outlook registry is read on Windows only
 fn reg_text(key: &RegKey, name: &str) -> String {
     match key.get(name) {
         Some((kind, data)) if kind == "REG_BINARY" => utf16_hex(data),
@@ -507,6 +514,7 @@ fn reg_text(key: &RegKey, name: &str) -> String {
 }
 
 /// A hex string of `reg query`: its bytes read as UTF-16LE text, up to the NUL it ends with.
+#[cfg_attr(not(windows), allow(dead_code))] // the Outlook registry is read on Windows only
 fn utf16_hex(hex: &str) -> String {
     let hex: String = hex.chars().filter(|c| c.is_ascii_hexdigit()).collect();
     let mut units: Vec<u16> = Vec::new();
@@ -523,6 +531,7 @@ fn utf16_hex(hex: &str) -> String {
 }
 
 /// A REG_DWORD value: `reg query` writes it as `0x3db`.
+#[cfg_attr(not(windows), allow(dead_code))] // the Outlook registry is read on Windows only
 fn reg_number(key: &RegKey, name: &str) -> Option<u32> {
     let data = key.get(name)?.1.trim().to_string();
     match data.strip_prefix("0x").or(data.strip_prefix("0X")) {
@@ -532,6 +541,7 @@ fn reg_number(key: &RegKey, name: &str) -> Option<u32> {
 }
 
 /// A port as Auto-setup wants it: "" when the key writes none.
+#[cfg_attr(not(windows), allow(dead_code))] // the Outlook registry is read on Windows only
 fn reg_port(key: &RegKey, name: &str) -> String {
     reg_number(key, name).map(|p| p.to_string()).unwrap_or_default()
 }

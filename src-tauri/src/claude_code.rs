@@ -81,6 +81,7 @@ pub fn parse_status(json: &str) -> Status {
 
 /// `claude`, or on Windows the `claude.cmd` script an npm install creates.
 fn command(program: &str) -> tokio::process::Command {
+    #[allow(unused_mut)] // changed on Windows only
     let mut c = tokio::process::Command::new(program);
     #[cfg(windows)]
     c.creation_flags(0x0800_0000); // CREATE_NO_WINDOW: no console flashing up
