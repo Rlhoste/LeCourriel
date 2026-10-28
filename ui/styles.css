@@ -1697,8 +1697,9 @@ body.compose-window .composer-resize { display: none; }
 [data-theme="brutalist"] .composer-send:active { transform: translate(2px, 2px); box-shadow: none; }
 [data-theme="brutalist"] .email-row.active { border-left-width: 6px; border-left-color: #000; }
 /* Hovered buttons invert: yellow text on black (the only place yellow is a text colour,
-   always on black). Colour swatches, theme cards, the red cross and small toggles keep their look. */
-[data-theme="brutalist"] button:hover:not(:disabled):not(.theme-card):not(.tb-swatch):not(.remove-account-btn):not(.row-mark):not(.pw-toggle),
+   always on black). Colour swatches, theme cards, the red cross and small toggles keep their look,
+   and so do the post office stamps and mailbox of Discussion mode. */
+[data-theme="brutalist"] button:hover:not(:disabled):not(.theme-card):not(.tb-swatch):not(.remove-account-btn):not(.row-mark):not(.pw-toggle):not(:is(.dm-act, .dm-new, .dm-send, .dm-add)),
 [data-theme="brutalist"] .rp-project:hover {
   background-color: #000 !important;
   color: #ffde00 !important;
@@ -2165,6 +2166,8 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 .dm-name { font-size: 0.8rem; font-weight: 700; color: var(--pc); margin: 0 10px 2px; }
 /* Every message has a name line; by default only the others' first message of a run shows it. */
 .dm-row:is(.me, :not(.first)) .dm-name { display: none; }
+/* The top of a postcard: only the Brutalist look shows it. */
+.dm-band, .dm-stamp, .dm-postmark { display: none; }
 .dm-bubble {
   padding: 8px 12px; border-radius: 16px; background: var(--bg3); color: var(--text);
   line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere;
@@ -2412,6 +2415,237 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 [data-theme="terminal"] .dm-send:hover:not(:disabled) { background: var(--accent); color: var(--on-accent); }
 [data-theme="terminal"] .dm-send::before { content: "[ "; }
 [data-theme="terminal"] .dm-send::after { content: " ]"; }
+
+/* Brutalist: a post office. A run of messages from one person is one postcard ("Greetings from ORG",
+   a perforated stamp with the initials under a round postmark, a sorting barcode); a draft is a dashed
+   card stamped DRAFT; the reply bar is the back of the card and Send is a mailbox. */
+[data-theme="brutalist"] {
+  --kraft: #c8a46a; --ink: #1d2a6b; --post: #c0262d;
+  --airmail: repeating-linear-gradient(-45deg, #d9342b 0 10px, #fff 10px 20px, #1d4fbf 20px 30px, #fff 30px 40px);
+}
+/* Perforated edges: the transparent border is cut into round teeth. */
+[data-theme="brutalist"] :is(.dm-stamp, .dm-new, .dm-act) {
+  border: 4px solid transparent;
+  -webkit-mask: linear-gradient(#000 0 0) padding-box, radial-gradient(circle at 4px 4px, transparent 2.6px, #000 3px) -4px -4px / 8px 8px border-box;
+  mask: linear-gradient(#000 0 0) padding-box, radial-gradient(circle at 4px 4px, transparent 2.6px, #000 3px) -4px -4px / 8px 8px border-box;
+}
+
+/* The list: a black counter with a red "✎ New card" stamp; unread is a little envelope, priority a strip. */
+[data-theme="brutalist"] .dm-list-top { background: #000; }
+[data-theme="brutalist"] .dm-new {
+  padding: 6px 12px; border-radius: 0; background: var(--post); color: #fff; font-weight: 900; white-space: nowrap;
+  box-shadow: inset 0 0 0 2px var(--post), inset 0 0 0 4px #fff; transition: transform 0.12s;
+}
+[data-theme="brutalist"] .dm-new:hover { transform: rotate(-4deg); }
+[data-theme="brutalist"] .dm-line { border-bottom: 2px solid #000; }
+[data-theme="brutalist"] .dm-line:has(.dm-prio) { padding-inline-start: 22px; }
+[data-theme="brutalist"] .dm-line.active {
+  background:
+    linear-gradient(to bottom right, transparent 49.5%, rgba(0, 0, 0, 0.12) 50%, transparent 51%) top left / 50% 45px no-repeat,
+    linear-gradient(to bottom left, transparent 49.5%, rgba(0, 0, 0, 0.12) 50%, transparent 51%) top right / 50% 45px no-repeat,
+    #ffde00;
+}
+[data-theme="brutalist"] .dm-who { text-transform: uppercase; font-weight: 900; }
+[data-theme="brutalist"] .dm-av { border-radius: 0; box-shadow: inset 0 0 0 2px #fff; }
+[data-theme="brutalist"] .dm-badge {
+  position: relative; display: inline-flex; align-items: center; height: 20px; padding: 0 6px; padding-inline-start: 26px;
+  border: 2px solid #000; border-radius: 0; background: #fff; color: #000; font-size: 11px; font-weight: 900;
+  white-space: nowrap; box-shadow: 2px 2px 0 #000;
+}
+[data-theme="brutalist"] .dm-badge::before {
+  content: ""; position: absolute; inset-inline-start: 4px; top: 50%; margin-top: -6px; width: 18px; height: 12px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='12'%3E%3Crect x='.5' y='.5' width='17' height='11' fill='%23ffde00' stroke='black'/%3E%3Cpath d='M1 1l8 6 8-6' fill='none' stroke='black'/%3E%3C/svg%3E");
+}
+[data-theme="brutalist"] .dm-prio { top: 0; bottom: 0; width: 14px; }
+[data-theme="brutalist"] .dm-prio-urgent { --prio: var(--post); }
+[data-theme="brutalist"] .dm-prio-high_priority { --prio: #e2862a; }
+[data-theme="brutalist"] :is(.dm-prio-urgent, .dm-prio-high_priority)::after {
+  content: "PRIORITAIRE"; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-90deg);
+  color: #fff; font-size: 8px; font-weight: 900; letter-spacing: 0.12em; white-space: nowrap;
+}
+[data-theme="brutalist"] .dm-prio-high_priority::after { content: "URGENT"; }
+
+/* The header: ✉ names over an airmail stripe, the buttons are stamps that tilt when pointed at. */
+[data-theme="brutalist"] .dm-head {
+  padding-bottom: 16px; border-bottom: 3px solid #000;
+  background: var(--airmail) bottom / 100% 6px no-repeat, #fff;
+}
+[data-theme="brutalist"] .dm-people { text-transform: uppercase; font-weight: 900; }
+[data-theme="brutalist"] .dm-people::before { content: "✉ "; }
+[data-theme="brutalist"] .dm-acts { gap: 6px; }
+[data-theme="brutalist"] .dm-act {
+  width: 42px; height: 48px; border-radius: 0; background: #fff; color: #000;
+  box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 4px #000; transition: transform 0.12s;
+}
+[data-theme="brutalist"] :is(.dm-act:hover, .dm-act.on) { transform: rotate(-6deg) scale(1.08); background: #ffde00; }
+[data-theme="brutalist"] .dm-find { background: #fff; border-bottom: 3px solid #000; }
+[data-theme="brutalist"] .dm-find-input { border: 2px solid #000; border-radius: 0; }
+[data-theme="brutalist"] .dm-find button { border: 2px solid #000; border-radius: 0; font-weight: 900; }
+
+/* The sorting table, and the postcards on it. */
+[data-theme="brutalist"] .dm-conv { background: #f4f1ea radial-gradient(rgba(0, 0, 0, 0.07) 1px, transparent 1.4px) 0 0 / 14px 14px; }
+[data-theme="brutalist"] .dm-scroll { gap: 0; padding: 16px 28px 32px; }
+[data-theme="brutalist"] .dm-row { width: min(560px, 80%); max-width: none; }
+[data-theme="brutalist"] .dm-row.page { width: 90%; }
+[data-theme="brutalist"] .dm-row.first { margin-top: 22px; }
+[data-theme="brutalist"] .dm-av-slot { display: none; }
+[data-theme="brutalist"] .dm-msg,
+[data-theme="brutalist"] .dm-row.me .dm-msg {
+  flex: 1; position: relative; align-items: stretch; padding: 4px 0;
+  background: #fff; color: #000; border: 0 solid #000; border-inline-width: 3px; box-shadow: 6px 6px 0 #000;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+[data-theme="brutalist"] .dm-row.me .dm-msg { background: #ffde00; }
+[data-theme="brutalist"] .dm-row.first .dm-msg { border-top-width: 3px; padding-top: 0; }
+[data-theme="brutalist"] .dm-row.last .dm-msg { border-bottom-width: 3px; padding-bottom: 26px; }
+/* A one-message card lies a little crooked and straightens up when pointed at. */
+[data-theme="brutalist"] .dm-row.first.last:not(.draft) .dm-msg { transform: rotate(-0.3deg); }
+[data-theme="brutalist"] .dm-row.me.first.last:not(.draft) .dm-msg { transform: rotate(0.4deg); }
+[data-theme="brutalist"] .dm-row.first.last:not(.draft) .dm-msg:hover { transform: translate(-2px, -2px); box-shadow: 8px 8px 0 #000; }
+[data-theme="brutalist"] .dm-row.last:not(.draft) .dm-msg::after {
+  content: ""; position: absolute; inset-inline-end: 14px; bottom: 8px; width: 110px; height: 12px; opacity: 0.8;
+  background: repeating-linear-gradient(90deg, #000 0 2px, transparent 2px 4px, #000 4px 5px, transparent 5px 8px, #000 8px 11px, transparent 11px 13px);
+}
+[data-theme="brutalist"] .dm-band {
+  display: block; margin-bottom: 4px; padding: 10px 0; padding-inline: 16px 150px; line-height: 1.1;
+  background: var(--pc); color: #fff; border-bottom: 3px solid #000;
+}
+[data-theme="brutalist"] .dm-band small { display: block; font-size: 11px; font-style: italic; font-weight: 700; }
+[data-theme="brutalist"] .dm-band b {
+  display: block; font-size: 26px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em; overflow-wrap: anywhere;
+  -webkit-text-stroke: 1px #000; text-shadow: 3px 3px 0 #000;
+}
+[data-theme="brutalist"] .dm-stamp {
+  display: grid; place-items: center; position: absolute; top: 10px; inset-inline-end: 10px; width: 50px; height: 58px;
+  background: #fff; color: #fff; font-size: 15px; font-weight: 900;
+  box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 30px var(--pc);
+}
+[data-theme="brutalist"] .dm-postmark {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  position: absolute; top: 24px; inset-inline-end: 46px; width: 74px; height: 74px; border-radius: 50%;
+  border: 2px solid var(--ink); box-shadow: inset 0 0 0 4px transparent, inset 0 0 0 5px var(--ink);
+  color: var(--ink); font-size: 9px; font-weight: 900; line-height: 1.1; text-transform: uppercase; text-align: center;
+  opacity: 0.78; mix-blend-mode: multiply; transform: rotate(-14deg); pointer-events: none;
+}
+[data-theme="brutalist"] .dm-postmark::after {
+  content: ""; position: absolute; inset-inline-start: -64px; top: 18px; width: 66px; height: 36px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='66' height='36'%3E%3Cg fill='none' stroke='%231d2a6b' stroke-width='2'%3E%3Cpath d='M0 6q8-5 16 0t16 0 16 0 16 0'/%3E%3Cpath d='M0 14q8-5 16 0t16 0 16 0 16 0'/%3E%3Cpath d='M0 22q8-5 16 0t16 0 16 0 16 0'/%3E%3Cpath d='M0 30q8-5 16 0t16 0 16 0 16 0'/%3E%3C/g%3E%3C/svg%3E");
+}
+[data-theme="brutalist"] .dm-name { margin: 8px 16px 0; color: #000; text-transform: uppercase; }
+[data-theme="brutalist"] .dm-bubble,
+[data-theme="brutalist"] .dm-row.me .dm-bubble { padding: 6px 16px; border-radius: 0; background: none; color: inherit; }
+[data-theme="brutalist"] .dm-time { margin: 0 16px; color: #555; }
+[data-theme="brutalist"] .dm-image { margin: 6px 16px; max-width: calc(100% - 32px); border: 2px solid #000; border-radius: 0; }
+[data-theme="brutalist"] .dm-file { margin: 6px 16px; border: 2px solid #000; border-radius: 0; background: var(--kraft); color: #000; box-shadow: 3px 3px 0 #000; }
+[data-theme="brutalist"] .dm-file-size { color: #000; }
+[data-theme="brutalist"] .dm-page { width: calc(100% - 32px); margin: 6px 16px; border: 2px solid #000; border-radius: 0; }
+/* A draft: a dashed card not yet posted, stamped DRAFT in red. */
+[data-theme="brutalist"] .dm-row.draft .dm-msg {
+  padding-bottom: 10px; border: 3px dashed #000; box-shadow: none; color: #555;
+  background: repeating-linear-gradient(45deg, #fff 0 10px, #f4f1ea 10px 20px);
+}
+[data-theme="brutalist"] .dm-row.draft .dm-band { background: #ddd; color: #555; }
+[data-theme="brutalist"] .dm-row.draft .dm-bubble { border: 0; color: #555; }
+[data-theme="brutalist"] .dm-row.draft .dm-postmark {
+  top: 14px; inset-inline-end: 14px; width: auto; height: auto; padding: 4px 10px; border: 3px solid #c00; border-radius: 4px; box-shadow: none;
+  color: #c00; font-size: 14px; letter-spacing: 0.1em; transform: rotate(-8deg);
+}
+[data-theme="brutalist"] .dm-row.draft .dm-postmark::after { display: none; }
+/* The ✓ task chip is a registered-mail sticker. */
+[data-theme="brutalist"] .dm-task,
+[data-theme="brutalist"] .dm-row.me .dm-task {
+  align-self: flex-start; margin: 6px 16px 0; padding: 2px 10px; padding-inline-start: 4px;
+  background: #fff; color: #000; border: 2px solid #000; border-radius: 0; font-weight: 800;
+}
+[data-theme="brutalist"] .dm-task::before {
+  content: "R"; display: inline-grid; place-items: center; width: 18px; height: 18px; margin-inline-end: 6px; vertical-align: middle;
+  border-radius: 50%; background: var(--post); color: #fff; font-size: 11px; font-weight: 900;
+}
+/* Day separators are rubber stamps, missing messages a tear line, recipient changes a parcel tag. */
+[data-theme="brutalist"] .dm-sep {
+  margin: 26px 0 4px; padding: 2px 12px; color: var(--post); border: 3px double var(--post);
+  font-weight: 900; letter-spacing: 0.14em; text-transform: uppercase; transform: rotate(-2deg); opacity: 0.9;
+}
+[data-theme="brutalist"] .dm-earlier {
+  position: relative; align-self: stretch; margin: 8px 0 4px; padding: 6px 30px 0; text-align: center;
+  border: 0; border-top: 2px dashed #000; border-radius: 0; color: #000; font-weight: 700;
+}
+[data-theme="brutalist"] .dm-earlier::before { content: "✂"; position: absolute; inset-inline-start: -4px; top: -13px; padding: 0 2px; font-size: 16px; background: #f4f1ea; }
+[data-theme="brutalist"] .dm-people-note {
+  position: relative; margin: 14px 0 0; padding: 3px 12px; padding-inline-start: 22px;
+  background: var(--kraft); color: #000; border: 2px solid #000; font-style: normal; font-weight: 700;
+}
+[data-theme="brutalist"] .dm-people-note::before {
+  content: ""; position: absolute; inset-inline-start: 6px; top: 50%; margin-top: -6px; width: 8px; height: 8px;
+  border-radius: 50%; background: #f4f1ea; border: 2px solid #000;
+}
+
+/* The back of the card: luggage-tag recipients, a dashed return address, ruled paper, a mailbox. */
+[data-theme="brutalist"] .dm-reply { padding-top: 14px; border-top: 3px solid #000; background: var(--airmail) top / 100% 6px no-repeat, #fff; }
+[data-theme="brutalist"] .dm-lbl { font-style: italic; color: #000; }
+[data-theme="brutalist"] .dm-pill {
+  position: relative; padding: 2px 8px; padding-inline-start: 16px; border: 2px solid #000; border-radius: 0;
+  border-start-end-radius: 6px; border-end-end-radius: 6px; background: var(--kraft); color: #000; font-weight: 700;
+}
+[data-theme="brutalist"] .dm-pill::before {
+  content: ""; position: absolute; inset-inline-start: 4px; top: 50%; margin-top: -4px; width: 6px; height: 6px;
+  border-radius: 50%; background: #fff; border: 1.5px solid #000;
+}
+[data-theme="brutalist"] .dm-pill.dm-from { padding-inline-start: 8px; border-style: dashed; background: #fff; }
+[data-theme="brutalist"] .dm-pill.dm-from::before { display: none; }
+[data-theme="brutalist"] .dm-x { color: #000; }
+[data-theme="brutalist"] .dm-add {
+  width: auto; height: 24px; padding: 0 10px; padding-inline-start: 8px; border: 2px dashed #000; border-radius: 0;
+  border-start-end-radius: 6px; border-end-end-radius: 6px; background: transparent; color: #000;
+  font-size: 12px; font-weight: 800; white-space: nowrap;
+}
+[data-theme="brutalist"] .dm-add:hover { background: var(--kraft); border-style: solid; }
+[data-theme="brutalist"] .dm-text {
+  padding: 4px 12px; padding-inline-start: 40px; border: 2px solid #000; border-radius: 0; color: #000; line-height: 22px;
+  background:
+    linear-gradient(90deg, transparent 30px, #e46a6a 30px 31px, transparent 31px),
+    repeating-linear-gradient(180deg, #fff 0 21px, #b9cbe6 21px 22px) 0 4px;
+  background-attachment: local;
+}
+[dir="rtl"][data-theme="brutalist"] .dm-text { background-image: linear-gradient(270deg, transparent 30px, #e46a6a 30px 31px, transparent 31px), repeating-linear-gradient(180deg, #fff 0 21px, #b9cbe6 21px 22px); }
+[data-theme="brutalist"] .dm-expand { color: #000; font-weight: 900; }
+[data-theme="brutalist"] .dm-send {
+  position: relative; width: 66px; height: 52px; padding: 0; flex: none; font-size: 0; color: transparent;
+  background: var(--post); border: 3px solid #000; border-radius: 24px 24px 0 0; box-shadow: 4px 4px 0 #000;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+[data-theme="brutalist"] .dm-send::before { content: ""; position: absolute; left: 12px; right: 12px; top: 26px; height: 5px; border-radius: 3px; background: #000; }
+/* The letter sticking out of the slot slides in when pointed at and drops on click. */
+[data-theme="brutalist"] .dm-send::after {
+  content: ""; position: absolute; left: 50%; bottom: 23px; width: 26px; height: 20px; margin-left: -13px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='20'%3E%3Crect x='1' y='1' width='24' height='18' fill='white' stroke='black' stroke-width='2'/%3E%3Cpath d='M1 1l12 9 12-9' fill='none' stroke='black' stroke-width='2'/%3E%3Crect x='18' y='3' width='5' height='6' fill='%23c0262d'/%3E%3C/svg%3E") center top / 26px 20px no-repeat;
+  transform: rotate(-8deg); transform-origin: bottom center; transition: height 0.25s ease-in, transform 0.2s;
+}
+[data-theme="brutalist"] .dm-send:hover:not(:disabled) { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 #000; }
+[data-theme="brutalist"] .dm-send:hover:not(:disabled)::after { transform: rotate(0); height: 9px; }
+[data-theme="brutalist"] .dm-send:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
+[data-theme="brutalist"] .dm-send:active:not(:disabled)::after { height: 0; transition-duration: 0.1s; }
+
+/* The ⓘ sheet is a receipt; the message menu and Show original carry the airmail stripe. */
+[data-theme="brutalist"] .dm-info { background: #fff8e6; border-inline-start: 3px solid #000; }
+[data-theme="brutalist"] .dm-info::before {
+  content: "AVIS DE RÉCEPTION · RECEIPT"; display: block; margin: -12px -16px 10px; padding: 6px;
+  background: var(--post); color: #fff; font-size: 11px; font-weight: 900; letter-spacing: 0.1em; text-align: center;
+}
+[data-theme="brutalist"] .dm-info h3 { padding-bottom: 2px; border-bottom: 2px solid #000; color: #000; font-weight: 900; }
+[data-theme="brutalist"] :is(.dm-info-person, .dm-info-line) { padding-bottom: 4px; border-bottom: 1px dashed #000; }
+[data-theme="brutalist"] .dm-tile { border: 2px solid #000; border-radius: 0; background: #fff; }
+[data-theme="brutalist"] .dm-tile img { border-radius: 0; }
+[data-theme="brutalist"] .rp-menu.dm-menu {
+  padding-top: 10px; border: 3px solid #000; box-shadow: 6px 6px 0 #000;
+  background: var(--airmail) top / 100% 6px no-repeat, #fff;
+}
+[data-theme="brutalist"] .dm-menu button { font-weight: 700; }
+[data-theme="brutalist"] .original-dialog {
+  border: 3px solid #000; box-shadow: 8px 8px 0 #000;
+  background: var(--airmail) top / 100% 8px no-repeat, #fff;
+}
+[data-theme="brutalist"] .original-body { border: 2px solid #000; }
 
 /* Rows with an importance bar keep it when selected (instead of the accent bar). Last in the
    file so it wins over the theme and right-to-left rules for .email-row.active. */

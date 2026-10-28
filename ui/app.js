@@ -210,6 +210,8 @@ let openDiscussionId = null;
 let replyDraft = null;   // the reply bar: { id, email, subject, from, to, cc, bcc, text, more, adding }
 const REPLY_PILLS = 4;   // bubbles shown before "+X" (a fixed count, not measured to the bar width)
 const dmFind = { open: false, query: '', at: -1 };   // the Ctrl+F bar of the open discussion
+// Brutalist dresses Discussion mode as a post office: postcards, stamps, a mailbox (and some wording).
+const postOffice = () => document.documentElement.dataset.theme === 'brutalist';
 
 function applyDiscussionMode(on) {
   document.body.classList.toggle('discussion-mode', on);
@@ -257,8 +259,9 @@ function renderDiscussions() {
       <span class="dm-when">${esc(fmtShort(d.date_ts))}</span>
       <span class="dm-subj">${esc(d.subject)}</span>
       <span class="dm-last">${esc(d.preview.mine ? t('dm.you', { text: d.preview.text }) : d.preview.text)}</span>
-      ${d.unread ? `<span class="dm-badge">${fmtNumber(d.unread)}</span>` : ''}
+      ${d.unread ? `<span class="dm-badge">${esc(postOffice() ? tn('dm.unread', d.unread) : fmtNumber(d.unread))}</span>` : ''}
     </div>`).join('');
+  document.getElementById('dm-new').textContent = t(postOffice() ? 'dm.newCard' : 'dm.new');
   lines.querySelectorAll('.dm-line').forEach((line, i) => line.addEventListener('click', () => openDiscussion(list[i])));
   renderDiscussion(list.find(d => d.id === openDiscussionId));
 }
@@ -418,7 +421,7 @@ function replyBar(d) {
   bar.innerHTML = `
     <div class="dm-recips hidden"></div>
     <div class="dm-compose">
-      <textarea class="dm-text" rows="1" placeholder="${esc(t('dm.reply'))}"></textarea>
+      <textarea class="dm-text" rows="1" placeholder="${esc(t(postOffice() ? 'dm.replyCard' : 'dm.reply'))}"></textarea>
       <button class="dm-expand" title="${esc(t('cmp.expand'))}">⤢</button>
       <button class="dm-send" title="${esc(t('cmp.sendTitle'))}">${esc(t('cmp.send'))}</button>
     </div>`;
@@ -452,7 +455,7 @@ function renderReplyRecipients(bar) {
   const pill = ({ kind, p }) => `
     <span class="dm-pill" title="${esc(p.address)}">${esc(p.label)}<button class="dm-x" data-kind="${kind}" data-address="${esc(p.address)}" title="${esc(t('dm.remove'))}">✕</button></span>`;
   bar.querySelector('.dm-recips').innerHTML = `
-    <button class="dm-add" title="${esc(t('dm.add'))}">+</button>
+    <button class="dm-add" title="${esc(t('dm.add'))}">${postOffice() ? esc(t('dm.addCard')) : '+'}</button>
     <label class="dm-pill dm-from">${esc(t('meta.from'))}
       <select>${composeAccounts.map((a, i) => `<option value="${i}"${i === r.from ? ' selected' : ''}>${esc(a.from)}</option>`).join('')}</select>
     </label>
@@ -544,6 +547,8 @@ function discussionItem(item, index) {
     <div class="dm-row me first last draft">
       <div class="dm-av-slot"></div>
       <div class="dm-msg">
+        <div class="dm-band"><small>${esc(t('dm.notSent'))}</small></div>
+        <span class="dm-postmark">${esc(t('dm.draft'))}</span>
         <div class="dm-bubble">${esc(item.text)}</div>
         <div class="dm-time">${esc(t('dm.draft'))}</div>
       </div>
@@ -562,12 +567,21 @@ function discussionItem(item, index) {
     <div class="dm-row${item.mine ? ' me' : ''}${item.first ? ' first' : ''}${item.last ? ' last' : ''}${item.kind === 'page' ? ' page' : ''}" style="--pc:${s.colour}" data-folder="${esc(item.folder)}" data-uid="${esc(item.email.uid)}">
       <div class="dm-av-slot">${!item.mine && item.last ? avatar(s) : ''}</div>
       <div class="dm-msg">
+        ${item.first ? postcardTop(s, time(item.date_ts)) : ''}
         <div class="dm-name">${esc(s.name || s.address)}</div>
         ${content}
         ${item.task ? `<button class="dm-task" data-task="${esc(item.task.id)}" title="${esc(t('dm.openTask'))}">✓ ${esc(item.task.title)}</button>` : ''}
         <div class="dm-time">${esc(fmt({ hour: '2-digit', minute: '2-digit' }).format(time(item.date_ts)))}</div>
       </div>
     </div>`;
+}
+
+// The top of a postcard (only the Brutalist look shows it): "Greetings from ORG", the stamp, the postmark.
+function postcardTop(s, date) {
+  return `<div class="dm-band"><small>${esc(t('dm.greetings'))}</small> <b>${esc(s.org || s.name || s.address)}</b></div>`
+    + `<span class="dm-stamp">${esc(s.initials)}</span>`
+    + `<span class="dm-postmark"><span>${esc(fmt({ day: 'numeric', month: 'short' }).format(date))}</span>`
+    + `<span>${esc(fmt({ hour: '2-digit', minute: '2-digit' }).format(date))}</span></span>`;
 }
 
 // A file size the way the language writes it: 12 B, 51 kB, 1.2 MB.
@@ -1360,6 +1374,8 @@ function setupSearch() {
 function openSearch() {
   $s('search-overlay').classList.remove('hidden');
   const input = $s('search-input');
+  const mail = postOffice() && document.body.classList.contains('discussion-mode');
+  input.placeholder = t(mail ? 'dm.searchMail' : 'search.placeholder');
   input.focus();
   input.select();
   runLocalSearch();
@@ -2874,6 +2890,7 @@ function applyTheme(id) {
   try { localStorage.setItem('theme', id); } catch (_) {}
   document.querySelectorAll('.theme-card').forEach(c =>
     c.classList.toggle('selected', c.dataset.theme === id));
+  if (appState && activePanel === 'discussions') renderDiscussions();   // the post office wording
 }
 
 function renderThemePicker() {

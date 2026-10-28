@@ -324,6 +324,16 @@ test('my messages (any of my accounts) and theirs take opposite sides, with the 
   assert.equal(mine.mine, true);
 });
 
+test('a sender carries the organisation of its address for the postcard band', () => {
+  const org = address => buildDiscussions({ inbox: [mail(1, { from_email: address })] }, ME)[0].items.find(i => i.kind === 'message').sender.org;
+  assert.equal(org('leo@acme.com'), 'acme');
+  assert.equal(org('ann@mail.studio-k.fr'), 'studio-k');
+  assert.equal(org('bob@ox.ac.uk'), 'ox');
+  assert.equal(org('kim@shop.co.jp'), 'shop');
+  assert.equal(org('dev@localhost'), 'localhost');
+  assert.equal(org('nobody'), '');
+});
+
 test('messages in a row from the same person stack; a new day starts with a separator', () => {
   const leo = { from_name: 'Leo', from_email: 'leo@d.com' };
   const me = { from_email: 'me@work.com' };
