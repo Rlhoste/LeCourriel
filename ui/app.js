@@ -1320,7 +1320,25 @@ function kanbanCard(task) {
     if (e.button !== 0 || e.target.closest('.kanban-delete')) return;
     const r = card.getBoundingClientRect();
     const dx = e.clientX - r.left, dy = e.clientY - r.top;
-    let ghost = null, over = null;
+    let ghost = null, over = null, x = 0, y = 0, scrolling = 0;
+    const target = () => {
+      const col = document.elementFromPoint(x, y)?.closest('.kanban-col') ?? null;
+      if (col !== over) {
+        over?.classList.remove('drop-target');
+        col?.classList.add('drop-target');
+        over = col;
+      }
+    };
+    // Held near the board's left or right edge: scroll it, so columns out of view can be reached.
+    const board = document.getElementById('kanban');
+    const autoScroll = () => {
+      const b = board.getBoundingClientRect();
+      const step = x < b.left + 40 ? -12 : x > b.right - 40 ? 12 : 0;
+      if (!ghost || !step) { scrolling = 0; return; }
+      board.scrollLeft += step;
+      target();
+      scrolling = requestAnimationFrame(autoScroll);
+    };
     const move = ev => {
       if (!(ev.buttons & 1)) return end(ev); // the release was lost (e.g. alt-tab): cancel
       if (!ghost) {
@@ -1334,12 +1352,9 @@ function kanbanCard(task) {
       }
       ghost.style.left = (ev.clientX - dx) + 'px';
       ghost.style.top = (ev.clientY - dy) + 'px';
-      const col = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('.kanban-col') ?? null;
-      if (col !== over) {
-        over?.classList.remove('drop-target');
-        col?.classList.add('drop-target');
-        over = col;
-      }
+      x = ev.clientX; y = ev.clientY;
+      target();
+      if (!scrolling) autoScroll();
     };
     const escape = ev => { if (ev.key === 'Escape') end(ev); };
     const end = ev => {
@@ -1349,6 +1364,7 @@ function kanbanCard(task) {
       window.removeEventListener('blur', end);
       window.removeEventListener('keydown', escape);
       if (!ghost) return;
+      cancelAnimationFrame(scrolling);
       ghost.remove();
       document.body.classList.remove('task-dragging');
       card.classList.remove('dragging');
