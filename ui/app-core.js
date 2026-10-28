@@ -118,8 +118,10 @@
   function discussion(emails, drafts, context, folderOf, texts, taskOf) {
     const own = new Set((context.me || []).map(a => String(a || '').trim().toLowerCase()).filter(Boolean));
     const isMine = email => own.has(String(email.from_email || '').trim().toLowerCase());
-    const last = emails[emails.length - 1];
-    const unread = emails.filter(e => !e.is_read && !isMine(e));
+    // What lists the discussion (Inbox and Sent) leads its line; Trash and Spam only show inside.
+    const listed = emails.filter(e => ['inbox', 'sent'].includes(folderOf.get(e)));
+    const last = listed[listed.length - 1];
+    const unread = listed.filter(e => !e.is_read && !isMine(e));
     const people = new Map();
     const everyone = new Map();   // the details sheet: me too
     const meet = (name, address) => {
@@ -136,7 +138,8 @@
     const others = [...people.values()];
     const messages = discussionItems(emails, isMine, people, context.now ?? Date.now(), folderOf, texts, taskOf);
     return {
-      id: String(emails[0].message_id || emails[0].uid),
+      // A uid is only unique within its folder.
+      id: String(emails[0].message_id || `${folderOf.get(emails[0])}:${emails[0].uid}`),
       people: others,
       title: others.slice(0, 2).map(p => p.short).join(', ') + (others.length > 2 ? ` +${others.length - 2}` : ''),
       subject: emails[0].subject || '',
@@ -198,14 +201,15 @@
     const account = address => (address ? mine.indexOf(address.trim().toLowerCase()) : -1);
     const fromMe = account(email.from_email);
     const sender = email.reply_to ? splitAddresses(email.reply_to) : [{ name: email.from_name || '', address: String(email.from_email || '').trim() }];
-    const received = [...splitAddresses(email.to), ...splitAddresses(email.cc)].map(a => account(a.address)).find(i => i >= 0);
+    // The account that received it is in its uid (mailing lists, Bcc and aliases hide it from To/Cc).
+    const received = Math.floor(Number(email.uid) / 2 ** 32);
     const subject = String(email.subject || '');
     const to = pick(fromMe >= 0 ? splitAddresses(email.to) : [...sender, ...splitAddresses(email.to)]);
     const cc = pick(splitAddresses(email.cc));
     bubbleLabels([...to, ...cc]);
     return {
       email,
-      from: fromMe >= 0 ? fromMe : received ?? 0,
+      from: fromMe >= 0 ? fromMe : received < me.length ? received : 0,
       to,
       cc,
       subject: /^re\s*:/i.test(subject) ? subject : `Re: ${subject}`,
@@ -295,15 +299,23 @@
   }
 
   // Most of the text sits in tables: a layout, not a written message (a signature table is not enough).
+  // Only the new text counts: the quoted history (a quoted newsletter, say) stops the count.
   function mostlyTables(html) {
-    const letters = piece => htmlText(piece).replace(/\s/g, '').length;
-    let inside = 0, outside = 0, depth = 0, from = 0;
+    let inside = 0, outside = 0, depth = 0, from = 0, ended = false;
+    const count = piece => {
+      if (ended) return;
+      const lines = htmlText(piece).split('\n');
+      const end = lines.findIndex((_, i) => historyStarts(lines, i));
+      ended = end >= 0;
+      const letters = (ended ? lines.slice(0, end) : lines).join('').replace(/\s/g, '').length;
+      if (depth > 0) inside += letters; else outside += letters;
+    };
     for (const m of html.matchAll(/<(\/?)table\b[^>]*>/gi)) {
-      if (depth > 0) inside += letters(html.slice(from, m.index)); else outside += letters(html.slice(from, m.index));
+      count(html.slice(from, m.index));
       depth = Math.max(0, depth + (m[1] ? -1 : 1));
       from = m.index + m[0].length;
     }
-    if (depth > 0) inside += letters(html.slice(from)); else outside += letters(html.slice(from));
+    count(html.slice(from));
     return inside > outside;
   }
 
@@ -330,7 +342,9 @@
   // When a cut would leave nothing, the message is kept whole.
   const QUOTE_FROM = /^\s*(?:De|From)\s*:/i;
   const QUOTE_SUBJECT = /^\s*(?:Objet|Subject)\s*:/i;
-  const QUOTE_INTRO = /^\s*(?:Le|On)\s.*(?:a\s+écrit|wrote)\s*:\s*$/i;   // may wrap onto a 2nd line
+  // May wrap onto a 2nd line. It always carries the date ("Le lun. 26 oct. 2026 à 09:12, … a écrit :"),
+  // which tells it from a sentence like "Le client a écrit :".
+  const QUOTE_INTRO = /^\s*(?:Le|On)\s.*\d.*(?:a\s+écrit|wrote)\s*:\s*$/i;
   const RULE_LINE = /^\s*(?:[-_─=]{3,}|-+\s*(?:Original Message|Message d'origine)\s*-+)?\s*$/i;
   function newText(email, signatures = []) {
     // A link shows as "[text][1]" with its address on a "[1]: url" line at the very end
@@ -343,16 +357,21 @@
     return cutText(whole, signatures) || whole;
   }
 
+  // Line i starts the quoted history (an Outlook header block, "Le … a écrit :") or the signature.
+  function historyStarts(lines, i) {
+    const line = lines[i];
+    return (QUOTE_FROM.test(line) && lines.slice(i + 1, i + 6).some(l => QUOTE_SUBJECT.test(l)))
+      || QUOTE_INTRO.test(line) || QUOTE_INTRO.test(`${line} ${lines[i + 1]}`)
+      || /^--\s?$/.test(line);   // signature delimiter "-- " (the space may be trimmed)
+  }
+
   // What is left of a text once the quoted history and the signatures go ('' when nothing).
   function cutText(whole, signatures = []) {
     const lines = whole.split('\n');
     const kept = [];
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (QUOTE_FROM.test(line) && lines.slice(i + 1, i + 6).some(l => QUOTE_SUBJECT.test(l))) break;
-      if (QUOTE_INTRO.test(line) || QUOTE_INTRO.test(`${line} ${lines[i + 1]}`)) break;
-      if (/^--\s?$/.test(line)) break;   // signature delimiter "-- " (the space may be trimmed)
-      if (!line.trimStart().startsWith('>')) kept.push(line);
+      if (historyStarts(lines, i)) break;
+      if (!lines[i].trimStart().startsWith('>')) kept.push(lines[i]);
     }
     for (const signature of signatures) cutBlock(kept, signature.split('\n'));
     while (kept.length && RULE_LINE.test(kept[kept.length - 1])) kept.pop();

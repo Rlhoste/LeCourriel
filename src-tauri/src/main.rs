@@ -1160,12 +1160,10 @@ fn create_task(
     // Made from an inbox email ("Add as task"): the task links back to it.
     let source = source_uid.and_then(|uid| shared.lock().unwrap().emails.iter().find(|e| e.uid == uid).cloned());
     Ok(tasks::Board::update(|b| {
-        let id = b.add_dated(title, project, due_date);
-        if let (Some(c), Some(t)) = (source, b.tasks.iter_mut().find(|t| t.id == id)) {
-            t.source_uid = Some(c.uid);
-            t.source_from = c.from_name.clone();
-            t.source_subject = c.subject.clone();
-        }
+        match &source {
+            Some(c) => b.add_from_email(title, project, due_date, c),
+            None => b.add_dated(title, project, due_date),
+        };
         b.tasks.clone()
     }))
 }

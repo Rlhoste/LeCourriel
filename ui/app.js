@@ -219,12 +219,40 @@ function applyDiscussionMode(on) {
   else if (!on && activePanel === 'discussions') switchPanel('inbox');
 }
 
+// Built again only when what it is made of changes: the lists are replaced on every change,
+// except read marks, which setReadAll changes in place (and counts in `discussionReads`).
+let discussionsBuilt = { from: [], list: [] };
+let discussionReads = 0;
 function discussionList() {
-  const me = composeAccounts.map(a => splitSender(a.from).email);   // index = account
-  return CourrielCore.buildDiscussions({
-    inbox: appState.all_emails, sent: appState.sent_emails,
-    trash: appState.trash_emails, spam: appState.spam_emails, drafts: appState.drafts_emails,
-  }, { me, now: Date.now(), signatures: composeAccounts.map(a => htmlText(a.signature_html)), tasks: appState.tasks });
+  const from = [appState.all_emails, appState.sent_emails, appState.trash_emails, appState.spam_emails,
+    appState.drafts_emails, appState.tasks, composeAccounts, discussionReads];
+  if (from.some((part, i) => part !== discussionsBuilt.from[i])) {
+    const me = composeAccounts.map(a => splitSender(a.from).email);   // index = account
+    discussionsBuilt = {
+      from,
+      list: CourrielCore.buildDiscussions({
+        inbox: appState.all_emails, sent: appState.sent_emails,
+        trash: appState.trash_emails, spam: appState.spam_emails, drafts: appState.drafts_emails,
+      }, { me, now: Date.now(), signatures: composeAccounts.map(a => htmlText(a.signature_html)), tasks: appState.tasks }),
+    };
+  }
+  return discussionsBuilt.list;
+}
+
+// The emails of the open discussion ("folder:uid"): its id changes when its oldest email goes
+// or an older one arrives, and the discussion holding one of them is still the open one.
+let openDiscussionEmails = new Set();
+const dmEmailKey = i => `${i.folder}:${i.email.uid}`;
+function findOpenDiscussion(list) {
+  const d = list.find(d => d.id === openDiscussionId)
+    || (openDiscussionId && list.find(d => d.items.some(i => i.email && openDiscussionEmails.has(dmEmailKey(i)))));
+  if (d && d.id !== openDiscussionId) {
+    if (replyDraft?.id === openDiscussionId) replyDraft.id = d.id;
+    if (shownDiscussionId === openDiscussionId) shownDiscussionId = d.id;
+    openDiscussionId = d.id;
+  }
+  openDiscussionEmails = new Set(d ? d.items.filter(i => i.email).map(dmEmailKey) : []);
+  return d;
 }
 
 // Opening a discussion reads it: every unread email, on the server too.
@@ -234,8 +262,7 @@ function openDiscussion(d, landOn = null) {
   openDiscussionId = d.id;
   dmLandOn = landOn;
   dmFind.at = -1;
-  const emails = new Set(d.items.filter(i => i.email && i.kind !== 'draft').map(i => i.email));
-  for (const email of emails) setRead(email, true);
+  setReadAll(new Set(d.items.filter(i => i.email && i.kind !== 'draft').map(i => i.email)), true);
   switchPanel('discussions');
 }
 
@@ -250,6 +277,7 @@ function openHitInDiscussion(h) {
 function renderDiscussions() {
   if (!appState) return;
   const list = discussionList();
+  const open = findOpenDiscussion(list);
   const lines = document.getElementById('dm-lines');
   lines.innerHTML = list.map(d => `
     <div class="dm-line${d.id === openDiscussionId ? ' active' : ''}" data-id="${esc(d.id)}">
@@ -263,13 +291,21 @@ function renderDiscussions() {
     </div>`).join('');
   document.getElementById('dm-new').textContent = t(postOffice() ? 'dm.newCard' : 'dm.new');
   lines.querySelectorAll('.dm-line').forEach((line, i) => line.addEventListener('click', () => openDiscussion(list[i])));
-  renderDiscussion(list.find(d => d.id === openDiscussionId));
+  renderDiscussion(open);
 }
 
+let shownDiscussionId = null;   // the discussion #dm-conv shows
 function renderDiscussion(d) {
   const conv = document.getElementById('dm-conv');
   // A reply being written survives refreshes of the same discussion.
   const reply = d && replyDraft?.id === d.id && replyDraft.text ? conv.querySelector('.dm-reply') : null;
+  // So does the reading position, unless it was at the newest message; and the page cards'
+  // heights, so that position holds while they load again.
+  const old = d && shownDiscussionId === d.id ? conv.querySelector('.dm-scroll') : null;
+  const keepTop = old && old.scrollHeight - old.scrollTop - old.clientHeight >= 4 ? old.scrollTop : null;
+  const pageHeights = new Map(old ? [...old.querySelectorAll('.dm-page')]
+    .map(frame => [frame.closest('.dm-row')?.dataset.uid, frame.style.height]) : []);
+  shownDiscussionId = d?.id ?? null;
   renderDiscussionInfo(d);
   if (!d) { conv.innerHTML = ''; replyDraft = null; return; }
   const finding = document.activeElement?.classList.contains('dm-find-input');
@@ -304,7 +340,11 @@ function renderDiscussion(d) {
     conv.appendChild(replyBar(d));
   }
   const scroll = conv.querySelector('.dm-scroll');
-  scroll.scrollTop = scroll.scrollHeight;
+  conv.querySelectorAll('.dm-page').forEach(frame => {
+    const height = pageHeights.get(frame.closest('.dm-row')?.dataset.uid);
+    if (height) frame.style.height = height;
+  });
+  scroll.scrollTop = keepTop ?? scroll.scrollHeight;
   conv.querySelectorAll('.dm-page').forEach(frame => showPage(frame, d.items[frame.dataset.item].email, scroll));
   scroll.addEventListener('click', ev => {   // on the scroll: the find bar rebuilds the bubbles
     const chip = ev.target.closest('.dm-task');
@@ -642,10 +682,10 @@ async function moveEmails(list, command) {
 // Header buttons: mark read/unread, archive, delete, details.
 // Archive and delete take the inbox and sent copies too: a discussion is listed while either remains.
 async function discussionAction(d, act) {
-  if (act === 'info') { dmInfoOpen = !dmInfoOpen; renderDiscussion(d); return; }
+  if (act === 'info') { showDiscussionInfo(d, !dmInfoOpen); return; }
   if (act === 'read') {
     const inbox = dmEmails(d, ['inbox']).map(x => x.email);
-    if (d.unread) inbox.forEach(e => setRead(e, true));
+    if (d.unread) setReadAll(inbox, true);
     else {   // like a messaging app: the latest message from someone else comes back as new
       const last = inbox.filter(e => !d.items.some(i => i.email === e && i.mine)).at(-1) || inbox.at(-1);
       setRead(last, false);
@@ -659,6 +699,13 @@ async function discussionAction(d, act) {
     if (!await askInApp(t('dm.deleteAsk', { n: list.length }), t('rp.delete'))) return;
     await moveEmails(list, 'trash_email');
   }
+}
+
+// Opens or closes the ⓘ sheet without rebuilding the conversation.
+function showDiscussionInfo(d, open) {
+  dmInfoOpen = open;
+  renderDiscussionInfo(d);
+  document.querySelector('#dm-conv .dm-act[data-dm="info"]')?.classList.toggle('on', open);
 }
 
 function renderDiscussionInfo(d) {
@@ -686,7 +733,7 @@ function renderDiscussionInfo(d) {
     ${info.where.map(w => `<div class="dm-info-line">${esc(where(w))}</div>`).join('')}
     ${info.summary ? `<h3>${esc(t('dm.summary'))}</h3><p class="dm-info-summary">${esc(info.summary)}</p>` : ''}
     ${info.files.length ? `<h3>${esc(t('dm.files'))}</h3><div class="dm-info-files">${info.files.map(tile).join('')}</div>` : ''}`;
-  sheet.querySelector('.dm-info-close').addEventListener('click', () => { dmInfoOpen = false; renderDiscussion(d); });
+  sheet.querySelector('.dm-info-close').addEventListener('click', () => showDiscussionInfo(d, false));
   sheet.querySelectorAll('.dm-tile').forEach(btn => btn.addEventListener('click', () => {
     const row = document.querySelector(`#dm-conv .dm-row[data-folder="${btn.dataset.folder}"][data-uid="${btn.dataset.uid}"]`);
     if (!row) return;
@@ -1058,25 +1105,33 @@ function showEmail(section, email) {
   setRead(email, true);
 }
 
-// Mark an inbox email read: locally right away, on the server in the background.
+// Mark inbox emails read: locally right away, on the server in the background, one after
+// the other (each opens its own IMAP connection and rewrites the cache).
 const NON_INBOX_PANELS = '#panel-sent, #panel-drafts, #panel-trash, #panel-spam';
-function setRead(email, read) {
-  if (email.is_read === read || !appState || panelForEmail(email) !== 'inbox') return;
-  const uid = email.uid;
-  email.is_read = read;
+let readQueue = Promise.resolve();
+function setRead(email, read) { setReadAll([email], read); }
+function setReadAll(emails, read) {
+  if (!appState) return;
+  const changed = [...emails].filter(email => email.is_read !== read && panelForEmail(email) === 'inbox');
+  if (!changed.length) return;
+  discussionReads++;
   // The same email appears in several lists (all_emails, urgent_emails, …).
   const skip = ['sent_emails', 'drafts_emails', 'trash_emails', 'spam_emails'];
-  for (const [key, val] of Object.entries(appState)) {
-    if (!Array.isArray(val) || skip.includes(key)) continue;
-    for (const e of val) if (e.uid === uid && 'is_read' in e) e.is_read = read;
+  for (const email of changed) {
+    const uid = email.uid;
+    email.is_read = read;
+    for (const [key, val] of Object.entries(appState)) {
+      if (!Array.isArray(val) || skip.includes(key)) continue;
+      for (const e of val) if (e.uid === uid && 'is_read' in e) e.is_read = read;
+    }
+    document.querySelectorAll(`.email-row[data-uid="${uid}"]`).forEach(row => {
+      if (row.closest(NON_INBOX_PANELS)) return;
+      row.classList.toggle('unread', !read);
+      row.querySelector('button.row-mark')?.setAttribute('title', readToggleTitle(read));
+    });
+    readQueue = readQueue.then(() => cmd('set_read', { uid, read })).catch(() => {});   // cmd() logs the error
   }
-  document.querySelectorAll(`.email-row[data-uid="${uid}"]`).forEach(row => {
-    if (row.closest(NON_INBOX_PANELS)) return;
-    row.classList.toggle('unread', !read);
-    row.querySelector('button.row-mark')?.setAttribute('title', readToggleTitle(read));
-  });
   renderOverview();
-  cmd('set_read', { uid, read }).catch(() => {});   // cmd() already logs the error
 }
 
 // ── Reading-pane actions ───────────────────────────────────────────────────
@@ -3681,8 +3736,11 @@ async function loadComposeAccounts() {
   $c('compose-from-row').classList.toggle('hidden', composeAccounts.length === 0);
 }
 
-// The account an email was sent to (its address in To or Cc), else the first.
+// The account that received an email: the one its uid belongs to (To/Cc miss mailing lists,
+// Bcc and aliases), else the one whose address is in To or Cc, else the first.
 function accountForEmail(email) {
+  const received = Math.floor(Number(email.uid) / 2 ** 32);
+  if (received >= 0 && received < composeAccounts.length) return received;
   const recipients = `${email.to || ''} ${email.cc || ''}`.toLowerCase();
   const i = composeAccounts.findIndex(a => {
     const address = splitSender(a.from).email.toLowerCase();

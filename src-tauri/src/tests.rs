@@ -519,6 +519,27 @@ api_key = "k" model = "m" max_tokens = 100
     }
 
     #[test]
+    fn test_board_task_added_by_hand_from_an_email_stays_the_users() {
+        use crate::dismissals::Dismissals;
+        use crate::tasks::Board;
+        let mut card = make_test_card(40, Priority::Information);
+        card.from_name = "Bob".into();
+        let mut b = Board::default();
+        let id = b.add_from_email("Call Bob back".into(), None, None, &card);
+        let t = b.tasks.iter().find(|t| t.id == id).unwrap();
+        assert_eq!(t.source_uid, Some(40), "the task links back to its email");
+        assert_eq!(t.source_from, "Bob");
+        assert!(t.by_hand, "the AI does not judge it");
+
+        // Deleting it does not stop the AI from finding a task in that email later.
+        b.delete(id).unwrap();
+        card.priority = Priority::Task;
+        card.task = Some("Send the slides".into());
+        assert!(b.sync_from_cards(&[card], &Dismissals::default()));
+        assert!(!b.tasks[0].by_hand);
+    }
+
+    #[test]
     fn test_board_manual_task_ids_unique() {
         use crate::tasks::{Board, Status};
         let mut b = Board::default();

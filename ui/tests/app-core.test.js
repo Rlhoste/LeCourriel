@@ -301,6 +301,37 @@ test('a list line shows the people, the last message, unread count and top unrea
   assert.equal(line.priority, 'high_priority');
 });
 
+test('unread emails in Trash or Spam count neither as unread nor for the priority mark', () => {
+  const [line] = buildDiscussions({
+    inbox: [mail(1, { message_id: '<a@x>', subject: 'Budget', is_read: true })],
+    trash: [mail(2, { references: '<a@x>', priority: 'urgent' })],
+    spam: [mail(3, { subject: 'Re: Budget', priority: 'threat' })],
+  }, ME);
+  assert.equal(line.unread, 0);
+  assert.equal(line.priority, null);
+});
+
+test('a newer email in Trash or Spam is neither the last message of the line nor the one the reply bar answers', () => {
+  const [line] = buildDiscussions({
+    inbox: [mail(1, { message_id: '<a@x>', subject: 'Budget', from_email: 'leo@d.com', body_text: 'Here it is' })],
+    spam: [mail(3, { subject: 'Re: Budget', from_email: 'scam@bad.com', body_text: 'Click here' })],
+    trash: [mail(2, { references: '<a@x>', from_email: 'ann@x.com', body_text: 'Old' })],
+  }, ME);
+  assert.deepEqual(line.preview, { mine: false, text: 'Here it is' });
+  assert.equal(line.date_ts, 10);
+  assert.equal(line.reply.email.uid, 1);
+  assert.deepEqual(addresses(line.reply.to), ['leo@d.com']);
+});
+
+test('discussions without Message-ID get distinct ids even when an Inbox and a Sent email share a uid', () => {
+  const list = buildDiscussions({
+    inbox: [mail(1, { subject: 'Lunch' })],
+    sent: [mail(1, { subject: 'Invoice', from_email: 'me@work.com', to: 'leo@d.com' })],
+  }, ME);
+  assert.equal(list.length, 2);
+  assert.notEqual(list[0].id, list[1].id);
+});
+
 test('a line without unread emails has no priority mark', () => {
   const [line] = buildDiscussions({ inbox: [mail(1, { priority: 'urgent', is_read: true, from_name: 'Ann' })] }, ME);
   assert.equal(line.unread, 0);
@@ -426,6 +457,18 @@ test('a message whose signature is a small table is still a message', () => {
   assert.deepEqual(d.items.slice(1).map(shown), [['message', 'Sure, the meeting is moved to Friday at ten, in the big room.\nLeo | CEO', 'FL']]);
 });
 
+test('a short reply quoting an email laid out in tables is still a message', () => {
+  const quoted = '<table><tr><td><h1>October invoice</h1><p>Total due before the end of the month: 1 200 euros.</p>'
+    + '<p>Pay online or by bank transfer to the account below.</p></td></tr></table>';
+  const [d] = buildDiscussions({
+    inbox: [mail(1, {
+      body_text: 'Paid, thanks.\n\nLe lun. 26 oct. 2026 à 09:12, Billing <billing@x.com> a écrit :\n> October invoice',
+      body_html: `<p>Paid, thanks.</p><div>Le lun. 26 oct. 2026 à 09:12, Billing &lt;billing@x.com&gt; a écrit :</div><blockquote>${quoted}</blockquote>`,
+    })],
+  }, ME);
+  assert.deepEqual(d.items.slice(1).map(shown), [['message', 'Paid, thanks.', 'FL']]);
+});
+
 test('in an email split by images, the quoted history and its images are cut too', () => {
   const [d] = buildDiscussions({
     inbox: [mail(1, {
@@ -459,9 +502,17 @@ test('the reply bar answers everyone on the latest message, never myself', () =>
 
 test('the reply goes to Reply-To when set, and From follows the account that received it', () => {
   const [d] = buildDiscussions({
-    inbox: [mail(1, { subject: 'Offer', from_email: 'news@shop.com', reply_to: 'Sales <sales@shop.com>', to: 'me@home.org' })],
+    inbox: [mail(2 ** 32 + 1, { subject: 'Offer', from_email: 'news@shop.com', reply_to: 'Sales <sales@shop.com>', to: 'me@home.org' })],
   }, ME);
   assert.deepEqual(addresses(d.reply.to), ['sales@shop.com']);
+  assert.equal(d.reply.from, 1);
+});
+
+test('From follows the account that received the email even when none of its addresses is in To or Cc', () => {
+  const second = 2 ** 32;   // emails of the second account
+  const [d] = buildDiscussions({
+    inbox: [mail(second + 5, { subject: 'Weekly news', from_email: 'leo@d.com', to: 'team@lists.org', cc: 'me@work.com' })],
+  }, ME);
   assert.equal(d.reply.from, 1);
 });
 
@@ -503,6 +554,13 @@ test('"Le … a écrit :" and "On … wrote:" (even split over two lines) cut al
     mail(2, { subject: 'B', body_text: 'Great.\n\nOn Mon, Oct 26, 2026 at 9:12 AM Leo Bianchini <\nleo@d.com> wrote:\n\nHere is the budget.' }),
     mail(3, { subject: 'C', body_text: '> Lundi ?\nOui.\n> Et mardi ?\n>> Plutôt lundi\nNon.' }),
   ]), ['Oui.\nNon.', 'Great.', 'Parfait.']);
+});
+
+test('a sentence of mine that says someone wrote something, without a date, is not a quote intro', () => {
+  assert.deepEqual(bubbles([
+    mail(1, { subject: 'A', body_text: 'Bonjour,\nLe client a écrit :\n« Je veux être remboursé. »\nJe propose de refuser.' }),
+    mail(2, { subject: 'B', body_text: 'Hi,\nOn Friday the client\nwrote:\nI want a refund.\nI suggest we say no.' }),
+  ]), ['Hi,\nOn Friday the client\nwrote:\nI want a refund.\nI suggest we say no.', 'Bonjour,\nLe client a écrit :\n« Je veux être remboursé. »\nJe propose de refuser.']);
 });
 
 test('a "-- " line and all after it is cut', () => {
