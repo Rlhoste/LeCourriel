@@ -2183,6 +2183,12 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 .dm-bubble mark.current { background: #ff9632; }
 .dm-row.dm-landed .dm-bubble { animation: dm-landed 2.5s ease-out; }
 @keyframes dm-landed { 0%, 40% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: 0 0 0 3px transparent; } }
+.dm-people-note { align-self: center; margin: 6px 0; font-size: 0.8rem; font-style: italic; color: var(--text-dim); }
+.dm-earlier {
+  align-self: center; margin-bottom: 4px; padding: 4px 10px; font-size: 0.8rem; color: var(--text-dim);
+  border: 1px dashed var(--border); border-radius: 999px;
+}
+.dm-row.draft .dm-bubble { background: transparent; color: var(--text-dim); border: 1px dashed var(--text-dim); }
 
 /* The reply bar: From/To/Cc bubbles (once something is typed) above the message field. */
 .dm-reply { border-top: 1px solid var(--border); background: var(--bg2); padding: 8px 16px 12px; }
