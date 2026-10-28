@@ -355,3 +355,51 @@ test('each message says which folder it is in, so a search result lands on it (U
   assert.deepEqual(landing.map(d => d.subject), ['Budget']);
   assert.deepEqual(landing[0].items.filter(i => i.kind === 'message').map(i => i.folder), ['inbox', 'sent', 'trash']);
 });
+
+test('a note says who joined or left when the recipients change, before that message', () => {
+  const [d] = buildDiscussions({
+    inbox: [
+      mail(1, { message_id: '<a@x>', from_name: 'Leo B', from_email: 'leo@d.com', to: 'me@work.com, Paul <paul@d.com>', date_ts: at(26, 9) }),
+      mail(3, { references: '<a@x>', from_name: 'Leo B', from_email: 'leo@d.com', to: 'me@work.com', cc: 'Damien <damien@o.com>', date_ts: at(26, 11) }),
+      mail(4, { references: '<a@x>', from_name: 'Damien', from_email: 'damien@o.com', to: 'LEO@d.com', cc: 'me@work.com', date_ts: at(26, 12) }),
+      mail(5, { references: '<a@x>', from_name: 'Zoe', from_email: 'zoe@z.com', to: 'leo@d.com, damien@o.com', cc: 'me@work.com', date_ts: at(26, 13) }),
+    ],
+    sent: [mail(2, { references: '<a@x>', from_email: 'me@home.org', to: 'leo@d.com', cc: 'paul@d.com, ann@x.com', date_ts: at(26, 10) })],
+  }, ME);
+  const shape = d.items.map(i => (i.kind === 'people'
+    ? `${i.mine ? 'me' : i.by.short} +${i.added.map(p => p.short + (p.cc ? '(cc)' : '')).join(',')} -${i.removed.map(p => p.short).join(',')}`
+    : i.kind === 'message' ? `${i.email.uid}${i.first ? 'F' : ''}` : i.kind));
+  // Zoe was a hidden copy: she is not "added" by her own reply.
+  assert.deepEqual(shape, ['day', '1F', 'me +ann(cc) -', '2F', 'Leo +Damien(cc) -Paul,ann', '3F', '4F', '5F']);
+});
+
+test('a note at the top says when earlier messages of the discussion are not on this computer', () => {
+  const list = buildDiscussions({
+    inbox: [
+      mail(1, { message_id: '<a@x>', subject: 'Complete' }),
+      mail(2, { references: '<a@x>', subject: 'Re: Complete' }),
+      mail(3, { message_id: '<c@x>', references: '<gone@x> <c0@x>', subject: 'Re: Partial' }),
+      mail(4, { references: '<gone@x> <c@x>', subject: 'Re: Partial' }),
+    ],
+  }, ME);
+  assert.deepEqual(list.map(d => [d.subject, d.items[0].kind]), [['Re: Partial', 'earlier'], ['Complete', 'day']]);
+  assert.equal(list[0].items.filter(i => i.kind === 'earlier').length, 1);
+});
+
+test('a draft of the discussion shows as an unsent message at the bottom', () => {
+  const list = buildDiscussions({
+    inbox: [mail(1, { message_id: '<a@x>', subject: 'Budget', from_name: 'Leo', from_email: 'leo@d.com', body_text: 'Numbers?', date_ts: at(26, 9) })],
+    sent: [mail(2, { references: '<a@x>', from_email: 'me@work.com', body_text: 'Soon.', date_ts: at(27, 9) })],
+    drafts: [
+      mail(3, { references: '<a@x>', from_email: 'me@work.com', body_text: ' Here they are \n', date_ts: at(28, 10), is_read: false }),
+      mail(4, { subject: 'Draft alone', from_email: 'me@work.com', date_ts: at(28, 11) }),
+    ],
+  }, ME);
+  assert.deepEqual(list.map(d => d.subject), ['Budget'], 'a lone draft is no discussion');
+  const [d] = list;
+  assert.deepEqual(d.items.map(i => i.kind), ['day', 'message', 'day', 'message', 'draft']);
+  assert.deepEqual(d.items.at(-1), { kind: 'draft', email: d.items.at(-1).email, text: 'Here they are', date_ts: at(28, 10) });
+  assert.equal(d.items.at(-1).email.uid, 3);
+  assert.equal(d.items.at(-2).last, true);
+  assert.deepEqual([d.date_ts, d.preview.text], [at(27, 9), 'Soon.'], 'the list line ignores the draft');
+});

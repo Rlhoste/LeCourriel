@@ -100,6 +100,8 @@ STRINGS.pt = {
     'set.discussion': 'Modo conversa: mostrar os meus e-mails como uma app de mensagens',
     'nav.discussions': 'Conversas', 'dm.new': 'Nova mensagem', 'dm.today': 'Hoje', 'dm.you': 'Você: {text}',
     'dm.find': "Procurar nesta conversa", 'dm.findCount': "{n} de {total}", 'dm.findNone': "Nenhum resultado", 'dm.findPrev': "Anterior", 'dm.findNext': "Seguinte",
+    'dm.earlier': 'As mensagens anteriores não estão carregadas', 'dm.draft': 'Rascunho', 'dm.cc': '{name} (Cc)',
+    'dm.added': '{who} adicionou {names}', 'dm.removed': '{who} removeu {names}', 'dm.youAdded': 'Você adicionou {names}', 'dm.youRemoved': 'Você removeu {names}',
     'set.fontScale': 'Tamanho do texto', 'set.theme': 'Tema', 'set.language': 'Idioma',
     "set.signature": "Assinatura", "set.sigChoose": "📄 Escolher um arquivo HTML…", "set.sigRemove": "Remover", "set.sigOnNew": "Adicionar às novas mensagens", "set.sigOnReply": "Adicionar às respostas e encaminhamentos", "set.sigHint": "Ainda não há assinatura. Exporte-a do seu cliente de e-mail (Outlook, Gmail…) como arquivo HTML, ou crie uma com qualquer gerador de assinaturas.", "set.sigImported": "Assinatura importada", "set.sigRemoved": "Assinatura removida", "set.sigFileFilter": "Arquivos HTML",
     "set.incoming": "📥 Recebimento (IMAP)", "set.outgoing": "📤 Envio (SMTP)", "set.server": "Servidor", "set.port": "Porta", "set.username": "Usuário", "set.usernamePh": "voce@exemplo.com", "set.password": "Senha", "set.sameAsIncoming": "Igual ao recebimento", "set.advanced": "Opções avançadas", "set.imapMailbox": "Pasta a verificar", "set.fetchCount": "Número de e-mails a buscar",
