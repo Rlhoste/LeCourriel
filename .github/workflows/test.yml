@@ -73,3 +73,37 @@ jobs:
       - run: npm ci
       - name: End-to-end tests
         run: scripts/e2e.sh
+
+  mutants:
+    # Mutation testing of the Rust lines this push changed. Informational: a missed mutant
+    # marks the job, never the run. --in-place because a copy breaks frontendDist "../ui".
+    if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
+    runs-on: ubuntu-22.04
+    continue-on-error: true
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Linux test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
+      - name: Mutants on the changed lines
+        working-directory: src-tauri
+        run: |
+          git diff --relative ${{ github.event.before }} ${{ github.sha }} > "$RUNNER_TEMP/push.diff"
+          cargo mutants --in-place --in-diff "$RUNNER_TEMP/push.diff"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutants.out
+          path: src-tauri/mutants.out
+          if-no-files-found: ignore
