@@ -603,7 +603,7 @@ test('my accounts\' signatures are cut wherever they appear, matched exactly', (
     mail(1, { subject: 'A', from_email: 'me@work.com', body_text: 'Bonjour Leo,\n\nC\'est validé.\n\nDavid Fort\n**O2GAME** | [o2game.com][1]' }),
     mail(2, { subject: 'B', from_email: 'me@work.com', body_text: 'Hi Leo,\n\nApproved.\n\nBest regards,\nDavid\n\nP.S. Lunch?' }),
     mail(3, { subject: 'C', from_email: 'me@work.com', body_text: 'Best regards,\nDavid Fort' }),
-  ], context), ['Best regards,\nDavid Fort', 'Hi Leo,\n\nApproved.\n\nP.S. Lunch?', 'Bonjour Leo,\n\nC\'est validé.']);
+  ], context), ['Best regards,','Hi Leo,\n\nApproved.\n\nP.S. Lunch?', 'Bonjour Leo,\n\nC\'est validé.']);
 });
 
 test('the same last lines at the end of 2+ emails from one sender are cut; a cut leaving nothing keeps all', () => {
@@ -705,7 +705,7 @@ test('a forwarded email is kept: its note is cut as usual, the forwarded message
   ]), [
     'Pour info.\n\n**De :** Paul\n**Envoyé :** lundi\n**À :** Marc\n**Objet :** Devis\nLe devis est validé.', 'Merci Marc.',
     '---------- Forwarded message ---------\nFrom: **Ana** <ana@d.com>\nDate: Mon, Oct 26, 2026\nSubject: Photos\n\nHere are the photos.',
-    `FYI, see below.\n\n${forwarded}`,
+    `FYI, see below.\n\nCordialement,\n\n${forwarded}`,
   ]);
 });
 
@@ -734,7 +734,7 @@ test('a sentence that only starts like a "sent from my phone" line is kept', () 
   assert.deepEqual(cutEach(bodies), bodies);
 });
 
-test('a closing (Cordialement, Best regards…) followed only by signature lines is cut with them', () => {
+test('a closing (Cordialement, Best regards…) stays; the signature lines after it are cut', () => {
   assert.deepEqual(cutEach([
     'Bonjour,\n\nVoici le devis.\n\nCordialement,\n\nLeo Bianchini\nDirecteur financier\nD Corp\nTél. : +33 1 23 45 67 89\n12 rue de la Paix, 75002 Paris\nwww.d-corp.fr',
     'Hi,\n\nHere is the quote.\n\nBest regards,\nAna Smith | Head of Sales\nE Ltd · 10 Downing Road, London\nM: +44 20 7946 0000\nhttps://e-ltd.co.uk',
@@ -742,7 +742,8 @@ test('a closing (Cordialement, Best regards…) followed only by signature lines
     'Ça marche.\n\nBien cordialement\n\n-- \nJean',
     'Sounds good.\n\nKind regards\n\n> Shall we meet?',
     'Merci pour tout.\n\nSincères salutations,\nPaul Martin',
-  ]), ['Bonjour,\n\nVoici le devis.', 'Hi,\n\nHere is the quote.', 'Je confirme pour jeudi.', 'Ça marche.', 'Sounds good.', 'Merci pour tout.']);
+  ]), ['Bonjour,\n\nVoici le devis.\n\nCordialement,', 'Hi,\n\nHere is the quote.\n\nBest regards,', 'Je confirme pour jeudi.\n\nBien à vous,',
+    'Ça marche.\n\nBien cordialement', 'Sounds good.\n\nKind regards', 'Merci pour tout.\n\nSincères salutations,']);
 });
 
 test('a closing is kept when real text follows it, or when it is inside a sentence', () => {
@@ -777,7 +778,7 @@ test('ordinary text about confidentiality, the environment or printing is kept',
   assert.deepEqual(cutEach(bodies), bodies);
 });
 
-test('a closing then a signature table (with a logo) is cut with them', () => {
+test('after a closing, a signature table (with a logo) is cut', () => {
   const signature = '<table><tr><td><img src="data:image/png;base64,LOGO"></td><td><b>Leo Bianchini</b><br>Directeur financier'
     + '<br>D Corp – 12 rue de la Paix, 75002 Paris<br>Tél. : +33 1 23 45 67 89<br>www.d-corp.fr</td></tr></table>';
   const [d] = buildDiscussions({
@@ -786,7 +787,7 @@ test('a closing then a signature table (with a logo) is cut with them', () => {
       body_html: `<p>Voici le devis.</p><p>Cordialement,</p>${signature}`,
     })],
   }, ME);
-  assert.deepEqual(d.items.slice(1).map(shown), [['message', 'Voici le devis.', 'FL']]);
+  assert.deepEqual(d.items.slice(1).map(shown), [['message', 'Voici le devis.\n\nCordialement,', 'FL']]);
 });
 
 test('in an email split by images, a signature with a logo is cut where the plain text cuts it; a picture before it stays', () => {

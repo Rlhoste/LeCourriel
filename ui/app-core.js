@@ -608,7 +608,7 @@
   }
 
   // Line i is a closing ("Cordialement,") followed only by signature lines (name, title, phone…)
-  // up to the end or the quoted history: it and all after go. Real text after it keeps it.
+  // up to the end or the quoted history: the closing stays, all after it goes. Real text after it keeps it.
   function closingStarts(lines, i) {
     if (!CLOSING.test(lines[i])) return false;
     const rest = [];
@@ -619,15 +619,14 @@
     return rest.length <= MAX_TAIL && !rest.some(isWritten);
   }
 
-  const cutStarts = (lines, i) => historyStarts(lines, i) || closingStarts(lines, i);
-
   // What is left of a text once the quoted history and the signatures go ('' when nothing).
   function cutText(whole, signatures = [], signed = false) {
     const lines = whole.split('\n');
     const kept = [];
     for (let i = 0; i < lines.length; i++) {
-      if (signed ? historyStarts(lines, i) : cutStarts(lines, i)) break;
+      if (historyStarts(lines, i)) break;
       if (!lines[i].trimStart().startsWith('>')) kept.push(lines[i]);
+      if (!signed && closingStarts(lines, i)) break;
     }
     for (const signature of signatures) cutBlock(kept, signature.split('\n'));
     while (kept.length && RULE_LINE.test(kept[kept.length - 1])) kept.pop();
