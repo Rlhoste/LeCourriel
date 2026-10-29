@@ -319,8 +319,23 @@ struct LegacyConfig {
 }
 
 impl Config {
+    /// Load config.toml and its passwords and keys from the OS keychain.
     pub fn load() -> Result<Self> {
-        Self::load_from(&crate::paths::file("config.toml"))
+        let path = crate::paths::file("config.toml");
+        let mut cfg = Self::load_from(&path)?;
+        let Some(stored) = crate::secrets::load() else { return Ok(cfg) };
+        let in_file = !crate::secrets::split(&mut cfg.clone()).is_empty();
+        crate::secrets::join(&mut cfg, &stored);
+        // Secrets written in config.toml by an older version move to the keychain once. Without a
+        // keychain the file is left alone: rewriting it would change its date and trigger a sync.
+        let mut stripped = cfg.clone();
+        if in_file && crate::secrets::save(&crate::secrets::split(&mut stripped)) {
+            // The secrets are safe in the keychain either way: a failed write must not stop the app.
+            if let Err(e) = write_to(&stripped, &path) {
+                tracing::warn!("Could not remove the secrets from config.toml: {:#}", e);
+            }
+        }
+        Ok(cfg)
     }
 
     /// Load a configuration from an explicit path. Keeping this independent from the
@@ -388,7 +403,16 @@ pub fn save_config(cfg: &Config) -> Result<()> {
 }
 
 /// Write config.toml only (used when applying preferences pulled from the database).
+/// Passwords and keys go to the OS keychain; without one they stay in config.toml.
 pub fn write_local(cfg: &Config) -> Result<()> {
+    let mut stripped = cfg.clone();
+    let secrets = crate::secrets::split(&mut stripped);
+    if crate::secrets::save(&secrets) {
+        return write_to(&stripped, &crate::paths::file("config.toml"));
+    }
+    if !secrets.is_empty() {
+        tracing::warn!("No OS keychain: {} passwords or keys stay in config.toml", secrets.len());
+    }
     write_to(cfg, &crate::paths::file("config.toml"))
 }
 

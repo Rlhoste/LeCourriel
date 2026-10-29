@@ -802,6 +802,58 @@ max_tokens = 10
     }
 
     #[test]
+    fn test_secrets_leave_the_config_and_come_back() {
+        use crate::secrets::{join, split};
+        let full = config_with_secrets();
+        let mut saved = full.clone();
+        let secrets = split(&mut saved);
+        let file = toml::to_string_pretty(&saved).unwrap();
+        for secret in ["IMAP-SECRET", "SMTP-SECRET", "CLAUDE-SECRET", "OPENAI-SECRET", "GIPHY-SECRET"] {
+            assert!(!file.contains(secret), "config.toml leaks {}", secret);
+        }
+        assert_eq!(secrets.get("imap:0:remi@imap.example.com").map(String::as_str), Some("IMAP-SECRET"));
+
+        let mut loaded = saved.clone();
+        join(&mut loaded, &secrets);
+        assert_eq!(loaded.accounts[0].imap.password, "IMAP-SECRET");
+        assert_eq!(loaded.accounts[0].smtp.password, "SMTP-SECRET");
+        assert_eq!(loaded.ai.keys, full.ai.keys);
+        assert_eq!(loaded.gifs.giphy_api_key, "GIPHY-SECRET");
+
+        // A value still in config.toml (older version, no keychain) wins over the stored one.
+        let mut older = full.clone();
+        join(&mut older, &[("imap:0:remi@imap.example.com".to_string(), "STALE".to_string())].into());
+        assert_eq!(older.accounts[0].imap.password, "IMAP-SECRET");
+    }
+
+    #[test]
+    fn test_secrets_of_two_accounts_with_one_login_stay_apart() {
+        use crate::secrets::{join, split};
+        let mut cfg = config_with_secrets();
+        let mut twin = cfg.accounts[0].clone();
+        twin.imap.password = "TWIN-SECRET".into();
+        twin.smtp.password.clear();
+        cfg.accounts.push(twin);
+        let secrets = split(&mut cfg);
+        join(&mut cfg, &secrets);
+        assert_eq!(cfg.accounts[0].imap.password, "IMAP-SECRET");
+        assert_eq!(cfg.accounts[1].imap.password, "TWIN-SECRET");
+        assert_eq!(cfg.accounts[1].smtp.password, "");
+
+        // Removing the first account does not hand its password to the second.
+        cfg.accounts.remove(0);
+        let after = split(&mut cfg);
+        assert!(!after.values().any(|v| v == "IMAP-SECRET"));
+    }
+
+    #[test]
+    fn test_qr_has_no_passwords() {
+        let qr = crate::settings::qr_payload(&config_with_secrets());
+        assert!(qr.contains("imap=remi@imap.example.com:993/INBOX"), "{qr}");
+        assert!(!qr.contains("IMAP-SECRET") && !qr.contains("SMTP-SECRET"), "{qr}");
+    }
+
+    #[test]
     fn test_cloud_merge_prefs_keeps_local_secrets() {
         use crate::cloud::{merge_prefs, prefs_from_config};
         let mut remote_cfg = make_test_config();

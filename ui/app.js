@@ -641,12 +641,10 @@ function retagInState(uid, project) {
 // Returns a message for the status line, or null if the user cancelled.
 async function saveEmail(email) {
   const safe = (email.subject || 'email').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 80).trim() || 'email';
-  const path = await window.__TAURI__.dialog.save({
-    defaultPath: `${safe}.eml`,
-    filters: [{ name: t('rp.emailFilter'), extensions: ['eml'] }],
+  const path = await cmd('save_email', {
+    uid: email.uid, folder: panelForEmail(email), name: `${safe}.eml`, filter: t('rp.emailFilter'),
   });
   if (!path) return null;
-  await cmd('save_email', { uid: email.uid, folder: panelForEmail(email), path });
   return t('rp.savedTo', { path });
 }
 
@@ -3169,12 +3167,9 @@ function setupAccountSignature(block) {
   if (file) invoke('signature_get', { file }).then(html => showAccountSignature(block, html)).catch(() => {});
   block.querySelector('.sig-choose').addEventListener('click', async () => {
     try {
-      const path = await window.__TAURI__.dialog.open({
-        multiple: false,
-        filters: [{ name: t('set.sigFileFilter'), extensions: ['html', 'htm'] }],
-      });
-      if (!path) return;
-      const [name, html] = await cmd('signature_import', { path });
+      const picked = await cmd('signature_import', { filter: t('set.sigFileFilter') });
+      if (!picked) return;
+      const [name, html] = picked;
       block.dataset.sigFile = name;
       showAccountSignature(block, html);
       status(t('set.sigImported'), 'ok');

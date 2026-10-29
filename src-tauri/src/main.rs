@@ -44,6 +44,7 @@ mod models;
 mod overrides;
 mod paths;
 mod search;
+mod secrets;
 mod settings;
 mod signature;
 mod smtp_sender;
@@ -397,11 +398,18 @@ fn save_settings(
 
 // ── Signature ──────────────────────────────────────────────────────────────
 
-/// Import an HTML signature file (local images are embedded). Returns its new file name
-/// (set on the account when Settings are saved) and its HTML.
+/// Ask for an HTML signature file and import it (local images are embedded). Returns its
+/// new file name (set on the account when Settings are saved) and its HTML, None if cancelled.
+/// The backend opens the dialog so the webview cannot make it read any path it likes.
+/// Async: a blocking dialog in a synchronous command would freeze the main thread.
 #[tauri::command]
-fn signature_import(path: String) -> Result<(String, String), String> {
-    signature::import(std::path::Path::new(&path), &signature::data_dir()).map_err(|e| format!("{:#}", e))
+async fn signature_import(app: AppHandle, filter: String) -> Result<Option<(String, String)>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let Some(path) = app.dialog().file().add_filter(filter, &["html", "htm"]).blocking_pick_file() else {
+        return Ok(None);
+    };
+    let path = path.into_path().map_err(|e| e.to_string())?;
+    signature::import(&path, &signature::data_dir()).map(Some).map_err(|e| format!("{:#}", e))
 }
 
 /// The HTML of a signature file ("" when there is none).
@@ -1044,11 +1052,25 @@ async fn file_existing_emails(app: &AppHandle, shared: &SharedState, name: &str)
     Ok(count)
 }
 
-/// Save the original message as an .eml file at `path`. `folder` is the list it was opened
-/// from ("inbox", "sent", "drafts", "trash" or "spam"): each folder numbers its UIDs apart.
+/// Ask where to save the original message, then write it as an .eml file. Returns the path,
+/// None if cancelled. `folder` is the list it was opened from ("inbox", "sent", "drafts",
+/// "trash" or "spam"): each folder numbers its UIDs apart. The backend opens the dialog so
+/// the webview cannot make it write any path it likes.
 #[tauri::command]
-async fn save_email(uid: u64, folder: String, path: String, shared: State<'_, SharedState>) -> Result<(), String> {
+async fn save_email(
+    app: AppHandle,
+    uid: u64,
+    folder: String,
+    name: String,
+    filter: String,
+    shared: State<'_, SharedState>,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
     let (account, folders, imap_uid) = account_of(shared.inner(), uid)?;
+    let Some(path) = app.dialog().file().set_file_name(name).add_filter(filter, &["eml"]).blocking_save_file() else {
+        return Ok(None);
+    };
+    let path = path.into_path().map_err(|e| e.to_string())?;
     let mailbox = match folder.as_str() {
         "sent" => folders.sent.clone(),
         "drafts" => folders.drafts.clone(),
@@ -1058,7 +1080,8 @@ async fn save_email(uid: u64, folder: String, path: String, shared: State<'_, Sh
     };
     let from = config::ImapConfig { mailbox, ..account.imap.clone() };
     let raw = imap_client::fetch_raw(&from, imap_uid).await.map_err(|e| format!("{:#}", e))?;
-    std::fs::write(&path, raw).map_err(|e| format!("Could not write {}: {}", path, e))
+    std::fs::write(&path, raw).map_err(|e| format!("Could not write {}: {}", path.display(), e))?;
+    Ok(Some(path.display().to_string()))
 }
 
 /// Hide a task, deadline or meeting item without touching the email.

@@ -139,32 +139,35 @@ pub fn account_from_dto(a: &AccountDto) -> AccountConfig {
     }
 }
 
+/// The accounts' server settings as a QR code, without passwords: anyone who sees or
+/// photographs the screen would get them.
 pub fn generate_qr(cfg: &Config) -> String {
+    QrCode::new(qr_payload(cfg).as_bytes())
+        .map(|code| {
+            code.render::<unicode::Dense1x2>()
+                .dark_color(unicode::Dense1x2::Dark)
+                .light_color(unicode::Dense1x2::Light)
+                .build()
+        })
+        .unwrap_or_else(|e| format!("QR error: {}", e))
+}
+
+pub fn qr_payload(cfg: &Config) -> String {
     let mut lines = vec![format!("courriel://import name={}", cfg.user.display_name)];
     for (i, a) in cfg.accounts.iter().enumerate() {
         lines.push(format!(
-            "account{} label={} imap={}:{}@{}:{}/{} smtp={}:{}@{}:{} from={}",
+            "account{} label={} imap={}@{}:{}/{} smtp={}@{}:{} from={}",
             i,
             a.name,
             a.imap.username,
-            a.imap.password,
             a.imap.host,
             a.imap.port,
             a.imap.mailbox,
             a.smtp.username,
-            a.smtp.password,
             a.smtp.host,
             a.smtp.port,
             a.smtp.from_address,
         ));
     }
-    let payload = lines.join("\n");
-    match QrCode::new(payload.as_bytes()) {
-        Ok(code) => code
-            .render::<unicode::Dense1x2>()
-            .dark_color(unicode::Dense1x2::Dark)
-            .light_color(unicode::Dense1x2::Light)
-            .build(),
-        Err(e) => format!("QR error: {}", e),
-    }
+    lines.join("\n")
 }
