@@ -619,6 +619,40 @@ test('the same last lines at the end of 2+ emails from one sender are cut; a cut
   ]), ['Bob\nSales team', 'Done.', 'Sure.', 'OK.\n\nTél. 01 23 45 67 89', 'Merci !\n\nÀ lundi.', 'Bonjour,\n\nVoici le budget.']);
 });
 
+test('a short common last line alone ("Thanks", "Merci") is not a signature; one long line ending 2+ emails is', () => {
+  assert.deepEqual(bubbles([
+    mail(1, { subject: 'A', from_email: 'leo@d.com', body_text: 'Can you send the file?\n\nThanks' }),
+    mail(2, { subject: 'B', from_email: 'leo@d.com', body_text: 'Is the room free?\n\nThanks' }),
+    mail(3, { subject: 'C', from_email: 'ana@d.com', body_text: 'Tu me rappelles ?\nMerci' }),
+    mail(4, { subject: 'D', from_email: 'ana@d.com', body_text: 'Le devis est prêt.\nMerci' }),
+    mail(5, { subject: 'E', from_email: 'bob@e.com', body_text: 'Done.\n\nBob Martin · Sales team' }),
+    mail(6, { subject: 'F', from_email: 'bob@e.com', body_text: 'Sure.\n\nBob Martin · Sales team' }),
+  ]), ['Sure.', 'Done.', 'Le devis est prêt.\nMerci', 'Tu me rappelles ?\nMerci', 'Is the room free?\n\nThanks', 'Can you send the file?\n\nThanks']);
+});
+
+test('a signature its mail app marks in the HTML (Gmail, Outlook, Apple Mail, Thunderbird, Proton Mail) is cut', () => {
+  assert.deepEqual(bubbles([
+    '<div dir="ltr">See you at 3.<br clear="all"><div><br></div><span class="gmail_signature_prefix">-- </span><br>'
+      + '<div dir="ltr" class="gmail_signature" data-smartmail="gmail_signature"><div dir="ltr">Leo Bianchini<div>D Corp | 01 23 45 67 89</div></div></div></div>',
+    '<div>Got the photos.</div><div data-smartmail="gmail_signature">Ana Costa<br>Design lead</div>',
+    '<div class="elementToProof">Le devis est en pièce jointe.</div><div id="Signature"><p>Marc Durand</p><p>Responsable achats</p></div>',
+    '<div dir="ltr">On arrive vers 20h.</div><div dir="ltr"><br><div id="AppleMailSignature" dir="ltr">Paul<br>photographe</div></div>',
+    '<p>Here is the draft.</p><pre class="moz-signature" cols="72">Sam Lee\nhttps://samlee.example</pre>',
+    '<div>Tomorrow works.</div><div class="protonmail_signature_block"><div class="protonmail_signature_block-user">Zoe</div>'
+      + '<div class="protonmail_signature_block-proton">Proton Mail</div></div>',
+  ].map((body_html, i) => mail(i + 1, { subject: `S${i}`, body_html }))).reverse(),
+  ['See you at 3.', 'Got the photos.', 'Le devis est en pièce jointe.', 'On arrive vers 20h.', 'Here is the draft.', 'Tomorrow works.']);
+});
+
+test('where the HTML marks the signature, guesses from the text do not cut more', () => {
+  // The closing and the name are written by hand above the signature Gmail adds.
+  const signed = text => `<div dir="ltr">${text}<br><div class="gmail_signature">Leo Bianchini<br>D Corp</div></div>`;
+  assert.deepEqual(bubbles([
+    mail(1, { subject: 'A', from_email: 'leo@d.com', body_html: signed('Thanks for the call.<br><br>Best regards,<br>Leo') }),
+    mail(2, { subject: 'B', from_email: 'leo@d.com', body_html: signed('Sent you the deck.<br><br>Best regards,<br>Leo') }),
+  ]), ['Sent you the deck.\n\nBest regards,\nLeo', 'Thanks for the call.\n\nBest regards,\nLeo']);
+});
+
 // Each body as its own email from its own sender; the bubbles in the bodies' order.
 const cutEach = bodies => bubbles(bodies.map((body_text, i) => mail(i + 1, { subject: `S${i}`, body_text }))).reverse();
 

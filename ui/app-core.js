@@ -390,14 +390,28 @@
   const BREAK = new Set(['div', 'tr', 'td', 'th', 'li', 'dt', 'dd', 'center', 'section', 'article', 'header', 'footer', 'hr', 'address', 'pre', 'form', 'caption']);
   const PARAGRAPH = new Set(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table', 'ul', 'ol', 'blockquote', 'dl']);
   const TOKEN = /<(\/?)([a-z][\w:-]*)((?:"[^"]*"|'[^']*'|[^'">])*)>|<[!?/][^>]*>|([^<]+|<)/gi;
-  let markedNow = new Map();   // HTML → its text, for this build (and the one before)
+  // The signature a mail app marks in its HTML: Gmail, Outlook (desktop, web, mobile), Apple Mail,
+  // Thunderbird, Proton Mail.
+  const SIGNATURE_CLASS = /^(?:gmail_signature(?:_prefix)?|moz-signature|protonmail_signature_block)$/i;
+  const SIGNATURE_ID = /^(?:x_)?(?:Signature|AppleMailSignature|ms-outlook-mobile-signature)$/i;
+  const isSignatureMark = (name, attrs) => (attrs.get('class') || '').split(/\s+/).some(c => SIGNATURE_CLASS.test(c))
+    || attrs.get('data-smartmail') === 'gmail_signature' || SIGNATURE_ID.test(attrs.get('id') || '');
+  let markedNow = new Map();   // HTML → { text, signed }, for this build (and the one before)
   let markedBefore = new Map();
+  // `signed`: a marked signature was cut. When cutting it leaves nothing, the text keeps it.
   function htmlMarked(source) {
     const known = markedNow.get(source) ?? markedBefore.get(source);
     if (known !== undefined) { markedNow.set(source, known); return known; }
     const html = removeElements(String(source)
       .replace(/<!--[\s\S]*?-->/g, '')
       .replace(/<(head|style|script|title|template)\b[\s\S]*?<\/\1\s*>/gi, ''), isHidden);
+    const unsigned = removeElements(html, isSignatureMark);
+    const text = unsigned !== html ? marked(unsigned) : '';
+    const result = text ? { text, signed: true } : { text: marked(html), signed: false };
+    markedNow.set(source, result);
+    return result;
+  }
+  function marked(html) {
     let out = '';
     let pending = 0;      // line breaks owed before the next text
     let space = false;    // a space owed before the next text
@@ -479,9 +493,7 @@
       }
     }
     close();
-    const text = out.split('\n').map(line => line.trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim();
-    markedNow.set(source, text);
-    return text;
+    return out.split('\n').map(line => line.trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim();
   }
 
   // Only what the person newly wrote, cut by rules (no AI): the quoted history goes.
@@ -492,23 +504,23 @@
   // which tells it from a sentence like "Le client a écrit :".
   const QUOTE_INTRO = /^\s*(?:Le|On)\s.*\d.*(?:a\s+écrit|wrote)\s*:\s*$/i;
   const RULE_LINE = /^\s*(?:[-_─=]{3,}|-+\s*(?:Original Message|Message d'origine)\s*-+)?\s*$/i;
-  function newText(email, signatures = []) {
-    const whole = emailText(email);
-    return cutText(whole, signatures) || whole;
+  // `signed`: its HTML marked the signature, already cut; no closing is guessed then.
+  function newText(email, signatures = [], { text: whole, signed } = emailText(email)) {
+    return cutText(whole, signatures, signed) || whole;
   }
 
-  // An email's whole text: its HTML as bubble text, else its plain text.
+  // An email's whole text ({ text, signed }): its HTML as bubble text, else its plain text.
   function emailText(email) {
     const html = String(email.body_html || '');
-    const marked = html.trim() ? htmlMarked(html) : '';
-    if (marked) return marked;
+    const fromHtml = html.trim() ? htmlMarked(html) : { text: '' };
+    if (fromHtml.text) return fromHtml;
     // A link shows as "[text][1]" with its address on a "[1]: url" line at the very end
     // (after any quote): put the address back beside it, as "[text](url)".
     const links = new Map();
     const body = String(email.body_text || '').replace(/\r\n?/g, '\n').split('\n')
       .filter(line => { const m = /^\[(\d+)\]:\s*(\S+)\s*$/.exec(line); if (m) links.set(m[1], m[2]); return !m; })
       .join('\n');
-    return body.replace(/\[([^\]\n]*)\]\[(\d+)\]/g, (all, text, n) => (links.has(n) ? `[${text}](${links.get(n)})` : all)).trim();
+    return { text: body.replace(/\[([^\]\n]*)\]\[(\d+)\]/g, (all, text, n) => (links.has(n) ? `[${text}](${links.get(n)})` : all)).trim(), signed: false };
   }
 
   // A whole line only: "Envoyé de mon iPhone", "Sent from Outlook for Android", "Get Outlook for iOS".
@@ -559,11 +571,11 @@
   const cutStarts = (lines, i) => historyStarts(lines, i) || closingStarts(lines, i);
 
   // What is left of a text once the quoted history and the signatures go ('' when nothing).
-  function cutText(whole, signatures = []) {
+  function cutText(whole, signatures = [], signed = false) {
     const lines = whole.split('\n');
     const kept = [];
     for (let i = 0; i < lines.length; i++) {
-      if (cutStarts(lines, i)) break;
+      if (signed ? historyStarts(lines, i) : cutStarts(lines, i)) break;
       if (!lines[i].trimStart().startsWith('>')) kept.push(lines[i]);
     }
     for (const signature of signatures) cutBlock(kept, signature.split('\n'));
@@ -573,23 +585,33 @@
 
   // Each email's new text, then the last lines one sender ends 2+ of their emails with
   // (a signature we were not told about) are cut: the longest such block, up to MAX_TAIL lines.
+  // One line alone counts only when long and not a sentence: "Thanks" or "Merci" is no signature.
+  // Emails whose HTML marked their signature are left out: it is already cut.
   const MAX_TAIL = 15;
+  const MIN_TAIL_LINE = 15;
   function newTexts(emails, signatures) {
-    const texts = new Map(emails.map(e => [e, newText(e, signatures)]));
+    const unsigned = [];
+    const texts = new Map(emails.map(e => {
+      const whole = emailText(e);
+      if (!whole.signed) unsigned.push(e);
+      return [e, newText(e, signatures, whole)];
+    }));
     const tails = new Map();   // sender + last k lines → distinct emails ending so
     const tailKeys = email => {
       const lines = texts.get(email).split('\n').map(plainLine).filter(Boolean);
       const sender = String(email.from_email || '').trim().toLowerCase();
       return lines.slice(-MAX_TAIL).map((_, k, last) => `${sender}\n${last.slice(last.length - k - 1).join('\n')}`);
     };
-    for (const email of emails) {
+    const isTail = (key, k) => tails.get(key).size >= 2
+      && (k > 0 || (key.length - key.indexOf('\n') - 1 >= MIN_TAIL_LINE && !isWritten(key.slice(key.indexOf('\n') + 1))));
+    for (const email of unsigned) {
       for (const key of tailKeys(email)) {
         if (!tails.has(key)) tails.set(key, new Set());
         tails.get(key).add(String(email.message_id || email.uid));
       }
     }
-    for (const email of emails) {
-      const k = tailKeys(email).findLastIndex(key => tails.get(key).size >= 2) + 1;
+    for (const email of unsigned) {
+      const k = tailKeys(email).findLastIndex(isTail) + 1;
       if (!k) continue;
       const lines = texts.get(email).split('\n');
       let cut = lines.length;
