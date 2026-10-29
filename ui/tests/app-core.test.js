@@ -399,7 +399,7 @@ test('an image in the middle of an email splits it: text before, the images, the
     })],
   }, ME);
   assert.deepEqual(d.items.slice(1).map(shown), [
-    ['message', 'Look at this:', 'F'],
+    ['message', 'Look at **this**:', 'F'],
     ['image', 'data:image/png;base64,AAA', ''],
     ['image', 'data:image/jpeg;base64,BBB', ''],
     ['message', 'Nice, isn\'t it?\nBye & see you', 'L'],
@@ -407,7 +407,7 @@ test('an image in the middle of an email splits it: text before, the images, the
   assert.ok(d.items.slice(1).every(i => i.email.uid === 1 && i.sender.address === 'person1@example.com' && i.date_ts === 10));
 });
 
-test('an email without an image in its HTML keeps its plain text whole', () => {
+test('an email without an image in its HTML is one message; an image from the web is left out', () => {
   const [d] = buildDiscussions({
     inbox: [mail(1, { body_text: 'Hello\n\nDavid', body_html: '<p>Hello</p><p>David</p><img src="https://x.com/logo.png">' })],
   }, ME);
@@ -435,27 +435,51 @@ test('each attachment shows as its own item after the text, with its name, size 
   assert.equal(d.items[4].email.uid, 2);
 });
 
-test('an email laid out as a page (mostly tables, or no plain-text part) shows as one card, not cut', () => {
-  const newsletter = '<p>View online</p><table><tr><td><img src="data:image/png;base64,LOGO"></td></tr>'
-    + '<tr><td><h1>October news</h1><p>Our new shop opens on Monday with a lot of offers.</p></td></tr></table>';
+test('an email laid out as a page (a newsletter) is plain text: its cells as lines, bold, italic, web and mail links', () => {
+  const newsletter = '<html><head><title>News</title><style>td { color: red }</style></head><body>'
+    + '<div style="display:none;max-height:0">Our best offers inside</div>'
+    + '<table><tr><td><img src="data:image/png;base64,LOGO" width="120"></td></tr>'
+    + '<tr><td><h1>October <b>news</b></h1><p>Our <i>new</i> shop opens <a href="https://shop.x.com/a?b=1&amp;c=2">on Monday</a>.</p>'
+    + '<p>Write to <a href="mailto:hi@x.com">us</a>, not <a href="javascript:alert(1)">here</a>.</p></td>'
+    + '<td>Opening hours:<br>9:00 – 18:00</td></tr></table>'
+    + '<img src="https://track.x.com/p.gif" width="1" height="1"><img src="data:image/gif;base64,PIXEL" width="1" height="1">'
+    + '<script>track()</script></body></html>';
   const [d] = buildDiscussions({
     inbox: [
       mail(1, { from_email: 'shop@x.com', message_id: '<a@x>', body_text: 'View online\nOctober news', body_html: newsletter,
         attachments: [{ name: 'invoice.pdf', size: 900, mime: 'application/pdf' }] }),
-      mail(2, { from_email: 'shop@x.com', references: '<a@x>', body_text: 'Hi', body_html: '<div>Hi</div>', html_only: true }),
+      mail(2, { from_email: 'shop@x.com', references: '<a@x>', body_html: '<div>Hi</div>', html_only: true }),
     ],
   }, ME);
-  assert.deepEqual(d.items.slice(1).map(shown), [['page', 1, 'F'], ['attachment', 'invoice.pdf', ''], ['page', 2, 'L']]);
+  assert.deepEqual(d.items.slice(1).map(shown), [
+    ['image', 'data:image/png;base64,LOGO', 'F'],
+    ['message', 'October **news**\n\nOur *new* shop opens [on Monday](https://shop.x.com/a?b=1&c=2).\n\n'
+      + 'Write to [us](mailto:hi@x.com), not here.\n\nOpening hours:\n9:00 – 18:00', ''],
+    ['attachment', 'invoice.pdf', ''],
+    ['message', 'Hi', 'L'],
+  ]);
 });
 
-test('a message whose signature is a small table is still a message', () => {
+test('a link drawn as a button (a coloured cell around it alone, a background, a border, padding, role=button) is a button', () => {
+  const html = '<p>Your invoice is ready.</p>'
+    + '<table><tr><td bgcolor="#1a73e8" style="padding:10px"><a href="https://pay.x.com/1" style="color:#fff">Pay now</a></td></tr></table>'
+    + '<p><a href="https://x.com/a" style="background-color:#e00;padding:8px 16px">Order</a> '
+    + '<a href="https://x.com/b" role="button">Track</a> <a href="https://x.com/c" style="color:#00f;text-decoration:none">Help</a></p>'
+    + '<table><tr><td style="background:#eee">See <a href="https://x.com/d">the terms</a> and <a href="https://x.com/e">privacy</a>.</td></tr></table>';
+  const [d] = buildDiscussions({ inbox: [mail(1, { body_html: html })] }, ME);
+  assert.deepEqual(d.items.slice(1).map(i => i.text), ['Your invoice is ready.\n\n[[Pay now]](https://pay.x.com/1)\n\n'
+    + '[[Order]](https://x.com/a) [[Track]](https://x.com/b) [Help](https://x.com/c)\n\n'
+    + 'See [the terms](https://x.com/d) and [privacy](https://x.com/e).']);
+});
+
+test('a message whose signature is a small table reads as lines', () => {
   const [d] = buildDiscussions({
     inbox: [mail(1, {
       body_text: 'Sure, the meeting is moved to Friday at ten, in the big room.\nLeo | CEO',
       body_html: '<p>Sure, the meeting is moved to Friday at ten, in the big room.</p><table><tr><td>Leo</td><td>CEO</td></tr></table>',
     })],
   }, ME);
-  assert.deepEqual(d.items.slice(1).map(shown), [['message', 'Sure, the meeting is moved to Friday at ten, in the big room.\nLeo | CEO', 'FL']]);
+  assert.deepEqual(d.items.slice(1).map(shown), [['message', 'Sure, the meeting is moved to Friday at ten, in the big room.\n\nLeo\nCEO', 'FL']]);
 });
 
 test('a short reply quoting an email laid out in tables is still a message', () => {
@@ -595,8 +619,95 @@ test('the same last lines at the end of 2+ emails from one sender are cut; a cut
   ]), ['Bob\nSales team', 'Done.', 'Sure.', 'OK.\n\nTél. 01 23 45 67 89', 'Merci !\n\nÀ lundi.', 'Bonjour,\n\nVoici le budget.']);
 });
 
+test('a short common last line alone ("Thanks", "Merci") is not a signature; one long line ending 2+ emails is', () => {
+  assert.deepEqual(bubbles([
+    mail(1, { subject: 'A', from_email: 'leo@d.com', body_text: 'Can you send the file?\n\nThanks' }),
+    mail(2, { subject: 'B', from_email: 'leo@d.com', body_text: 'Is the room free?\n\nThanks' }),
+    mail(3, { subject: 'C', from_email: 'ana@d.com', body_text: 'Tu me rappelles ?\nMerci' }),
+    mail(4, { subject: 'D', from_email: 'ana@d.com', body_text: 'Le devis est prêt.\nMerci' }),
+    mail(5, { subject: 'E', from_email: 'bob@e.com', body_text: 'Done.\n\nBob Martin · Sales team' }),
+    mail(6, { subject: 'F', from_email: 'bob@e.com', body_text: 'Sure.\n\nBob Martin · Sales team' }),
+  ]), ['Sure.', 'Done.', 'Le devis est prêt.\nMerci', 'Tu me rappelles ?\nMerci', 'Is the room free?\n\nThanks', 'Can you send the file?\n\nThanks']);
+});
+
+test('a signature its mail app marks in the HTML (Gmail, Outlook, Apple Mail, Thunderbird, Proton Mail) is cut', () => {
+  assert.deepEqual(bubbles([
+    '<div dir="ltr">See you at 3.<br clear="all"><div><br></div><span class="gmail_signature_prefix">-- </span><br>'
+      + '<div dir="ltr" class="gmail_signature" data-smartmail="gmail_signature"><div dir="ltr">Leo Bianchini<div>D Corp | 01 23 45 67 89</div></div></div></div>',
+    '<div>Got the photos.</div><div data-smartmail="gmail_signature">Ana Costa<br>Design lead</div>',
+    '<div class="elementToProof">Le devis est en pièce jointe.</div><div id="Signature"><p>Marc Durand</p><p>Responsable achats</p></div>',
+    '<div dir="ltr">On arrive vers 20h.</div><div dir="ltr"><br><div id="AppleMailSignature" dir="ltr">Paul<br>photographe</div></div>',
+    '<p>Here is the draft.</p><pre class="moz-signature" cols="72">Sam Lee\nhttps://samlee.example</pre>',
+    '<div>Tomorrow works.</div><div class="protonmail_signature_block"><div class="protonmail_signature_block-user">Zoe</div>'
+      + '<div class="protonmail_signature_block-proton">Proton Mail</div></div>',
+  ].map((body_html, i) => mail(i + 1, { subject: `S${i}`, body_html }))).reverse(),
+  ['See you at 3.', 'Got the photos.', 'Le devis est en pièce jointe.', 'On arrive vers 20h.', 'Here is the draft.', 'Tomorrow works.']);
+});
+
+test('where the HTML marks the signature, guesses from the text do not cut more', () => {
+  // The closing and the name are written by hand above the signature Gmail adds.
+  const signed = text => `<div dir="ltr">${text}<br><div class="gmail_signature">Leo Bianchini<br>D Corp</div></div>`;
+  assert.deepEqual(bubbles([
+    mail(1, { subject: 'A', from_email: 'leo@d.com', body_html: signed('Thanks for the call.<br><br>Best regards,<br>Leo') }),
+    mail(2, { subject: 'B', from_email: 'leo@d.com', body_html: signed('Sent you the deck.<br><br>Best regards,<br>Leo') }),
+  ]), ['Sent you the deck.\n\nBest regards,\nLeo', 'Thanks for the call.\n\nBest regards,\nLeo']);
+});
+
 // Each body as its own email from its own sender; the bubbles in the bodies' order.
 const cutEach = bodies => bubbles(bodies.map((body_text, i) => mail(i + 1, { subject: `S${i}`, body_text }))).reverse();
+
+test('a quote its mail app marks in the HTML (Gmail, Apple Mail, Outlook, Thunderbird, Yahoo) is cut, whatever its language', () => {
+  assert.deepEqual(bubbles([
+    '<div dir="ltr">Sounds good.</div><br><div class="gmail_quote gmail_quote_container"><div dir="ltr" class="gmail_attr">'
+      + 'Am Mo., 26. Okt. 2026 um 09:12 Uhr schrieb Leo &lt;leo@d.com&gt;:<br></div><blockquote class="gmail_quote">Lunch?</blockquote></div>',
+    '<div dir="ltr">Parfait.</div><div dir="ltr"><br><blockquote type="cite">Il giorno 26 ott 2026, alle ore 09:12, Leo ha scritto:<br><br></blockquote></div>'
+      + '<blockquote type="cite"><div dir="ltr">Pranzo?</div></blockquote>',
+    '<div class="elementToProof">Agreed.</div><div id="appendonsend"></div><hr style="display:inline-block;width:98%">'
+      + '<div id="divRplyFwdMsg" dir="ltr"><b>Von:</b> Leo<br><b>Gesendet:</b> Montag<br><b>Betreff:</b> Budget</div><div>Hier ist das Budget.</div>',
+    '<div>Got it.</div><hr><div id="x_divRplyFwdMsg"><b>Från:</b> Leo</div><div>Budget</div>',
+    '<div class="WordSection1"><p class="MsoNormal">Bien reçu.</p><div id="stopSpelling"><p class="MsoNormal">Leo, 26/10</p></div><p>Voici le budget.</p></div>',
+    '<div class="moz-cite-prefix">Am 26.10.2026 um 09:12 schrieb Leo:<br></div><blockquote type="cite" cite="mid:1@d.com">Lunch?</blockquote><p>Yes, at noon.</p>',
+    '<div>¡Gracias!</div><div id="yahoo_quoted_8812" class="yahoo_quoted"><div>El lunes, 26 de octubre de 2026, Leo escribió:</div><div>Voici</div></div>',
+  ].map((body_html, i) => mail(i + 1, { subject: `S${i}`, body_html }))).reverse(),
+  ['Sounds good.', 'Parfait.', 'Agreed.', 'Got it.', 'Bien reçu.', 'Yes, at noon.', '¡Gracias!']);
+});
+
+test('an "-----Original Message-----" line, or 3+ header lines in a row from "From:" / "De :", start the quoted history', () => {
+  assert.deepEqual(cutEach([
+    'Vu.\n\n-----Message d\'origine-----\nExpéditeur : Leo\nVoici.',
+    'Noted.\n\n-----Original Message-----\nLeo wrote this on Monday\nHere is the budget.',
+    'Noted.\n\nFrom: Leo Bianchini\nSent: Monday, October 26, 2026 9:12 AM\nTo: Me\n\nHere is the budget.',
+    'OK pour moi.\n\n**De :** Leo Bianchini\n**Envoyé :** lundi 26 octobre\n**À :** Moi\n**Cc :** Ana\n**Objet :** Budget\n\nVoici.',
+    'Happy new year!\n\nFrom: the whole team\nTo: everyone',
+  ]), ['Vu.', 'Noted.', 'Noted.', 'OK pour moi.', 'Happy new year!\n\nFrom: the whole team\nTo: everyone']);
+});
+
+test('the end of an email that repeats an earlier message of the discussion is cut, even quoted in a way no rule knows', () => {
+  assert.deepEqual(bubbles([
+    mail(1, { subject: 'Budget', from_email: 'leo@d.com', body_text: 'Here is the budget for Q4,\nwith the new numbers.' }),
+    mail(2, { subject: 'RE: Budget', from_email: 'ana@d.com', body_text: 'Thanks! Can we talk on Friday?\n\nLeo Bianchini, 26.10.2026 09:12:\nHere is the budget for Q4, with the\nNEW numbers.' }),
+    mail(3, { subject: 'RE: Budget', from_email: 'leo@d.com', body_text: 'Yes, Friday 10:00.\n\nAna Costa, 27.10.2026:\n   thanks!  Can we talk on Friday?\nLeo Bianchini, 26.10.2026 09:12:\nHere is the budget for Q4, with the new numbers.' }),
+    mail(4, { subject: 'RE: Budget', from_email: 'me@work.com', body_text: 'OK.' }),
+    mail(5, { subject: 'RE: Budget', from_email: 'leo@d.com', body_text: 'Great.\nOK.' }),
+  ]), ['Here is the budget for Q4,\nwith the new numbers.', 'Thanks! Can we talk on Friday?', 'Yes, Friday 10:00.', 'OK.', 'Great.\nOK.']);
+});
+
+test('a forwarded email is kept: its note is cut as usual, the forwarded message shows whole; a reply to a forward is cut', () => {
+  const forwarded = '---------- Forwarded message ---------\nFrom: Ana Costa <ana@d.com>\nDate: Mon, Oct 26, 2026\nSubject: Planning\nTo: Leo <leo@d.com>\n\nThe launch moves to May.';
+  assert.deepEqual(bubbles([
+    mail(1, { subject: 'Fwd: Planning', from_email: 'leo@d.com', body_text: `FYI, see below.\n\nCordialement,\nLeo\n\n${forwarded}` }),
+    mail(2, { subject: 'TR: Devis', from_email: 'marc@e.com', body_html: '<div>Pour info.</div><div id="appendonsend"></div><hr>'
+      + '<div id="divRplyFwdMsg"><b>De :</b> Paul<br><b>Envoyé :</b> lundi<br><b>À :</b> Marc<br><b>Objet :</b> Devis</div><div>Le devis est validé.</div>' }),
+    mail(3, { subject: 'Fwd: Photos', from_email: 'leo@d.com', body_html: '<div dir="ltr"><br><br><div class="gmail_quote gmail_quote_container"><div dir="ltr" class="gmail_attr">'
+      + '---------- Forwarded message ---------<br>From: <b class="gmail_sendername">Ana</b> &lt;ana@d.com&gt;<br>Date: Mon, Oct 26, 2026<br>Subject: Photos<br></div>'
+      + '<br><br><div dir="ltr">Here are the photos.</div></div></div>' }),
+    mail(4, { subject: 'RE: TR: Devis', from_email: 'paul@e.com', body_text: 'Merci Marc.\n\nDe : Marc\nEnvoyé : mardi\nÀ : Paul\nObjet : TR: Devis\n\nPour info.\n\n-------- Message transféré --------\nDe : Paul\nLe devis est validé.' }),
+  ]), [
+    'Pour info.\n\n**De :** Paul\n**Envoyé :** lundi\n**À :** Marc\n**Objet :** Devis\nLe devis est validé.', 'Merci Marc.',
+    '---------- Forwarded message ---------\nFrom: **Ana** <ana@d.com>\nDate: Mon, Oct 26, 2026\nSubject: Photos\n\nHere are the photos.',
+    `FYI, see below.\n\n${forwarded}`,
+  ]);
+});
 
 test('a "sent from my phone" line (Envoyé de mon iPhone, Sent from Outlook for Android…) and all after it is cut', () => {
   assert.deepEqual(cutEach([
@@ -666,7 +777,7 @@ test('ordinary text about confidentiality, the environment or printing is kept',
   assert.deepEqual(cutEach(bodies), bodies);
 });
 
-test('a closing then a signature table (with a logo) is cut, and the email stays a message, not a page', () => {
+test('a closing then a signature table (with a logo) is cut with them', () => {
   const signature = '<table><tr><td><img src="data:image/png;base64,LOGO"></td><td><b>Leo Bianchini</b><br>Directeur financier'
     + '<br>D Corp – 12 rue de la Paix, 75002 Paris<br>Tél. : +33 1 23 45 67 89<br>www.d-corp.fr</td></tr></table>';
   const [d] = buildDiscussions({
@@ -834,7 +945,7 @@ test('the list search keeps discussions whose people, subjects or message text h
   assert.deepEqual(found('studio.fr'), ['Budget'], 'an address');
   assert.deepEqual(found('2027'), ['Budget'], 'any subject of the discussion');
   assert.deepEqual(found('pizza'), ['Lunch'], 'message text');
-  assert.deepEqual(found('promo'), ['News'], 'the text of an email shown as a page');
+  assert.deepEqual(found('promo'), ['News'], 'the text of an email with only HTML');
   assert.deepEqual(found('pret merci'), ['Budget'], 'words may sit in different messages');
   assert.deepEqual(found('pizza merci'), [], 'every word must match');
   assert.deepEqual(found('me@work.com'), [], 'not my own address: it is on every discussion');
