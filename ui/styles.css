@@ -2161,7 +2161,7 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 .dm-scroll { flex: 1; overflow-y: auto; padding: 16px 24px 24px; display: flex; flex-direction: column; gap: 3px; }
 .dm-sep { align-self: center; margin: 16px 0 8px; font-size: 0.8rem; font-weight: 600; color: var(--text-dim); }
 /* Mine on the end side, the others on the start side (so the sides swap right to left). */
-.dm-row { display: flex; gap: 8px; align-items: flex-end; max-width: 70%; align-self: flex-start; }
+.dm-row { display: flex; gap: 8px; align-items: flex-end; max-width: 80%; align-self: flex-start; }
 .dm-row.first { margin-top: 10px; }
 .dm-row.me { align-self: flex-end; flex-direction: row-reverse; }
 .dm-av-slot { width: 36px; flex: none; }
@@ -2369,7 +2369,7 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 
 /* Premium: each message is a paper letter card with a gold top edge and a serif italic name line. */
 [data-theme="premium"] .dm-scroll { gap: 10px; }
-[data-theme="premium"] .dm-row { max-width: 62%; }
+[data-theme="premium"] .dm-row { max-width: 78%; }
 [data-theme="premium"] .dm-av-slot { display: none; }
 [data-theme="premium"] .dm-msg {
   padding: 14px 20px; border-radius: 4px; border-top: 3px solid var(--accent);
@@ -2519,7 +2519,11 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 /* The sorting table, and the postcards on it. */
 [data-theme="brutalist"] .dm-conv { background: #f4f1ea radial-gradient(rgba(0, 0, 0, 0.07) 1px, transparent 1.4px) 0 0 / 14px 14px; }
 [data-theme="brutalist"] .dm-scroll { gap: 0; padding: 16px 28px 32px; }
-[data-theme="brutalist"] .dm-row { width: min(560px, 80%); max-width: none; }
+/* A card grows with its text up to 80%; it stays wide enough for the band, stamp and postmark. */
+[data-theme="brutalist"] .dm-row { min-width: min(360px, 80%); max-width: 80%; }
+/* Sturdy sans-serif for the cards and the list instead of the theme's thin monospace; weight keeps the look. */
+[data-theme="brutalist"] :is(.dm-list, .dm-conv, .dm-info) { font-family: "Segoe UI", "Helvetica Neue", Arial, system-ui, sans-serif; }
+[data-theme="brutalist"] :is(.dm-bubble, .dm-text) { font-size: 15px; font-weight: 600; line-height: 1.45; }
 [data-theme="brutalist"] .dm-row.first { margin-top: 22px; }
 [data-theme="brutalist"] .dm-av-slot { display: none; }
 [data-theme="brutalist"] .dm-msg,
@@ -2540,7 +2544,7 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
   background: repeating-linear-gradient(90deg, #000 0 2px, transparent 2px 4px, #000 4px 5px, transparent 5px 8px, #000 8px 11px, transparent 11px 13px);
 }
 [data-theme="brutalist"] .dm-band {
-  display: block; margin-bottom: 4px; padding: 10px 0; padding-inline: 16px 150px; line-height: 1.1;
+  display: block; min-height: 66px; margin-bottom: 4px; padding: 10px 0; padding-inline: 16px 150px; line-height: 1.1;
   background: var(--pc); color: #fff; border-bottom: 3px solid #000;
 }
 [data-theme="brutalist"] .dm-band small { display: block; font-size: 11px; font-style: italic; font-weight: 700; }
@@ -2555,13 +2559,14 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 }
 [data-theme="brutalist"] .dm-postmark {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  position: absolute; top: 24px; inset-inline-end: 46px; width: 74px; height: 74px; border-radius: 50%;
+  /* Inside the band (about 64px tall), so the date never lands on the message text. */
+  position: absolute; top: 5px; inset-inline-end: 46px; width: 56px; height: 56px; border-radius: 50%;
   border: 2px solid var(--ink); box-shadow: inset 0 0 0 4px transparent, inset 0 0 0 5px var(--ink);
   color: var(--ink); font-size: 9px; font-weight: 900; line-height: 1.1; text-transform: uppercase; text-align: center;
   opacity: 0.78; mix-blend-mode: multiply; transform: rotate(-14deg); pointer-events: none;
 }
 [data-theme="brutalist"] .dm-postmark::after {
-  content: ""; position: absolute; inset-inline-start: -64px; top: 18px; width: 66px; height: 36px;
+  content: ""; position: absolute; inset-inline-start: -64px; top: 9px; width: 66px; height: 36px;
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='66' height='36'%3E%3Cg fill='none' stroke='%231d2a6b' stroke-width='2'%3E%3Cpath d='M0 6q8-5 16 0t16 0 16 0 16 0'/%3E%3Cpath d='M0 14q8-5 16 0t16 0 16 0 16 0'/%3E%3Cpath d='M0 22q8-5 16 0t16 0 16 0 16 0'/%3E%3Cpath d='M0 30q8-5 16 0t16 0 16 0 16 0'/%3E%3C/g%3E%3C/svg%3E");
 }
 [data-theme="brutalist"] .dm-name { margin: 8px 16px 0; color: #000; text-transform: uppercase; }
