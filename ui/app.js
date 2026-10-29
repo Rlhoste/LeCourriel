@@ -276,8 +276,16 @@ function openHitInDiscussion(h) {
 
 function renderDiscussions() {
   if (!appState) return;
-  const list = discussionList();
-  const open = findOpenDiscussion(list);
+  const open = findOpenDiscussion(discussionList());
+  renderDiscussionLines();
+  document.getElementById('dm-new').textContent = t(postOffice() ? 'dm.newCard' : 'dm.new');
+  document.getElementById('dm-search').placeholder = t(postOffice() ? 'dm.searchMail' : 'dm.search');
+  renderDiscussion(open);
+}
+
+// The list lines, only the discussions the search bar above them finds.
+function renderDiscussionLines() {
+  const list = CourrielCore.filterDiscussions(discussionList(), document.getElementById('dm-search').value);
   const lines = document.getElementById('dm-lines');
   lines.innerHTML = list.map(d => `
     <div class="dm-line${d.id === openDiscussionId ? ' active' : ''}" data-id="${esc(d.id)}">
@@ -289,10 +297,9 @@ function renderDiscussions() {
       <span class="dm-last">${esc(d.preview.mine ? t('dm.you', { text: d.preview.text }) : d.preview.text)}</span>
       ${d.unread ? `<span class="dm-badge">${esc(postOffice() ? tn('dm.unread', d.unread) : fmtNumber(d.unread))}</span>` : ''}
     </div>`).join('');
-  document.getElementById('dm-new').textContent = t(postOffice() ? 'dm.newCard' : 'dm.new');
   lines.querySelectorAll('.dm-line').forEach((line, i) => line.addEventListener('click', () => openDiscussion(list[i])));
-  renderDiscussion(open);
 }
+document.getElementById('dm-search').addEventListener('input', () => { if (appState) renderDiscussionLines(); });
 
 let shownDiscussionId = null;   // the discussion #dm-conv shows
 function renderDiscussion(d) {
@@ -1504,7 +1511,7 @@ function searchTerms() {
 // Wrap matches in <mark>, accent-insensitive; every piece of text is escaped.
 function highlight(text, terms) {
   text = text || '';
-  const fold = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const fold = CourrielCore.fold;
   const folded = fold(text);
   if (!terms.length || folded.length !== text.length) return esc(text);
   const ranges = [];

@@ -163,6 +163,25 @@
     };
   }
 
+  // The search bar over the discussion list: the discussions where every word of `query` is found
+  // in a person's name or address (not mine), a subject or a message text; case and accents ignored.
+  const fold = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const searchable = new WeakMap();   // discussion → its folded text, made once per built list
+  function filterDiscussions(list, query) {
+    const words = fold(query).split(/\s+/).filter(Boolean);
+    if (!words.length) return list;
+    const textOf = d => {
+      if (!searchable.has(d)) {
+        searchable.set(d, fold([
+          ...d.people.flatMap(p => [p.name, p.address]), ...d.info.subjects,
+          ...d.items.map(i => i.text ?? (i.kind === 'page' ? htmlText(String(i.email.body_html || '')) : '')),
+        ].join('\n')));
+      }
+      return searchable.get(d);
+    };
+    return list.filter(d => words.every(w => textOf(d).includes(w)));
+  }
+
   // The details sheet's "where": per account (its position, from the email id's bits above 32),
   // how many of the discussion's emails each folder holds. `kept` is [email, folder] pairs.
   const FOLDER_ORDER = ['inbox', 'sent', 'trash', 'spam', 'drafts'];
@@ -548,6 +567,8 @@
     threadSubject,
     groupThreads,
     buildDiscussions,
+    filterDiscussions,
+    fold,
     bubbleLabels,
     splitAddresses,
     removeEmailFromState,
