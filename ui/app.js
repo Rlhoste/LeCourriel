@@ -861,7 +861,7 @@ function taskBox(task) {
     + `<span class="dm-task-status" role="group" aria-label="${esc(t('dm.taskStatus'))}">`
     + Object.entries(labels).map(([s, label]) => `<button data-status="${s}"${s === task.status ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"'}>${esc(label)}</button>`).join('')
     + `</span><button class="dm-task-go">${esc(t('dm.openTask'))}</button>`
-    + `<button class="dm-task-del" title="${esc(t('dm.deleteTask'))}" aria-label="${esc(t('dm.deleteTask'))}">🗑</button></div>`;
+    + `<button class="dm-task-del" title="${esc(t('dm.deleteTask'))}" aria-label="${esc(t('dm.deleteTask'))}">✕</button></div>`;
 }
 
 // Same command as the board's delete; the board and the discussion both redraw from setTasks.

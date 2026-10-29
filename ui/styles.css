@@ -1733,7 +1733,7 @@ body.compose-window .composer-resize { display: none; }
   --danger: #ff0000; --danger-bg: #ffe0e0; --success: #007a3d;
   --composer-head: #000; --composer-head-text: #ffde00; --composer-head-dim: #fff;
   --toast-bg: #000; --toast-text: #ffde00;
-  --font-ui: "Courier New", Courier, ui-monospace, monospace;
+  --font-ui: "Segoe UI", "Helvetica Neue", Arial, system-ui, sans-serif;
   --radius: 0; --radius-sm: 0; --radius-pill: 0;
   --border-w: 2px;
   --shadow-pop: 4px 4px 0 #000;
@@ -2650,7 +2650,6 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 /* A card grows with its text up to 80%; it stays wide enough for the band, stamp and postmark. */
 [data-theme="brutalist"] .dm-row { min-width: min(360px, 80%); max-width: 80%; }
 /* Sturdy sans-serif for the cards and the list instead of the theme's thin monospace; weight keeps the look. */
-[data-theme="brutalist"] :is(.dm-list, .dm-conv, .dm-info) { font-family: "Segoe UI", "Helvetica Neue", Arial, system-ui, sans-serif; }
 [data-theme="brutalist"] :is(.dm-bubble, .dm-text) { font-size: 15px; font-weight: 600; line-height: 1.45; }
 [data-theme="brutalist"] .dm-row.first { margin-top: 22px; }
 [data-theme="brutalist"] .dm-av-slot { display: none; }
