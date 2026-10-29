@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const {
   normalizedSort,
   buildDiscussions,
+  filterDiscussions,
   sortEmails,
   removeEmailFromState,
   autoUpdatesEnabled,
@@ -817,4 +818,30 @@ test('a received email the board took a task from carries the task, once, after 
     ['inbox', 'attachment', 7],
     ['sent', 'message', null],
   ]);
+});
+
+test('the list search keeps discussions whose people, subjects or message text hold every word', () => {
+  const list = buildDiscussions({
+    inbox: [
+      mail(1, { message_id: '<a@x>', from_name: 'Léo Bianchini', from_email: 'leo@studio.fr', subject: 'Budget', body_text: 'Le devis est prêt.' }),
+      mail(2, { from_name: 'Ann', from_email: 'ann@x.com', subject: 'Lunch', body_text: 'Pizza?' }),
+      mail(4, { subject: 'News', html_only: true, body_html: '<table><tr><td>Big <b>promo</b></td></tr></table>' }),
+    ],
+    sent: [mail(3, { references: '<a@x>', from_email: 'me@work.com', subject: 'Re: Budget 2027', body_text: 'Merci' })],
+  }, ME);
+  const found = q => filterDiscussions(list, q).map(d => d.subject);
+  assert.deepEqual(found('LEO'), ['Budget'], 'a name, accents and case ignored');
+  assert.deepEqual(found('studio.fr'), ['Budget'], 'an address');
+  assert.deepEqual(found('2027'), ['Budget'], 'any subject of the discussion');
+  assert.deepEqual(found('pizza'), ['Lunch'], 'message text');
+  assert.deepEqual(found('promo'), ['News'], 'the text of an email shown as a page');
+  assert.deepEqual(found('pret merci'), ['Budget'], 'words may sit in different messages');
+  assert.deepEqual(found('pizza merci'), [], 'every word must match');
+  assert.deepEqual(found('me@work.com'), [], 'not my own address: it is on every discussion');
+});
+
+test('an empty list search shows the whole list', () => {
+  const list = buildDiscussions({ inbox: [mail(1), mail(2)] }, ME);
+  assert.equal(filterDiscussions(list, '   '), list);
+  assert.equal(filterDiscussions(list, ''), list);
 });
