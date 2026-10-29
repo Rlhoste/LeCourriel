@@ -15,6 +15,7 @@ const {
   attentionEmails,
   activeTasks,
   threadSubject,
+  displaySubject,
   groupThreads,
 } = require('../app-core.js');
 
@@ -233,6 +234,18 @@ test('reply prefixes are ignored when matching subjects', () => {
   assert.equal(threadSubject('RE[2]: budget 2026'), 'budget 2026');
 });
 
+test('a subject shown to the user keeps its case and loses its reply and forward prefixes', () => {
+  assert.equal(displaySubject('Re: Budget 2026'), 'Budget 2026');
+  assert.equal(displaySubject('RE: Fwd: RE: Budget'), 'Budget');
+  assert.equal(displaySubject(' fw: TR[2]:  Le   Budget  '), 'Le Budget');
+  assert.equal(displaySubject('re:FW:Réunion  commerciale'), 'Réunion commerciale');
+  assert.equal(displaySubject('Re: Case Matters Here'), 'Case Matters Here');
+  assert.equal(displaySubject('Troubleshooting: the guide'), 'Troubleshooting: the guide');
+  assert.equal(displaySubject('Re: Re:'), '');
+  assert.equal(displaySubject(''), '');
+  assert.equal(displaySubject(undefined), '');
+});
+
 test('replies are grouped with the email they answer, by headers', () => {
   const sorted = sortEmails([
     mail(1, { message_id: '<a@x>', subject: 'Budget' }),
@@ -300,6 +313,17 @@ test('a list line shows the people, the last message, unread count and top unrea
   assert.equal(line.date_ts, 40);
   assert.equal(line.unread, 2);
   assert.equal(line.priority, 'high_priority');
+});
+
+test('a discussion is named by its cleaned subject, by its people when it has none', () => {
+  const [withSubject] = buildDiscussions({
+    inbox: [mail(1, { from_name: 'Leo Bianchini', from_email: 'leo@d.com', subject: 'Re: Fwd: Budget 2026' })],
+  }, ME);
+  assert.equal(withSubject.heading, 'Budget 2026');
+  const [noSubject] = buildDiscussions({
+    inbox: [mail(1, { from_name: 'Leo Bianchini', from_email: 'leo@d.com', subject: 'Re: Re:' })],
+  }, ME);
+  assert.equal(noSubject.heading, 'Leo');
 });
 
 test('unread emails in Trash or Spam count neither as unread nor for the priority mark', () => {

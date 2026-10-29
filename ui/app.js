@@ -290,14 +290,14 @@ function renderDiscussionLines() {
   lines.innerHTML = list.map(d => `
     <div class="dm-line${d.id === openDiscussionId ? ' active' : ''}" data-id="${esc(d.id)}">
       ${d.priority ? `<span class="dm-prio dm-prio-${esc(d.priority)}"></span>` : ''}
-      ${avatarStack(d.people)}
-      <span class="dm-who">${esc(d.title || d.subject)}</span>
+      <span class="dm-who">${esc(d.heading)}</span>
       <span class="dm-when">${esc(fmtShort(d.date_ts))}</span>
-      <span class="dm-subj">${esc(d.subject)}</span>
+      <span class="dm-people" data-people="${d.people.length}">${peopleLabels(d.people)}</span>
       <span class="dm-last">${esc(d.preview.mine ? t('dm.you', { text: d.preview.text }) : d.preview.text)}</span>
       ${d.unread ? `<span class="dm-badge">${esc(postOffice() ? tn('dm.unread', d.unread) : fmtNumber(d.unread))}</span>` : ''}
     </div>`).join('');
   lines.querySelectorAll('.dm-line').forEach((line, i) => line.addEventListener('click', () => openDiscussion(list[i])));
+  fitPeopleLabels(lines);
 }
 document.getElementById('dm-search').addEventListener('input', () => { if (appState) renderDiscussionLines(); });
 
@@ -318,8 +318,8 @@ function renderDiscussion(d) {
     <div class="dm-head">
       ${avatarStack(d.people)}
       <div class="dm-titles">
-        <div class="dm-people">${esc(d.people.map(p => p.name || p.address).join(', '))}</div>
-        <div class="dm-subject">${esc(d.subject)}</div>
+        <div class="dm-subject">${esc(d.heading)}</div>
+        <div class="dm-people" data-people="${d.people.length}">${peopleLabels(d.people)}</div>
       </div>
       <div class="dm-acts">
         ${inbox.length ? `<button class="dm-act" data-dm="read" title="${esc(t(d.unread ? 'rp.markRead' : 'rp.markUnread'))}">${d.unread ? '✓' : '●'}</button>` : ''}
@@ -343,6 +343,7 @@ function renderDiscussion(d) {
     conv.innerHTML = html;
     conv.appendChild(replyBar(d));
   }
+  fitPeopleLabels(conv.querySelector('.dm-head'));
   const scroll = conv.querySelector('.dm-scroll');
   scroll.scrollTop = keepTop ?? scroll.scrollHeight;
   scroll.addEventListener('click', ev => {   // on the scroll: the find bar rebuilds the bubbles
@@ -656,6 +657,54 @@ function fmtBytes(n) {
 
 const avatar = p => `<span class="dm-av" style="--pc:${p.colour}" title="${esc(p.name || p.address)}">${esc(p.initials)}</span>`;
 const avatarStack = people => `<span class="dm-av-stack">${people.slice(0, 3).map(avatar).join('')}</span>`;
+
+// The people of a discussion as first-name labels in their own colour, the last one "+N" counting
+// those the line has no room for (fitPeopleLabels). No line lays out more than PEOPLE_LABELS names.
+const PEOPLE_LABELS = 12;
+const peopleLabels = people => people.slice(0, PEOPLE_LABELS).map(p =>
+  `<span class="dm-tag" style="--pc:${p.colour}" title="${esc(p.name || p.address)}">${esc(p.short)}</span>`).join('')
+  + (people.length > 1 ? `<span class="dm-rest">+${esc(fmtNumber(people.length - 1))}</span>` : '');
+
+// How many of those labels fit: every one is laid out once, their widths (and the gaps between them)
+// summed against the room the line has, and the ones past that room are hidden. The widths are all
+// read before anything is hidden, so a whole list is measured in one layout, not one per line.
+function fitPeopleLabels(root) {
+  if (!root) return;
+  const read = [...root.querySelectorAll('.dm-people[data-people]')].map(box => {
+    for (const el of box.querySelectorAll('[hidden]')) el.hidden = false;   // measured visible again
+    const tags = [...box.querySelectorAll('.dm-tag')];
+    const rest = box.querySelector('.dm-rest');
+    const gap = parseFloat(getComputedStyle(box).columnGap) || 0;
+    return {
+      box, tags, rest, gap, room: box.clientWidth, total: Number(box.dataset.people),
+      widths: tags.map(el => el.offsetWidth), restW: rest ? rest.offsetWidth + gap : 0,
+    };
+  });
+  for (const r of read) {
+    if (!r.room) continue;   // not laid out (the panel is hidden): leave the labels as they are
+    const used = k => r.widths.slice(0, k).reduce((a, w) => a + w, 0) + r.gap * (k - 1);
+    let shown = r.widths.length;
+    // Hiding a person leaves room for "+N" too; the first label always stays, however long it is.
+    while (shown > 1 && used(shown) + (shown < r.total ? r.restW : 0) > r.room) shown--;
+    r.tags.forEach((el, i) => { el.hidden = i >= shown; });
+    r.box.classList.toggle('single', shown === 1);
+    if (!r.rest) continue;
+    const hasRoom = used(shown) + r.restW <= r.room;
+    r.rest.hidden = !(r.total > shown && hasRoom);
+    if (!r.rest.hidden) r.rest.textContent = `+${fmtNumber(r.total - shown)}`;
+  }
+}
+
+// A narrower window changes how many names fit: the lines and the header are measured again.
+let refitNames = null;
+addEventListener('resize', () => {
+  clearTimeout(refitNames);
+  refitNames = setTimeout(() => {
+    if (activePanel !== 'discussions') return;
+    fitPeopleLabels(document.getElementById('dm-lines'));
+    fitPeopleLabels(document.querySelector('.dm-head'));
+  }, 200);
+});
 
 // ── Discussion details (ⓘ sheet), whole-discussion actions and the message menu ──
 let dmInfoOpen = false;

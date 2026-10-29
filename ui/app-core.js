@@ -53,6 +53,11 @@
     return String(subject || '').replace(REPLY_PREFIX, '').replace(/\s+/g, ' ').trim().toLowerCase();
   }
 
+  // The same prefixes taken off a subject for display: what is left keeps the case it was written in.
+  function displaySubject(subject) {
+    return String(subject || '').replace(REPLY_PREFIX, '').replace(/\s+/g, ' ').trim();
+  }
+
   // Groups an already sorted list into discussions. Emails are linked by Message-ID and
   // In-Reply-To / References; when those are missing, a reply ("Re: …") joins the email
   // with the same subject. Each discussion keeps the place of its first email in the sorted
@@ -137,12 +142,16 @@
       for (const a of [...splitAddresses(e.to), ...splitAddresses(e.cc)]) meet(a.name, a.address);
     }
     const others = [...people.values()];
+    const names = others.slice(0, 2).map(p => p.short).join(', ') + (others.length > 2 ? ` +${others.length - 2}` : '');
     const messages = discussionItems(emails, isMine, people, context.now ?? Date.now(), folderOf, texts, taskOf);
     return {
       // A uid is only unique within its folder.
       id: String(emails[0].message_id || `${folderOf.get(emails[0])}:${emails[0].uid}`),
       people: others,
-      title: others.slice(0, 2).map(p => p.short).join(', ') + (others.length > 2 ? ` +${others.length - 2}` : ''),
+      title: names,
+      // What a discussion is called: its subject without the reply and forward prefixes,
+      // the people's names when it has no subject.
+      heading: displaySubject(emails[0].subject) || names,
       subject: emails[0].subject || '',
       preview: { mine: isMine(last), text: String(last.body_text || '').replace(/\s+/g, ' ').trim().slice(0, 200) },
       date_ts: Number(last.date_ts) || 0,
@@ -846,6 +855,7 @@
     normalizedSort,
     sortEmails,
     threadSubject,
+    displaySubject,
     groupThreads,
     buildDiscussions,
     filterDiscussions,
