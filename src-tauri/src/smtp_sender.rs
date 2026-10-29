@@ -119,7 +119,7 @@ fn parse_list(list: &str, field: &str) -> Result<Vec<Mailbox>> {
 /// The message body: the plain-text alternative of the HTML, its inline images, and the
 /// attached files. With attachments the whole becomes `multipart/mixed`, which is what a
 /// reader expects: the alternative/related part stays one piece of it.
-pub fn build_body(html: &str, files: &[Loaded]) -> MultiPart {
+pub fn build_body(html: &str, files: Vec<Loaded>) -> MultiPart {
     let (html_body, images) = extract_inline_images(html);
     let html_doc =
         format!("<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head><body>{}</body></html>", html_body);
@@ -135,7 +135,8 @@ pub fn build_body(html: &str, files: &[Loaded]) -> MultiPart {
     }
     let mut mixed = MultiPart::mixed().multipart(alternative);
     for file in files {
-        mixed = mixed.singlepart(attachment_part(&file.filename, &file.content_type, file.data.clone()));
+        // The bytes are moved, not copied: a 25 MB attachment must not double in memory.
+        mixed = mixed.singlepart(attachment_part(&file.filename, &file.content_type, file.data));
     }
     mixed
 }
@@ -187,8 +188,9 @@ pub async fn send_message(cfg: &SmtpConfig, mail: &OutgoingMail) -> Result<Vec<u
         builder = builder.in_reply_to(id.trim().to_string()).references(id.trim().to_string());
     }
 
-    let files = attachments::load_all(&mail.attachments)?;
-    let email = builder.multipart(build_body(&mail.html, &files)).context("Failed to build email message")?;
+    let email = builder
+        .multipart(build_body(&mail.html, attachments::load_all(&mail.attachments)?))
+        .context("Failed to build email message")?;
 
     let creds = Credentials::new(cfg.username.clone(), cfg.password.clone());
 

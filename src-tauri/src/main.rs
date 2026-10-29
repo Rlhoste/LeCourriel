@@ -1218,6 +1218,8 @@ fn main() {
         .init();
 
     info!("Starting Le courriel (Tauri)");
+    // The copies the attach picker left in the temp folder are good for this session only.
+    attachments::cleanup_staging();
     match paths::init_data_dir() {
         Ok(dir) => info!("Data directory: {}", dir.display()),
         Err(e) => tracing::warn!("Could not use the data directory ({}); using the current one", e),

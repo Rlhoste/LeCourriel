@@ -8,9 +8,11 @@
 use anyhow::{anyhow, Context, Result};
 use base64::Engine;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock};
 use zip::write::SimpleFileOptions;
 use zip::CompressionMethod;
 use zip::ZipWriter;
@@ -43,7 +45,52 @@ pub struct DroppedItem {
     pub files: Vec<DroppedFile>,
 }
 
+/// The most a message may carry in attachments, in bytes: providers refuse more, and the
+/// whole message travels in memory.
+pub const MAX_TOTAL_BYTES: u64 = 25 * 1024 * 1024;
+
+/// The message is refused with the limit it went over, in MB (what a user understands).
+fn too_big(total: u64, limit: u64) -> anyhow::Error {
+    anyhow!(
+        "Attachments are limited to {} MB in total (this message would be {} MB)",
+        limit / (1024 * 1024),
+        total / (1024 * 1024)
+    )
+}
+
+/// Add one size to the running total of a message, and refuse the whole thing over the limit.
+fn add_size(total: &mut u64, size: u64, limit: u64) -> Result<()> {
+    *total += size;
+    if *total > limit {
+        return Err(too_big(*total, limit));
+    }
+    Ok(())
+}
+
+/// The paths this process gave the UI as attachments. Sending reads nothing else, so a message
+/// cannot be made to read any file on disk. Composer windows are separate webviews of the same
+/// process, hence one process-wide set.
+fn trusted() -> &'static Mutex<HashSet<String>> {
+    static TRUSTED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    TRUSTED.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+fn trust(path: &str) {
+    let mut set = trusted().lock().unwrap_or_else(|e| e.into_inner());
+    set.insert(path.to_string());
+}
+
+fn check_trusted(path: &str) -> Result<()> {
+    let known = trusted().lock().unwrap_or_else(|e| e.into_inner()).contains(path);
+    if known {
+        Ok(())
+    } else {
+        Err(anyhow!("This file was not attached in Le courriel: {path}"))
+    }
+}
+
 /// A file ready to go into the multipart message.
+#[derive(Debug)]
 pub struct Loaded {
     pub filename: String,
     pub content_type: String,
@@ -138,8 +185,12 @@ pub fn safe_file_name(name: &str) -> String {
     }
 }
 
-/// The name a file keeps inside a zip: under `top` (the folder it came from), with `..`,
-/// `.` and leading separators removed, and backslashes turned into `/`.
+/// The name a file keeps inside a zip: under `top` when one is given (the dropped folders),
+/// with `..`, `.` and leading separators removed, and backslashes turned into `/`.
+///
+/// `top` is only given for a dropped item: the webview names its paths from the dropped folder,
+/// so its name must not appear twice. A folder read from disk prefixes its own name in
+/// `collect_dir` instead, where a subfolder of the same name must stay visible.
 pub fn zip_entry_name(top: Option<&str>, rel: &str) -> String {
     let normalised = rel.replace('\\', "/");
     let mut parts: Vec<String> = Vec::new();
@@ -209,11 +260,20 @@ fn write_staged(name: &str, bytes: Vec<u8>) -> Result<AttachmentInfo> {
     let size = bytes.len() as u64;
     let path = staging_dir().join(&clean);
     std::fs::write(&path, &bytes).with_context(|| format!("Cannot write {clean}"))?;
-    Ok(AttachmentInfo { name: clean, size, path: path.to_string_lossy().into_owned() })
+    let path = path.to_string_lossy().into_owned();
+    trust(&path);
+    Ok(AttachmentInfo { name: clean, size, path })
 }
 
 /// Every file under `dir`, named as it sits inside `root`, prefixed with `top`.
-fn collect_dir(root: &Path, top: &str, dir: &Path, out: &mut Vec<(String, Vec<u8>)>) -> Result<()> {
+fn collect_dir(
+    root: &Path,
+    top: &str,
+    dir: &Path,
+    total: &mut u64,
+    limit: u64,
+    out: &mut Vec<(String, Vec<u8>)>,
+) -> Result<()> {
     let read = std::fs::read_dir(dir).with_context(|| format!("Cannot read {}", dir.display()))?;
     for entry in read {
         let entry = entry.with_context(|| format!("Cannot read {}", dir.display()))?;
@@ -225,12 +285,18 @@ fn collect_dir(root: &Path, top: &str, dir: &Path, out: &mut Vec<(String, Vec<u8
         if kind.is_dir() {
             // Symbolic links are not followed (their `is_dir` is false), so a link back to
             // a parent cannot loop here.
-            collect_dir(root, top, &path, out)?;
+            collect_dir(root, top, &path, total, limit, out)?;
         } else if kind.is_file() {
+            // The size is known before the bytes are read: a folder far too big is refused
+            // while it is walked, not after everything was in memory.
+            let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+            add_size(total, size, limit).with_context(|| format!("In {}", dir.display()))?;
             let inside = path.strip_prefix(root).unwrap_or(path.as_path());
             let rel = inside.to_string_lossy().replace('\\', "/");
             match std::fs::read(&path) {
-                Ok(data) => out.push((zip_entry_name(Some(top), &rel), data)),
+                // `top` is put in front of the path here rather than by `zip_entry_name`: a
+                // folder may hold a subfolder of its own name, and both files must be kept.
+                Ok(data) => out.push((zip_entry_name(None, &format!("{top}/{rel}")), data)),
                 Err(e) => tracing::warn!("Attachment skipped {}: {e}", path.display()),
             }
         }
@@ -239,7 +305,7 @@ fn collect_dir(root: &Path, top: &str, dir: &Path, out: &mut Vec<(String, Vec<u8
 }
 
 /// Zip a folder on disk into one `FolderName.zip` in the staging folder.
-pub fn zip_folder(dir: &Path) -> Result<AttachmentInfo> {
+fn zip_folder(dir: &Path, total: &mut u64, limit: u64) -> Result<AttachmentInfo> {
     let top = dir
         .file_name()
         .and_then(|n| n.to_str())
@@ -247,7 +313,7 @@ pub fn zip_folder(dir: &Path) -> Result<AttachmentInfo> {
         .filter(|n| n != "attachment")
         .ok_or_else(|| anyhow!("Cannot name this folder"))?;
     let mut entries = Vec::new();
-    collect_dir(dir, &top, dir, &mut entries)?;
+    collect_dir(dir, &top, dir, total, limit, &mut entries)?;
     if entries.is_empty() {
         return Err(anyhow!("{top} is empty"));
     }
@@ -257,11 +323,17 @@ pub fn zip_folder(dir: &Path) -> Result<AttachmentInfo> {
 
 /// Prepare what the picker chose: files as they are, folders as one zip.
 pub fn prepare(paths: &[String]) -> Result<Vec<AttachmentInfo>> {
+    prepare_limit(paths, MAX_TOTAL_BYTES)
+}
+
+/// `prepare` with the total limit given, so the tests can use a small one.
+pub(crate) fn prepare_limit(paths: &[String], limit: u64) -> Result<Vec<AttachmentInfo>> {
     let mut out = Vec::new();
+    let mut total = 0u64;
     for p in paths.iter().filter(|p| !p.trim().is_empty()) {
         let path = Path::new(p);
         if path.is_dir() {
-            out.push(zip_folder(path)?);
+            out.push(zip_folder(path, &mut total, limit)?);
         } else if path.is_file() {
             let name = path
                 .file_name()
@@ -269,6 +341,8 @@ pub fn prepare(paths: &[String]) -> Result<Vec<AttachmentInfo>> {
                 .map(safe_file_name)
                 .ok_or_else(|| anyhow!("Cannot name {p}"))?;
             let size = std::fs::metadata(path).with_context(|| format!("Cannot read {name}"))?.len();
+            add_size(&mut total, size, limit)?;
+            trust(p);
             out.push(AttachmentInfo { name, size, path: p.clone() });
         } else {
             return Err(anyhow!("This file is no longer there: {p}"));
@@ -286,13 +360,21 @@ fn decode_base64(text: &str) -> Result<Vec<u8>> {
 
 /// Write what was dropped: a file as it is, a folder as one zip of the dropped files.
 pub fn save_dropped(items: &[DroppedItem]) -> Result<Vec<AttachmentInfo>> {
+    save_dropped_limit(items, MAX_TOTAL_BYTES)
+}
+
+/// `save_dropped` with the total limit given, so the tests can use a small one.
+pub(crate) fn save_dropped_limit(items: &[DroppedItem], limit: u64) -> Result<Vec<AttachmentInfo>> {
     let mut out = Vec::new();
+    let mut total = 0u64;
     for item in items {
         let name = safe_file_name(&item.name);
         if item.dir {
             let mut entries = Vec::new();
             for file in &item.files {
-                entries.push((zip_entry_name(Some(&name), &file.path), decode_base64(&file.data)?));
+                let data = decode_base64(&file.data)?;
+                add_size(&mut total, data.len() as u64, limit)?;
+                entries.push((zip_entry_name(Some(&name), &file.path), data));
             }
             if entries.is_empty() {
                 return Err(anyhow!("{name} is empty"));
@@ -301,7 +383,9 @@ pub fn save_dropped(items: &[DroppedItem]) -> Result<Vec<AttachmentInfo>> {
             out.push(write_staged(&format!("{name}.zip"), bytes)?);
         } else {
             let one = item.files.first().ok_or_else(|| anyhow!("{name} is empty"))?;
-            out.push(write_staged(&name, decode_base64(&one.data)?)?);
+            let data = decode_base64(&one.data)?;
+            add_size(&mut total, data.len() as u64, limit)?;
+            out.push(write_staged(&name, data)?);
         }
     }
     Ok(out)
@@ -309,15 +393,58 @@ pub fn save_dropped(items: &[DroppedItem]) -> Result<Vec<AttachmentInfo>> {
 
 /// Read every attachment path for sending.
 pub fn load_all(paths: &[String]) -> Result<Vec<Loaded>> {
-    paths
-        .iter()
-        .filter(|p| !p.trim().is_empty())
-        .map(|p| {
-            let path = Path::new(p);
-            let filename =
-                path.file_name().and_then(|n| n.to_str()).ok_or_else(|| anyhow!("Cannot name {p}"))?.to_string();
-            let data = std::fs::read(path).with_context(|| format!("Cannot read {filename}"))?;
-            Ok(Loaded { content_type: guess_mime(&filename), filename, data })
-        })
-        .collect()
+    load_all_limit(paths, MAX_TOTAL_BYTES)
+}
+
+/// `load_all` with the total limit given, so the tests can use a small one. Only the paths
+/// `prepare`/`save_dropped` handed out are read, and the total is checked before reading.
+pub(crate) fn load_all_limit(paths: &[String], limit: u64) -> Result<Vec<Loaded>> {
+    let mut total = 0u64;
+    let mut out = Vec::new();
+    for p in paths.iter().filter(|p| !p.trim().is_empty()) {
+        check_trusted(p)?;
+        let path = Path::new(p);
+        let filename = path.file_name().and_then(|n| n.to_str()).ok_or_else(|| anyhow!("Cannot name {p}"))?.to_string();
+        let size = std::fs::metadata(path).with_context(|| format!("Cannot read {filename}"))?.len();
+        add_size(&mut total, size, limit)?;
+        let data = std::fs::read(path).with_context(|| format!("Cannot read {filename}"))?;
+        out.push(Loaded { content_type: guess_mime(&filename), filename, data });
+    }
+    Ok(out)
+}
+
+/// Delete the staging subfolders a day old: a copy left behind by a message that was never
+/// sent should not stay on disk forever. Best effort — the app starts either way.
+pub fn cleanup_staging() {
+    cleanup_staging_in(&out_dir(), std::time::SystemTime::now(), std::time::Duration::from_secs(24 * 3600));
+}
+
+pub(crate) fn cleanup_staging_in(dir: &Path, now: std::time::SystemTime, max_age: std::time::Duration) {
+    let Some(cutoff) = now.checked_sub(max_age) else { return };
+    let read = match std::fs::read_dir(dir) {
+        Ok(read) => read,
+        Err(e) => {
+            tracing::debug!("Nothing to clean in {}: {e}", dir.display());
+            return;
+        }
+    };
+    for entry in read.flatten() {
+        let Ok(kind) = entry.file_type() else { continue };
+        if !kind.is_dir() {
+            continue;
+        }
+        let path = entry.path();
+        let older = match entry.metadata().and_then(|m| m.modified()) {
+            Ok(when) => when < cutoff,
+            Err(e) => {
+                tracing::warn!("Cannot check the age of {}: {e}", path.display());
+                false
+            }
+        };
+        if older {
+            if let Err(e) = std::fs::remove_dir_all(&path) {
+                tracing::warn!("Cannot remove {}: {e}", path.display());
+            }
+        }
+    }
 }

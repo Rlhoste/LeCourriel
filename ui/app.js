@@ -307,8 +307,10 @@ document.getElementById('dm-search').addEventListener('input', () => { if (appSt
 let shownDiscussionId = null;   // the discussion #dm-conv shows
 function renderDiscussion(d) {
   const conv = document.getElementById('dm-conv');
-  // A reply being written survives refreshes of the same discussion.
-  const reply = d && replyDraft?.id === d.id && replyDraft.text ? conv.querySelector('.dm-reply') : null;
+  // A reply being written survives refreshes of the same discussion: a typed word, or a file
+  // picked for it (a reply can be sent with an attachment and no text).
+  const reply = d && replyDraft?.id === d.id && (replyDraft.text || replyDraft.attachments?.length)
+    ? conv.querySelector('.dm-reply') : null;
   // So does the reading position, unless it was at the newest message.
   const old = d && shownDiscussionId === d.id ? conv.querySelector('.dm-scroll') : null;
   const keepTop = old && old.scrollHeight - old.scrollTop - old.clientHeight >= 4 ? old.scrollTop : null;
@@ -475,7 +477,9 @@ const attachListHtml = items => items.map((a, i) =>
   + `<span class="attach-size">${esc(fmtBytes(a.size))}</span>`
   + `<button class="attach-x" data-at="${i}" title="${esc(t('dm.remove'))}">✕</button></span>`).join('');
 
-// One place that can hold attachments: the composer, or a discussion's reply bar.
+// One place that can hold attachments: the composer, or a discussion's reply bar. `items`
+// belongs to this place alone, and a pick or a drop that finishes after its list left the page
+// (the bar was rebuilt, the composer closed) is thrown away rather than shown somewhere else.
 function attachTarget(list, items, onError, onChange) {
   const show = () => {
     list.classList.toggle('hidden', !items.length);
@@ -488,12 +492,18 @@ function attachTarget(list, items, onError, onChange) {
     show();
     if (onChange) onChange();
   });
-  const add = got => { items.push(...got); show(); if (onChange) onChange(); };
+  const add = got => {
+    if (!list.isConnected) return;
+    items.push(...got);
+    show();
+    if (onChange) onChange();
+  };
   const fail = err => onError(t('cmp.attachFailed', { err: String(err) }));
   show();
   return {
     items,
     show,
+    add,
     clear: () => { items.length = 0; show(); },
     // The OS picker takes files or a folder, never both at once: hence the small menu.
     async pick(kind) {
@@ -563,6 +573,13 @@ function openAttachMenu(anchor, target) {
 
 // #44: files and folders can be dropped on the editor or on the reply bar. The zone shows a
 // sign while something is dragged over it, and hides it again on leave or drop.
+const carriesFiles = e => Array.from(e.dataTransfer?.types || []).includes('Files');
+
+// Outside a drop zone, a drop of files is swallowed here: left alone, the webview would open
+// the file and leave the app.
+document.addEventListener('dragover', e => { if (carriesFiles(e)) e.preventDefault(); });
+document.addEventListener('drop', e => { if (carriesFiles(e)) e.preventDefault(); });
+
 function setupDropZone(zone, target, skipFor) {
   // The editor already carries its sign in the HTML shell; the reply bar gets one here.
   let overlay = zone.querySelector(':scope > .drop-overlay');
@@ -573,7 +590,6 @@ function setupDropZone(zone, target, skipFor) {
     zone.appendChild(overlay);
   }
   let depth = 0;
-  const carriesFiles = e => Array.from(e.dataTransfer?.types || []).includes('Files');
   zone.addEventListener('dragenter', e => {
     if (!carriesFiles(e)) return;
     e.preventDefault();
@@ -655,14 +671,13 @@ const isImageName = name => /\.(png|jpe?g|gif|webp|bmp|svg|heic|tiff?)$/i.test(n
 // ── Discussion mode: the reply bar ──
 // Reply-all to the latest message. The From/To/Cc bubbles appear once something is typed;
 // Send goes through the usual send path, the expand icon moves the reply to the full editor.
-const replyAttachments = [];   // { name, size, path }, sent with the reply
-let replyAttach = null;        // the open bar's attach target
-
+// The attachments ({ name, size, path }) live on the draft being written: each bar owns its
+// own list, so a late pick or drop cannot land in another discussion's bar.
 function replyBar(d) {
-  replyAttachments.length = 0;
   replyDraft = {
     id: d.id, email: d.reply.email, subject: d.reply.subject, from: d.reply.from,
     to: [...d.reply.to], cc: [...d.reply.cc], bcc: [], text: '', more: false, adding: false,
+    attachments: [],
   };
   const bar = document.createElement('footer');
   bar.className = 'dm-reply';
@@ -682,19 +697,21 @@ function replyBar(d) {
   });
   text.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendReply(bar); } });
   bar.querySelector('.dm-send').addEventListener('click', () => sendReply(bar));
-  replyAttach = attachTarget(bar.querySelector('.dm-attach-list'), replyAttachments, msg => showToast(msg));
+  const target = attachTarget(bar.querySelector('.dm-attach-list'), replyDraft.attachments,
+    msg => showToast(msg));
+  bar.replyAttach = target;   // this bar's own target, even after another bar was built
   const clip = bar.querySelector('.dm-attach');
-  clip.addEventListener('click', () => openAttachMenu(clip, replyAttach));
-  setupDropZone(bar, replyAttach);
+  clip.addEventListener('click', () => openAttachMenu(clip, target));
+  setupDropZone(bar, target);
   bar.querySelector('.dm-expand').addEventListener('click', () => {
     const r = replyDraft;
     openCompose({
       mode: 'reply', email: r.email, subject: r.subject, account: r.from, html: replyHtml(r.text),
       to: addressList(r.to), cc: addressList(r.cc), bcc: addressList(r.bcc),
-      attachments: replyAttachments.map(a => ({ ...a })),
+      attachments: r.attachments.map(a => ({ ...a })),
     });
     text.value = r.text = '';
-    replyAttach.clear();   // they went to the editor with the text
+    target.clear();   // they went to the editor with the text
   });
   bar.querySelector('.dm-recips').addEventListener('click', e => replyRecipientClick(bar, e));
   bar.querySelector('.dm-recips').addEventListener('change', e => {
@@ -760,7 +777,8 @@ const addressList = people => people
 
 async function sendReply(bar) {
   const r = replyDraft;
-  if (!r.text.trim()) return;
+  // A file alone is a reply: an empty text with an attachment is sent, not swallowed.
+  if (!r.text.trim() && !r.attachments.length) return;
   if (!r.to.length && !r.cc.length && !r.bcc.length) { showToast(t('cmp.needRecipient')); return; }
   const btn = bar.querySelector('.dm-send');
   btn.disabled = true;
@@ -769,11 +787,11 @@ async function sendReply(bar) {
       to: addressList(r.to), cc: addressList(r.cc), bcc: addressList(r.bcc), subject: r.subject,
       html: replyHtml(r.text) + signatureBlock(r.from, 'reply') + replyQuote(r.email),
       inReplyTo: r.email.message_id || null, account: r.from,
-      attachments: replyAttachments.map(a => a.path),
+      attachments: r.attachments.map(a => a.path),
     });
     showToast(t('cmp.sent'));
     bar.querySelector('.dm-text').value = r.text = '';
-    if (replyAttach) replyAttach.clear();
+    bar.replyAttach.clear();
   } catch (e) {
     showToast(t('cmp.sendFailed', { err: e }));
   }
@@ -2763,32 +2781,45 @@ function setupComposeImages() {
     fileInput.value = '';
   });
   body.addEventListener('paste', e => {
-    const files = Array.from(e.clipboardData?.files || []).filter(f => f.type.startsWith('image/'));
+    const files = Array.from(e.clipboardData?.files || []).filter(f => isImageName(f.name));
     if (!files.length) return;
     e.preventDefault();
     files.forEach(insertImageFile);
   });
   body.addEventListener('dragover', e => {
-    if (Array.from(e.dataTransfer?.types || []).includes('Files')) e.preventDefault();
+    if (carriesFiles(e)) e.preventDefault();
   });
   body.addEventListener('drop', e => {
-    const files = Array.from(e.dataTransfer?.files || []).filter(f => f.type.startsWith('image/'));
+    const files = Array.from(e.dataTransfer?.files || []).filter(f => isImageName(f.name));
     if (!files.length) return;
     e.preventDefault();
     files.forEach(insertImageFile);
   });
 }
 
+// One rule for "a picture for the text": the extension, the same one the drop zone uses to
+// decide what stays inline (the MIME type is missing for some dropped files). Anything refused
+// inline — too big, or not one of these types — is attached instead of being lost.
 function insertImageFile(file) {
-  if (!file.type.startsWith('image/')) return;
-  if (file.size > MAX_IMAGE_BYTES) {
-    setComposeStatus(t('cmp.imageTooLarge', { name: file.name }), true);
+  if (isImageName(file.name) && file.size <= MAX_IMAGE_BYTES) {
+    const reader = new FileReader();
+    reader.onload = () => execCompose('insertHTML',
+      `<img src="${reader.result}" alt="${esc(file.name)}" style="max-width:100%">`);
+    reader.readAsDataURL(file);
     return;
   }
-  const reader = new FileReader();
-  reader.onload = () => execCompose('insertHTML',
-    `<img src="${reader.result}" alt="${esc(file.name)}" style="max-width:100%">`);
-  reader.readAsDataURL(file);
+  if (isImageName(file.name)) setComposeStatus(t('cmp.imageTooLarge', { name: file.name }));
+  attachFiles([file]);
+}
+
+// The webview gives no disk path for a picked or pasted file: the bytes go to the backend,
+// which writes them and answers with the { name, size, path } of the attachment.
+function attachFiles(files) {
+  Promise.all(files.map(async file => {
+    const item = { name: file.name, dir: false, files: [{ path: file.name, data: await readAsDataUrl(file) }] };
+    return (await cmd('save_dropped_attachments', { items: [item] }))[0];
+  })).then(got => composeAttach.add(got.flat().filter(Boolean)))
+    .catch(err => setComposeStatus(t('cmp.attachFailed', { err: String(err) }), true));
 }
 
 // GIF picker: trending on open, search as you type (debounced).

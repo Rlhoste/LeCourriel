@@ -3680,12 +3680,132 @@ urgency = "high"
     fn test_load_all_names_and_types_each_file() {
         let dir = isolated_test_dir("attach-load");
         std::fs::write(dir.join("photo.png"), [1, 2, 3]).unwrap();
-        let loaded = crate::attachments::load_all(&[dir.join("photo.png").to_string_lossy().to_string()]).unwrap();
+        // Only what the app handed out can be read: `prepare` is what hands it out.
+        let infos = crate::attachments::prepare(&[dir.join("photo.png").to_string_lossy().to_string()]).unwrap();
+        let loaded = crate::attachments::load_all(&[infos[0].path.clone()]).unwrap();
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].filename, "photo.png");
         assert_eq!(loaded[0].content_type, "image/png");
         assert_eq!(loaded[0].data, vec![1, 2, 3]);
         assert!(crate::attachments::load_all(&[dir.join("nope.png").to_string_lossy().to_string()]).is_err());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_load_all_refuses_a_path_the_app_never_handed_out() {
+        let dir = isolated_test_dir("attach-trusted");
+        let secret = dir.join("secret.txt");
+        std::fs::write(&secret, "top secret").unwrap();
+        let as_attachment = secret.to_string_lossy().to_string();
+
+        // A message cannot be made to read a file that was never attached.
+        let one = std::slice::from_ref(&as_attachment);
+        let err = crate::attachments::load_all(one).unwrap_err().to_string();
+        assert!(err.contains("was not attached"), "{err}");
+
+        // The same path, once the picker gave it, is read like any other attachment.
+        let infos = crate::attachments::prepare(one).unwrap();
+        assert_eq!(infos[0].path, as_attachment);
+        assert_eq!(crate::attachments::load_all(&[as_attachment]).unwrap()[0].data, b"top secret");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_prepare_refuses_more_than_the_size_limit() {
+        let dir = isolated_test_dir("attach-limit");
+        std::fs::write(dir.join("one.bin"), vec![7u8; 600_000]).unwrap();
+        std::fs::write(dir.join("two.bin"), vec![7u8; 600_000]).unwrap();
+        let limit = 1024 * 1024;
+
+        // One file under the limit goes through, the second one is refused.
+        let one = crate::attachments::prepare_limit(&[dir.join("one.bin").to_string_lossy().to_string()], limit);
+        assert_eq!(one.unwrap().len(), 1);
+        let both = crate::attachments::prepare_limit(
+            &[dir.join("one.bin").to_string_lossy().to_string(), dir.join("two.bin").to_string_lossy().to_string()],
+            limit,
+        );
+        let err = both.unwrap_err().to_string();
+        assert!(err.contains("limited to 1 MB"), "{err}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_a_folder_bigger_than_the_limit_is_refused_while_it_is_walked() {
+        let dir = isolated_test_dir("attach-limit-dir");
+        std::fs::create_dir_all(dir.join("Big/inner")).unwrap();
+        std::fs::write(dir.join("Big/a.bin"), vec![7u8; 600_000]).unwrap();
+        std::fs::write(dir.join("Big/inner/b.bin"), vec![7u8; 600_000]).unwrap();
+        let err = crate::attachments::prepare_limit(&[dir.join("Big").to_string_lossy().to_string()], 1024 * 1024)
+            .unwrap_err();
+        // The command shows the whole chain, hence `{:#}` here.
+        let err = format!("{:#}", err);
+        assert!(err.contains("limited to 1 MB"), "{err}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_dropped_items_and_sending_stop_at_the_size_limit() {
+        use base64::Engine;
+        let b64 = base64::engine::general_purpose::STANDARD.encode(vec![7u8; 600_000]);
+        let items: Vec<crate::attachments::DroppedItem> = serde_json::from_value(serde_json::json!([
+            { "name": "Big", "dir": true,
+              "files": [{ "path": "Big/a.bin", "data": b64 }, { "path": "Big/b.bin", "data": b64 }] },
+        ]))
+        .unwrap();
+        let err = crate::attachments::save_dropped_limit(&items, 1024 * 1024).unwrap_err().to_string();
+        assert!(err.contains("limited to 1 MB"), "{err}");
+
+        // At sending time too: what the paths add up to is checked before they are read.
+        let dir = isolated_test_dir("attach-limit-send");
+        std::fs::write(dir.join("one.bin"), vec![7u8; 600_000]).unwrap();
+        std::fs::write(dir.join("two.bin"), vec![7u8; 600_000]).unwrap();
+        let infos = crate::attachments::prepare(&[
+            dir.join("one.bin").to_string_lossy().to_string(),
+            dir.join("two.bin").to_string_lossy().to_string(),
+        ])
+        .unwrap();
+        let paths: Vec<String> = infos.iter().map(|i| i.path.clone()).collect();
+        let err = crate::attachments::load_all_limit(&paths, 1024 * 1024).unwrap_err().to_string();
+        assert!(err.contains("limited to 1 MB"), "{err}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_a_subfolder_named_like_its_folder_keeps_both_files() {
+        let dir = isolated_test_dir("attach-same-name");
+        std::fs::create_dir_all(dir.join("Docs/Docs")).unwrap();
+        std::fs::write(dir.join("Docs/a.txt"), "outer").unwrap();
+        std::fs::write(dir.join("Docs/Docs/a.txt"), "inner").unwrap();
+
+        let infos = crate::attachments::prepare(&[dir.join("Docs").to_string_lossy().to_string()]).unwrap();
+        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(std::fs::read(&infos[0].path).unwrap())).unwrap();
+        assert_eq!(zip_names(&mut archive), vec!["Docs/Docs/a.txt", "Docs/a.txt"]);
+        assert_eq!(zip_file(&mut archive, "Docs/a.txt"), b"outer");
+        assert_eq!(zip_file(&mut archive, "Docs/Docs/a.txt"), b"inner");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_staging_folders_older_than_a_day_are_deleted_on_start() {
+        use std::time::{Duration, SystemTime};
+        let dir = isolated_test_dir("attach-staging");
+        let day = Duration::from_secs(24 * 3600);
+        let old = dir.join("1-old");
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::write(old.join("copy.bin"), "left behind").unwrap();
+        let stray = dir.join("stray.bin");
+        std::fs::write(&stray, "not a folder").unwrap();
+
+        // Seen a day later, the folder is gone; the loose file next to it is left alone.
+        crate::attachments::cleanup_staging_in(&dir, SystemTime::now() + day, day);
+        assert!(!old.exists(), "a staging folder a day old must be deleted");
+        assert!(stray.exists());
+
+        // A folder written since the last start is kept.
+        let fresh = dir.join("2-fresh");
+        std::fs::create_dir_all(&fresh).unwrap();
+        crate::attachments::cleanup_staging_in(&dir, SystemTime::now(), day);
+        assert!(fresh.exists(), "a fresh staging folder must be kept");
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -3709,7 +3829,7 @@ urgency = "high"
             .from("me@example.com".parse().unwrap())
             .to("you@example.com".parse().unwrap())
             .subject("With a file")
-            .multipart(crate::smtp_sender::build_body("<p>Signed</p>", &files))
+            .multipart(crate::smtp_sender::build_body("<p>Signed</p>", files))
             .unwrap();
         let raw = String::from_utf8_lossy(&mail.formatted()).replace("\r\n", "\n");
 
@@ -3733,7 +3853,7 @@ urgency = "high"
             .from("me@example.com".parse().unwrap())
             .to("you@example.com".parse().unwrap())
             .subject("Plain")
-            .multipart(crate::smtp_sender::build_body("<p>Hi</p>", &[]))
+            .multipart(crate::smtp_sender::build_body("<p>Hi</p>", Vec::new()))
             .unwrap();
         let raw = String::from_utf8_lossy(&mail.formatted()).replace("\r\n", "\n");
         assert!(!raw.contains("multipart/mixed"), "{raw}");
