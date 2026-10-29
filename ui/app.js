@@ -322,10 +322,10 @@ function renderDiscussion(d) {
         <div class="dm-people" data-people="${d.people.length}">${peopleLabels(d.people)}</div>
       </div>
       <div class="dm-acts">
-        ${inbox.length ? `<button class="dm-act" data-dm="read" title="${esc(t(d.unread ? 'rp.markRead' : 'rp.markUnread'))}">${d.unread ? '✓' : '●'}</button>` : ''}
-        <button class="dm-act" data-dm="archive" title="${esc(t('dm.archive'))}">🗄</button>
-        <button class="dm-act" data-dm="delete" title="${esc(t('rp.delete'))}">🗑</button>
-        <button class="dm-act${dmInfoOpen ? ' on' : ''}" data-dm="info" title="${esc(t('dm.details'))}">ⓘ</button>
+        ${inbox.length ? dmActButton('read', d.unread ? 'rp.markRead' : 'rp.markUnread', d.unread ? 'read' : 'unread') : ''}
+        ${dmActButton('archive', 'dm.archive', 'archive')}
+        ${dmActButton('delete', 'rp.delete', 'delete')}
+        ${dmActButton('info', 'dm.details', 'info', dmInfoOpen)}
       </div>
     </div>
     <div class="dm-find${dmFind.open ? '' : ' hidden'}">
@@ -657,6 +657,21 @@ function fmtBytes(n) {
 
 const avatar = p => `<span class="dm-av" style="--pc:${p.colour}" title="${esc(p.name || p.address)}">${esc(p.initials)}</span>`;
 const avatarStack = people => `<span class="dm-av-stack">${people.slice(0, 3).map(avatar).join('')}</span>`;
+
+// The whole-discussion buttons of the header: a line icon (drawn in the text colour, so every
+// theme recolours it) and the action's name.
+const DM_ACT_ICONS = {
+  read: '<path d="M4 12.5l5 5L20 6.5"/>',
+  unread: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/><circle cx="19" cy="5" r="3" fill="currentColor"/>',
+  archive: '<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10h14V9M10 13h4"/>',
+  delete: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>',
+};
+const dmActButton = (action, labelKey, icon, on = false) => `
+  <button class="dm-act${on ? ' on' : ''}" data-dm="${action}" title="${esc(t(labelKey))}">
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${DM_ACT_ICONS[icon]}</svg>
+    <span class="dm-act-label">${esc(t(labelKey))}</span>
+  </button>`;
 
 // The people of a discussion as first-name labels in their own colour, the last one "+N" counting
 // those the line has no room for (fitPeopleLabels). No line lays out more than PEOPLE_LABELS names.

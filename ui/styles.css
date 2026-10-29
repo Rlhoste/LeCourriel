@@ -2255,12 +2255,17 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 .dm-send:disabled { opacity: 0.6; cursor: default; }
 
 /* Whole-discussion buttons in the header, the ✓ task box under a message, the message menu. */
-.dm-acts { display: flex; gap: 2px; margin-inline-start: auto; }
+.dm-acts { display: flex; gap: 2px; margin-inline-start: auto; flex-shrink: 0; }
 .dm-act {
-  width: 34px; height: 34px; border: none; border-radius: 8px; cursor: pointer;
-  background: transparent; color: var(--text); font-size: 1rem;
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px;
+  border: none; border-radius: 8px; cursor: pointer; white-space: nowrap;
+  background: transparent; color: var(--text); font: inherit; font-size: 0.85rem;
 }
+.dm-act svg { width: 18px; height: 18px; flex-shrink: 0; }
 .dm-act:hover, .dm-act.on { background: var(--bg3); }
+/* A narrow conversation keeps the icons only; the name stays in the tooltip. */
+.dm-conv { container-type: inline-size; }
+@container (max-width: 620px) { .dm-act-label { display: none; } .dm-act { padding: 0 8px; } }
 .dm-task {
   align-self: flex-start; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px;
   margin: 4px 6px 0; padding: 3px 10px; border-radius: 12px; background: var(--task); color: #000;
@@ -2535,7 +2540,8 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 [data-theme="brutalist"] .dm-rest { color: #000; font-size: 11px; font-weight: 900; }
 [data-theme="brutalist"] .dm-acts { gap: 6px; }
 [data-theme="brutalist"] .dm-act {
-  width: 42px; height: 48px; border-radius: 0; background: #fff; color: #000;
+  height: 48px; padding: 0 12px; border-radius: 0; background: #fff; color: #000;
+  font-weight: 900; text-transform: uppercase; letter-spacing: 0.04em;
   box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 4px #000; transition: transform 0.12s;
 }
 [data-theme="brutalist"] :is(.dm-act:hover, .dm-act.on) { transform: rotate(-6deg) scale(1.08); background: #ffde00; }
