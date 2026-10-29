@@ -2126,9 +2126,17 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
   border-bottom: var(--border-w) solid var(--border);
 }
 .dm-line:hover, .dm-line.active { background: var(--bg3); }
-.dm-who { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Its subject, the urgent mark before it and its marks after it (dmMarks). */
+.dm-who { display: flex; align-items: center; gap: 4px; min-width: 0; font-weight: 700; }
+.dm-who-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .dm-when { font-size: 0.75rem; color: var(--text-dim); }
-.dm-line > .dm-people { grid-column: 1 / 3; }
+/* Its people, and the AI's very short line on where the discussion stands after them. */
+.dm-line > .dm-sub { grid-column: 1 / 3; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.dm-sub > .dm-people { flex: 0 1 auto; }
+.dm-standing {
+  flex: 1 1 auto; min-width: 0; font-size: 0.75rem; font-style: italic; color: var(--text-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .dm-last { font-size: 0.85rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dm-badge {
   justify-self: end; min-width: 18px; padding: 1px 6px; border-radius: 999px; text-align: center;
@@ -2140,6 +2148,12 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 .dm-prio-high_priority { --prio: var(--high); }
 .dm-prio-task { --prio: var(--task); }
 .dm-prio-threat { --prio: var(--threat); }
+/* The marks themselves: 12px icons, each coloured for what it says. */
+.dm-marks { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.dm-mark { display: inline-flex; align-items: center; color: var(--text-dim); }
+.dm-mark svg { width: 12px; height: 12px; }
+.dm-mark-urgent { color: var(--urgent); }
+.dm-mark-reply { color: var(--accent); }
 
 .dm-av {
   width: 36px; height: 36px; border-radius: 50%; display: inline-grid; place-items: center; flex: none;
@@ -2334,6 +2348,9 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 [data-theme="modern"] .dm-sep { padding: 3px 12px; border-radius: 999px; background: var(--bg3); }
 [data-theme="modern"] .dm-reply { border-top-color: var(--bg3); }
 [data-theme="modern"] .dm-text { border-color: transparent; background: var(--bg3); }
+/* Its list marks are hairline icons, its standing a faint grey line under the names. */
+[data-theme="modern"] .dm-mark svg { stroke-width: 1.75; }
+[data-theme="modern"] .dm-standing { color: var(--text-faint); }
 
 /* Aero: glossy rounded bubbles with a tail, blue for me and white for the others. */
 [data-theme="aero"] :is(.dm-list, .dm-info) {
@@ -2381,6 +2398,9 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
   -webkit-backdrop-filter: blur(14px) saturate(1.3);
 }
 [data-theme="aero"] .dm-text { background: #fff; box-shadow: inset 0 1px 3px rgba(0, 60, 120, 0.15); }
+/* Thin marks on the glass, an upright standing like the people's names. */
+[data-theme="aero"] .dm-mark svg { stroke-width: 1.6; }
+[data-theme="aero"] .dm-standing { font-style: normal; }
 [data-theme="aero"] :is(.dm-new, .dm-send) {
   background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.15) 50%, rgba(255, 255, 255, 0) 51%);
   box-shadow: 0 2px 6px rgba(0, 90, 170, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.7);
@@ -2415,6 +2435,7 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 [data-theme="premium"] .dm-sep::before { content: "── "; }
 [data-theme="premium"] .dm-sep::after { content: " ──"; }
 [data-theme="premium"] .dm-people-note { font-family: Georgia, "Times New Roman", serif; }
+[data-theme="premium"] .dm-standing { font-family: Georgia, "Times New Roman", serif; }
 [data-theme="premium"] .dm-tag {
   padding: 0 6px; border: 0; border-radius: 2px; background: #ece4d2;
   font-family: Georgia, "Times New Roman", serif; font-style: italic; font-weight: normal;
@@ -2457,6 +2478,7 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 [data-theme="terminal"] .dm-av { background: var(--bg2); color: var(--pc, var(--accent)); border: 1px solid var(--pc, var(--accent)); }
 [data-theme="terminal"] .dm-tag { padding: 0 2px; border: 0; background: none; font-size: inherit; font-weight: normal; }
 [data-theme="terminal"] .dm-rest { color: var(--text-faint); }
+[data-theme="terminal"] .dm-standing { font-style: normal; color: var(--text-faint); }
 [data-theme="terminal"] :is(.dm-av, .dm-new, .dm-search, .dm-badge, .dm-pill, .dm-add, .dm-text, .dm-send, .dm-find button, .dm-act, .dm-task, .dm-task-status, .dm-tile, .dm-tile img) { border-radius: 0; }
 [data-theme="terminal"] .dm-task { order: 3; flex: 0 1 auto; min-width: 0; max-width: 50%; align-self: baseline; margin: 0; background: none; color: var(--task); border: 1px solid var(--task); }
 [data-theme="terminal"] .dm-task::before { content: "[ "; }
@@ -2506,6 +2528,8 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
     #ffde00;
 }
 [data-theme="brutalist"] .dm-who { text-transform: uppercase; font-weight: 900; }
+[data-theme="brutalist"] .dm-mark svg { stroke-width: 3; }
+[data-theme="brutalist"] .dm-standing { font-style: normal; font-weight: 700; }
 [data-theme="brutalist"] .dm-av { border-radius: 0; box-shadow: inset 0 0 0 2px #fff; }
 [data-theme="brutalist"] .dm-badge {
   position: relative; display: inline-flex; align-items: center; height: 20px; padding: 0 6px; padding-inline-start: 26px;

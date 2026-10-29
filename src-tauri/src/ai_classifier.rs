@@ -18,6 +18,27 @@ struct ClassificationResult {
     task: Option<String>,
     #[serde(default)]
     meeting_link: Option<String>,
+    #[serde(default, deserialize_with = "loose_bool")]
+    needs_reply: bool,
+    #[serde(default)]
+    standing: Option<String>,
+}
+
+/// The AI's `needs_reply` read as a boolean: models answer `true`, but also `"true"`, `"oui"` or
+/// `null` (which means no). An absent key or anything else means no too — never a lost classification.
+fn loose_bool<'de, D>(deserializer: D) -> std::result::Result<bool, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(match value {
+        serde_json::Value::Bool(b) => b,
+        serde_json::Value::String(s) => {
+            matches!(s.trim().to_lowercase().as_str(), "true" | "yes" | "oui" | "vrai" | "1")
+        }
+        serde_json::Value::Number(n) => n.as_f64().unwrap_or(0.0) != 0.0,
+        _ => false,
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -28,7 +49,17 @@ pub struct ClassifiedEmail {
     pub deadline: Option<NaiveDate>,
     pub task: Option<String>,
     pub meeting_link: Option<String>,
+    /// The AI's answer on whether this email waits for the user's reply.
+    /// Results stored by older versions have neither field: `#[serde(default)]` keeps them readable.
+    #[serde(default)]
+    pub needs_reply: bool,
+    /// A very short AI line saying where the discussion stands ("Waiting for Ana's quote").
+    #[serde(default)]
+    pub standing: Option<String>,
 }
+
+/// How many words the standing may take: it is read at a glance on a list line.
+const STANDING_WORDS: usize = 6;
 
 const CLASSIFY_FAILED: &str = "Could not classify email.";
 const PARSE_FAILED: &str = "Unable to summarize email.";
@@ -56,13 +87,15 @@ pub fn unclassified() -> ClassifiedEmail {
         deadline: None,
         task: None,
         meeting_link: None,
+        needs_reply: false,
+        standing: None,
     }
 }
 
-fn build_system_prompt(projects: &[ProjectConfig]) -> String {
+pub(crate) fn build_system_prompt(projects: &[ProjectConfig]) -> String {
     let mut prompt = String::from(
         r#"You are an email priority classifier. Given an email's subject and body, respond ONLY with a JSON object (no explanation, no markdown, no code fences) in this exact format:
-{"priority": "<value>", "summary": "<one sentence>", "project": "<project name or null>", "deadline": "<ISO date YYYY-MM-DD or null>", "task": "<action item or null>", "meeting_link": "<URL or null>"}
+{"priority": "<value>", "summary": "<one sentence>", "project": "<project name or null>", "deadline": "<ISO date YYYY-MM-DD or null>", "task": "<action item or null>", "meeting_link": "<URL or null>", "needs_reply": <true or false>, "standing": "<max 6 words or null>"}
 
 Priority must be exactly one of: urgent, high_priority, other_priority, information, threat, task
 
@@ -79,6 +112,8 @@ The summary must be a single concise sentence (max 15 words) describing what the
 For the deadline field: extract a specific date if the email mentions one (e.g. "due Friday Nov 21" → "2026-11-21"), otherwise null.
 For the task field: if the email requires a specific action, describe it concisely (max 10 words), otherwise null.
 For the meeting_link field: if the email body contains a video meeting URL (Zoom https://zoom.us/j/..., Teams https://teams.microsoft.com/l/meetup-join/..., Google Meet https://meet.google.com/..., Webex https://webex.com/...), extract the full URL. Otherwise null.
+For the needs_reply field: true when the email asks something of the user (a question, a request, an approval, a document or quote awaited) that is still unanswered, false for newsletters, receipts, notifications, reminders sent to oneself and pure information.
+For the standing field: in at most 6 words, say where the discussion stands from the user's point of view (e.g. "Waiting for Ana's quote", "Invoice paid, nothing owed"). Otherwise null.
 "#,
     );
 
@@ -93,10 +128,45 @@ For the meeting_link field: if the email body contains a video meeting URL (Zoom
     }
 
     prompt.push_str(&format!(
-        "\nWrite the summary and the task in {}, whatever the language of the email.\n",
+        "\nWrite the summary, the task and the standing in {}, whatever the language of the email.\n",
         crate::i18n::ai_language()
     ));
     prompt
+}
+
+/// The value the AI gave, as text: None when it is absent, blank or the word "null".
+fn kept(value: Option<String>) -> Option<String> {
+    value.map(|v| v.trim().to_string()).filter(|v| !v.is_empty() && v != "null")
+}
+
+/// Reads the AI's JSON answer as a classification; None when it cannot be read. An answer
+/// written without `needs_reply` or `standing` (an older model, or one that ignores them)
+/// gives false / None.
+pub fn parse_answer(text: &str) -> Option<ClassifiedEmail> {
+    let result: ClassificationResult = match serde_json::from_str(crate::ai::extract_json(text)) {
+        Ok(r) => r,
+        Err(e) => {
+            warn!("Failed to parse the AI's JSON answer: {} — raw: {}", e, text);
+            return None;
+        }
+    };
+    Some(ClassifiedEmail {
+        priority: Priority::from_str(&result.priority),
+        summary: result.summary,
+        project: kept(result.project),
+        deadline: result.deadline.as_deref().and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok()),
+        task: kept(result.task),
+        meeting_link: kept(result.meeting_link),
+        needs_reply: result.needs_reply,
+        standing: kept(result.standing).map(|s| {
+            let words: Vec<&str> = s.split_whitespace().collect();
+            if words.len() <= STANDING_WORDS {
+                s
+            } else {
+                words[..STANDING_WORDS].join(" ")
+            }
+        }),
+    })
 }
 
 /// Fails only when the AI can't be reached (the error says why); an answer that can't be
@@ -112,6 +182,8 @@ pub async fn classify(ai: &AiConfig, email: &RawEmail, projects: &[ProjectConfig
         deadline: None,
         task: None,
         meeting_link: None,
+        needs_reply: false,
+        standing: None,
     };
 
     let text = match crate::ai::complete(
@@ -129,23 +201,10 @@ pub async fn classify(ai: &AiConfig, email: &RawEmail, projects: &[ProjectConfig
     };
     debug!("AI raw response: {}", text);
 
-    match serde_json::from_str::<ClassificationResult>(crate::ai::extract_json(&text)) {
-        Ok(result) => {
-            let priority = Priority::from_str(&result.priority);
-            let deadline = result.deadline.as_deref().and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
-            Ok(ClassifiedEmail {
-                priority,
-                summary: result.summary,
-                project: result.project.filter(|p| p != "null" && !p.is_empty()),
-                deadline,
-                task: result.task.filter(|t| t != "null" && !t.is_empty()),
-                meeting_link: result.meeting_link.filter(|m| m != "null" && !m.is_empty()),
-            })
-        }
-        Err(e) => {
-            warn!("Failed to parse the AI's JSON answer: {} — raw: {}", e, text);
-            Ok(placeholder(PARSE_FAILED))
-        }
+    match parse_answer(&text) {
+        Some(classified) => Ok(classified),
+        // An answer that cannot be read: the placeholder keeps the email from being asked again.
+        None => Ok(placeholder(PARSE_FAILED)),
     }
 }
 

@@ -296,6 +296,8 @@ fn get_email(uid: u64, shared: State<'_, SharedState>) -> Option<dto::EmailCardD
         attachments: c.attachments.clone(),
         html_only: c.html_only,
         meeting_link: c.meeting_link.clone().unwrap_or_default(),
+        needs_reply: c.needs_reply,
+        standing: c.standing.clone().unwrap_or_default(),
     })
 }
 

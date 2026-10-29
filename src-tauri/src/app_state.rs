@@ -113,6 +113,8 @@ pub fn raw_to_card(raw: crate::models::RawEmail) -> EmailCard {
         deadline: None,
         task: None,
         meeting_link: None,
+        needs_reply: false,
+        standing: None,
     }
 }
 
@@ -381,6 +383,8 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
                     deadline: classified.deadline,
                     task: classified.task,
                     meeting_link: classified.meeting_link,
+                    needs_reply: classified.needs_reply,
+                    standing: classified.standing,
                 }
             })
             .collect();
@@ -711,6 +715,8 @@ pub fn to_dto_vec(cards: &[EmailCard]) -> Vec<EmailCardDto> {
             attachments: c.attachments.clone(),
             html_only: c.html_only,
             meeting_link: c.meeting_link.clone().unwrap_or_default(),
+            needs_reply: c.needs_reply,
+            standing: c.standing.clone().unwrap_or_default(),
         })
         .collect()
 }

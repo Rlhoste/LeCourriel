@@ -8,6 +8,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '../..');
 const html = fs.readFileSync(path.join(root, 'ui/index.html'), 'utf8');
 const app = fs.readFileSync(path.join(root, 'ui/app.js'), 'utf8');
+const css = fs.readFileSync(path.join(root, 'ui/styles.css'), 'utf8');
 const backend = fs.readFileSync(path.join(root, 'src-tauri/src/main.rs'), 'utf8');
 
 test('every literal getElementById reference exists in the HTML shell', () => {
@@ -66,4 +67,22 @@ test('all supported locale scripts load before app startup', () => {
     assert.ok(localeIndex >= 0, `${locale} locale script missing`);
     assert.ok(localeIndex < appIndex, `${locale} locale loads after app.js`);
   }
+});
+
+// What each discussion line shows at a glance: its marks and the AI's line on where it stands.
+test('the discussion list lines show their marks, each with a translated tooltip', () => {
+  const marks = [...app.matchAll(/dmMark\('([a-z]+)', '([\w.]+)'\)/g)].map(m => `${m[1]}:${m[2]}`);
+  assert.deepEqual(marks, ['urgent:dm.urgent', 'reply:dm.needsReply', 'files:dm.hasFiles', 'tasks:dm.hasTasks']);
+  const STRINGS = {};
+  new Function('STRINGS', fs.readFileSync(path.join(root, 'ui/locales/en.js'), 'utf8'))(STRINGS);
+  for (const key of [...marks.map(m => m.split(':')[1]), 'dm.standing']) {
+    assert.ok(STRINGS.en[key], `en lacks ${key}`);
+  }
+  const styled = cls => css.includes(`.${cls} `) || css.includes(`.${cls} {`);
+  for (const cls of ['dm-who-text', 'dm-marks', 'dm-sub', 'dm-standing']) {
+    assert.match(app, new RegExp(`class="${cls}"`));
+    assert.ok(styled(cls), `${cls} has no style`);
+  }
+  assert.match(app, /class="dm-mark dm-mark-\$\{kind\}"/);
+  for (const cls of ['dm-mark', 'dm-mark-urgent', 'dm-mark-reply']) assert.ok(styled(cls), `${cls} has no style`);
 });

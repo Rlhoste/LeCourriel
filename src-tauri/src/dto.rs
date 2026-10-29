@@ -31,6 +31,12 @@ pub struct EmailCardDto {
     #[serde(default)]
     pub html_only: bool,
     pub meeting_link: String,
+    /// The AI thinks this email waits for the user's reply.
+    #[serde(default)]
+    pub needs_reply: bool,
+    /// The AI's very short line on where the discussion stands ("" when it has none).
+    #[serde(default)]
+    pub standing: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]

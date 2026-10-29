@@ -100,7 +100,8 @@
   // Discussion mode: what the discussion list and each opened discussion show.
   // `folders` holds the cached emails per folder ({ inbox, sent, trash, spam, drafts }, every account);
   // `context` is { me: own address of each account, in account order, now: ms, signatures: each account's signature as text }.
-  // Returns the listed discussions, newest first. Each one is a list line plus its `items`,
+  // Returns the listed discussions, newest first. Each one is a list line — its `hasFiles`, `hasTasks`,
+  // `needsReply` and `standing` are what the line shows at a glance — plus its `items`,
   // oldest first; an item's `kind` says what it is: 'earlier' (older messages not on this computer,
   // at the top), 'day' separator, 'people' (recipients changed), 'message', 'draft' (unsent, at the bottom).
   function buildDiscussions(folders, context = {}) {
@@ -144,6 +145,7 @@
     const others = [...people.values()];
     const names = others.slice(0, 2).map(p => p.short).join(', ') + (others.length > 2 ? ` +${others.length - 2}` : '');
     const messages = discussionItems(emails, isMine, people, context.now ?? Date.now(), folderOf, texts, taskOf);
+    const files = messages.filter(i => i.kind === 'image' || i.kind === 'attachment');
     return {
       // A uid is only unique within its folder.
       id: String(emails[0].message_id || `${folderOf.get(emails[0])}:${emails[0].uid}`),
@@ -157,6 +159,13 @@
       date_ts: Number(last.date_ts) || 0,
       unread: unread.length,
       priority: unread.reduce((top, e) => (top && PRIORITY_ORDER[top] <= (PRIORITY_ORDER[e.priority] ?? 99) ? top : e.priority), null) ?? null,
+      // What the line shows at a glance: does the discussion hold files / tasks, is a reply owed
+      // (its last message is not mine and the AI says it waits for one), and where it stands
+      // (the AI's very short line on that last message, empty when the AI gave none).
+      hasFiles: files.length > 0,
+      hasTasks: messages.some(i => i.task),
+      needsReply: !isMine(last) && last.needs_reply === true,
+      standing: String(last.standing || '').replace(/\s+/g, ' ').trim(),
       items: [
         ...(missesEarlier(emails) ? [{ kind: 'earlier' }] : []),
         ...messages,
@@ -168,7 +177,7 @@
         subjects: [...new Set(emails.map(e => String(e.subject || '').trim()).filter(Boolean))],
         where: whereKept([...emails.map(e => [e, folderOf.get(e)]), ...drafts.map(e => [e, 'drafts'])]),
         summary: String(emails.findLast(e => String(e.summary || '').trim())?.summary || '').trim(),
-        files: messages.filter(i => i.kind === 'image' || i.kind === 'attachment'),
+        files,
       },
     };
   }

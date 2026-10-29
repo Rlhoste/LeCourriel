@@ -365,6 +365,64 @@ test('a line without unread emails has no priority mark', () => {
   assert.deepEqual(line.preview, { mine: false, text: '' });
 });
 
+// What a list line shows at a glance: its marks (files, tasks, a reply owed) and the AI standing.
+test('a line says whether the discussion holds files and tasks', () => {
+  const [plain] = buildDiscussions({ inbox: [mail(1, { from_name: 'Ann' })] }, ME);
+  assert.deepEqual([plain.hasFiles, plain.hasTasks], [false, false]);
+  const [files] = buildDiscussions({
+    inbox: [mail(1, { from_name: 'Ann', body_html: '<img src="data:image/png;base64,AAA">', attachments: [{ name: 'quote.pdf', size: 900, mime: 'application/pdf' }] })],
+  }, ME);
+  assert.deepEqual([files.hasFiles, files.hasTasks], [true, false]);
+  const [tasks] = buildDiscussions(
+    { inbox: [mail(1, { from_name: 'Ann', body_text: 'Can you?' })] },
+    { ...ME, tasks: [{ id: 7, title: 'Send the REX', status: 'todo', source_uid: 1 }] },
+  );
+  assert.deepEqual([tasks.hasFiles, tasks.hasTasks], [false, true]);
+});
+
+test('a line owes a reply only when its last message is not mine and the AI says so', () => {
+  const [owed] = buildDiscussions({
+    inbox: [
+      mail(1, { message_id: '<a@x>', from_email: 'leo@d.com', needs_reply: true }),
+      mail(2, { references: '<a@x>', from_email: 'ann@x.com', needs_reply: true }),
+    ],
+  }, ME);
+  assert.equal(owed.needsReply, true);
+  const [answered] = buildDiscussions({
+    inbox: [mail(1, { message_id: '<a@x>', from_email: 'leo@d.com', needs_reply: true })],
+    sent: [mail(2, { references: '<a@x>', from_email: 'me@work.com', needs_reply: true })],   // my reply is the last message
+  }, ME);
+  assert.equal(answered.needsReply, false);
+  const [newer] = buildDiscussions({
+    inbox: [
+      mail(1, { message_id: '<a@x>', from_email: 'leo@d.com', needs_reply: true }),
+      mail(2, { references: '<a@x>', from_email: 'ann@x.com' }),   // the newest email was not sorted as owing
+    ],
+  }, ME);
+  assert.equal(newer.needsReply, false);
+  const [quiet] = buildDiscussions({ inbox: [mail(1, { from_email: 'leo@d.com' })] }, ME);
+  assert.equal(quiet.needsReply, false);
+});
+
+test('a line shows the standing of its last message only, nothing when it has none', () => {
+  const [d] = buildDiscussions({
+    inbox: [
+      mail(1, { message_id: '<a@x>', from_email: 'leo@d.com', standing: 'Invoice paid' }),
+      mail(2, { references: '<a@x>', from_email: 'ann@x.com', standing: '  Waiting for Ana  ' }),
+    ],
+  }, ME);
+  assert.equal(d.standing, 'Waiting for Ana');
+  const [gone] = buildDiscussions({
+    inbox: [
+      mail(1, { message_id: '<a@x>', from_email: 'leo@d.com', standing: 'Waiting for Ana' }),
+      mail(2, { references: '<a@x>', from_email: 'ann@x.com', standing: '   ' }),   // a new message without one
+    ],
+  }, ME);
+  assert.equal(gone.standing, '');
+  const [never] = buildDiscussions({ inbox: [mail(1, { from_email: 'leo@d.com' })] }, ME);
+  assert.equal(never.standing, '');
+});
+
 test('my messages (any of my accounts) and theirs take opposite sides, with the sender and its colour', () => {
   const [d] = buildDiscussions({
     inbox: [mail(1, { message_id: '<a@x>', from_name: 'Leo Bianchini', from_email: 'leo@d.com', body_text: ' Hello\nDavid ' })],

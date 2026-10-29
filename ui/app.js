@@ -290,9 +290,12 @@ function renderDiscussionLines() {
   lines.innerHTML = list.map(d => `
     <div class="dm-line${d.id === openDiscussionId ? ' active' : ''}" data-id="${esc(d.id)}">
       ${d.priority ? `<span class="dm-prio dm-prio-${esc(d.priority)}"></span>` : ''}
-      <span class="dm-who">${esc(d.heading)}</span>
+      <span class="dm-who">${dmUrgent(d)}<span class="dm-who-text">${esc(d.heading)}</span>${dmMarks(d)}</span>
       <span class="dm-when">${esc(fmtShort(d.date_ts))}</span>
-      <span class="dm-people" data-people="${d.people.length}">${peopleLabels(d.people)}</span>
+      <span class="dm-sub">
+        <span class="dm-people" data-people="${d.people.length}">${peopleLabels(d.people)}</span>
+        ${d.standing ? `<span class="dm-standing" title="${esc(t('dm.standing'))}">${esc(d.standing)}</span>` : ''}
+      </span>
       <span class="dm-last">${esc(d.preview.mine ? t('dm.you', { text: d.preview.text }) : d.preview.text)}</span>
       ${d.unread ? `<span class="dm-badge">${esc(postOffice() ? tn('dm.unread', d.unread) : fmtNumber(d.unread))}</span>` : ''}
     </div>`).join('');
@@ -672,6 +675,27 @@ const dmActButton = (action, labelKey, icon, on = false) => `
     <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${DM_ACT_ICONS[icon]}</svg>
     <span class="dm-act-label">${esc(t(labelKey))}</span>
   </button>`;
+
+// The marks a list line shows at a glance, as small line icons drawn in the text colour (so every
+// theme recolours them): the AI's urgent mark at the start of the line, then a reply owed, the
+// files and the tasks the discussion holds after its subject.
+const DM_MARK_ICONS = {
+  urgent: '<path d="M12 4.5L21 19H3z"/><path d="M12 10v4.5M12 17v.5"/>',
+  reply: '<path d="M9 15l-5-5 5-5"/><path d="M4 10h10a6 6 0 0 1 6 6v3"/>',
+  files: '<path d="M20.5 11.5l-8.2 8.2a5.5 5.5 0 0 1-7.8-7.8l8.2-8.2a3.7 3.7 0 0 1 5.2 5.2l-8.2 8.2a1.8 1.8 0 0 1-2.6-2.6l7.6-7.6"/>',
+  tasks: '<path d="M9 11l3 3L21 5"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h11"/>',
+};
+const dmMark = (kind, key) => `<span class="dm-mark dm-mark-${kind}" title="${esc(t(key))}">`
+  + `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${DM_MARK_ICONS[kind]}</svg></span>`;
+const dmUrgent = d => (d.priority === 'urgent' ? dmMark('urgent', 'dm.urgent') : '');
+const dmMarks = d => {
+  const marks = [
+    d.needsReply && dmMark('reply', 'dm.needsReply'),
+    d.hasFiles && dmMark('files', 'dm.hasFiles'),
+    d.hasTasks && dmMark('tasks', 'dm.hasTasks'),
+  ].filter(Boolean);
+  return marks.length ? `<span class="dm-marks">${marks.join('')}</span>` : '';
+};
 
 // The people of a discussion as first-name labels in their own colour, the last one "+N" counting
 // those the line has no room for (fitPeopleLabels). No line lays out more than PEOPLE_LABELS names.
