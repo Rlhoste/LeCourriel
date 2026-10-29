@@ -347,12 +347,16 @@ function renderDiscussion(d) {
   scroll.scrollTop = keepTop ?? scroll.scrollHeight;
   conv.querySelectorAll('.dm-page').forEach(frame => showPage(frame, d.items[frame.dataset.item].email, scroll));
   scroll.addEventListener('click', ev => {   // on the scroll: the find bar rebuilds the bubbles
-    const chip = ev.target.closest('.dm-task');
-    if (chip) { openTask(Number(chip.dataset.task)); return; }
+    const go = ev.target.closest('.dm-task-go');
+    if (go) { openTask(Number(go.closest('.dm-task').dataset.task)); return; }
     const a = ev.target.closest('a[data-url]');
     if (!a) return;
     ev.preventDefault();
     window.__TAURI__.shell.open(a.dataset.url).catch(err => console.error('open link', err));
+  });
+  scroll.addEventListener('change', ev => {
+    const box = ev.target.closest('.dm-task');
+    if (box) setTaskStatus(Number(box.dataset.task), ev.target.value).catch(e => showToast(String(e)));
   });
   scroll.addEventListener('contextmenu', ev => {
     const item = dmItemOf(d, ev.target.closest('.dm-row[data-uid]'));
@@ -610,10 +614,22 @@ function discussionItem(item, index) {
         ${item.first ? postcardTop(s, time(item.date_ts)) : ''}
         <div class="dm-name">${esc(s.name || s.address)}</div>
         ${content}
-        ${item.task ? `<button class="dm-task" data-task="${esc(item.task.id)}" title="${esc(t('dm.openTask'))}">✓ ${esc(item.task.title)}</button>` : ''}
+        ${item.task ? taskBox(item.task) : ''}
         <div class="dm-time">${esc(fmt({ hour: '2-digit', minute: '2-digit' }).format(time(item.date_ts)))}</div>
       </div>
     </div>`;
+}
+
+// The task taken from a message: its status, set from here, and the way to it on the board.
+// Not done is the board's Todo; Given up stays the board's own, listed only when the task is there.
+function taskBox(task) {
+  const labels = { todo: t('dm.notDone'), in_progress: t('kanban.inProgress'), done: t('kanban.done'), given_up: t('kanban.givenUp') };
+  const statuses = ['todo', 'in_progress', 'done', ...(task.status === 'given_up' ? ['given_up'] : [])];
+  return `<div class="dm-task" data-task="${esc(task.id)}">`
+    + `<span class="dm-task-title">✓ ${esc(task.title)}</span>`
+    + `<select class="dm-task-status" aria-label="${esc(t('dm.taskStatus'))}">`
+    + statuses.map(s => `<option value="${s}"${s === task.status ? ' selected' : ''}>${esc(labels[s])}</option>`).join('')
+    + `</select><button class="dm-task-go">${esc(t('dm.openTask'))}</button></div>`;
 }
 
 // The top of a postcard (only the Brutalist look shows it): "Greetings from ORG", the stamp, the postmark.
@@ -789,7 +805,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') document.getElementById('original-overlay').classList.add('hidden');
 });
 
-// The task chip under a message: the task on its board.
+// Go to task, under a message: the task on its board, scrolled to and highlighted.
 function openTask(id) {
   const task = appState.tasks.find(x => x.id === id);
   if (!task) return;

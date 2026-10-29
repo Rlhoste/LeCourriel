@@ -2235,7 +2235,7 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 }
 .dm-send:disabled { opacity: 0.6; cursor: default; }
 
-/* Whole-discussion buttons in the header, the ✓ task chip under a message, the message menu. */
+/* Whole-discussion buttons in the header, the ✓ task box under a message, the message menu. */
 .dm-acts { display: flex; gap: 2px; margin-inline-start: auto; }
 .dm-act {
   width: 34px; height: 34px; border: none; border-radius: 8px; cursor: pointer;
@@ -2243,11 +2243,15 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 }
 .dm-act:hover, .dm-act.on { background: var(--bg3); }
 .dm-task {
-  align-self: flex-start; margin: 4px 6px 0; padding: 2px 10px; border: none; border-radius: 999px; cursor: pointer;
-  background: var(--task); color: #000; font: inherit; font-size: 0.8rem; font-weight: 600;
-  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  align-self: flex-start; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px;
+  margin: 4px 6px 0; padding: 3px 10px; border-radius: 12px; background: var(--task); color: #000;
+  font-size: 0.8rem; font-weight: 600; max-width: calc(100% - 12px);   /* the margins: never wider than the message */
 }
 .dm-row.me .dm-task { align-self: flex-end; }
+.dm-task-title { min-width: 0; overflow-wrap: anywhere; }
+.dm-task-status { padding: 0 2px; border: 1px solid currentColor; border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.dm-task-status option { color: #000; background: #fff; }
+.dm-task-go { padding: 0; border: none; background: none; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
 .rp-menu.dm-menu { position: fixed; right: auto; z-index: 120; }
 .kanban-card.kanban-landed { animation: dm-landed 2.5s ease-out; }
 
@@ -2406,8 +2410,8 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 [data-theme="terminal"] .dm-earlier { padding: 0; border: 0; color: var(--text-faint); }
 [data-theme="terminal"] .dm-earlier::before { content: "# "; }
 [data-theme="terminal"] .dm-av { background: var(--bg2); color: var(--pc, var(--accent)); border: 1px solid var(--pc, var(--accent)); }
-[data-theme="terminal"] :is(.dm-av, .dm-new, .dm-badge, .dm-pill, .dm-add, .dm-text, .dm-send, .dm-find button, .dm-act, .dm-task, .dm-tile, .dm-tile img) { border-radius: 0; }
-[data-theme="terminal"] .dm-task { order: 3; flex: none; align-self: baseline; margin: 0; background: none; color: var(--task); border: 1px solid var(--task); }
+[data-theme="terminal"] :is(.dm-av, .dm-new, .dm-badge, .dm-pill, .dm-add, .dm-text, .dm-send, .dm-find button, .dm-act, .dm-task, .dm-task-status, .dm-tile, .dm-tile img) { border-radius: 0; }
+[data-theme="terminal"] .dm-task { order: 3; flex: 0 1 auto; min-width: 0; max-width: 50%; align-self: baseline; margin: 0; background: none; color: var(--task); border: 1px solid var(--task); }
 [data-theme="terminal"] .dm-task::before { content: "[ "; }
 [data-theme="terminal"] .dm-task::after { content: " ]"; }
 [data-theme="terminal"] .dm-info h3::before { content: "# "; }
@@ -2554,13 +2558,14 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 /* The ✓ task chip is a registered-mail sticker. */
 [data-theme="brutalist"] .dm-task,
 [data-theme="brutalist"] .dm-row.me .dm-task {
-  align-self: flex-start; margin: 6px 16px 0; padding: 2px 10px; padding-inline-start: 4px;
+  align-self: flex-start; margin: 6px 16px 0; max-width: calc(100% - 32px); padding: 2px 10px; padding-inline-start: 4px;
   background: #fff; color: #000; border: 2px solid #000; border-radius: 0; font-weight: 800;
 }
 [data-theme="brutalist"] .dm-task::before {
   content: "R"; display: inline-grid; place-items: center; width: 18px; height: 18px; margin-inline-end: 6px; vertical-align: middle;
   border-radius: 50%; background: var(--post); color: #fff; font-size: 11px; font-weight: 900;
 }
+[data-theme="brutalist"] .dm-task-status { border: 2px solid #000; border-radius: 0; font-weight: 800; }
 /* Day separators are rubber stamps, missing messages a tear line, recipient changes a parcel tag. */
 [data-theme="brutalist"] .dm-sep {
   margin: 26px 0 4px; padding: 2px 12px; color: var(--post); border: 3px double var(--post);
