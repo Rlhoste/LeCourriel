@@ -140,4 +140,10 @@ pub struct EmailCard {
     pub task: Option<String>,
     /// Video meeting URL extracted by AI (Zoom, Teams, Meet, etc.)
     pub meeting_link: Option<String>,
+    /// The AI thinks this email waits for the user's reply (older caches: false).
+    #[serde(default)]
+    pub needs_reply: bool,
+    /// Very short AI line (max 6 words) on where the discussion stands (older caches: None).
+    #[serde(default)]
+    pub standing: Option<String>,
 }

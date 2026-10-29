@@ -216,6 +216,8 @@ api_key = "k" model = "m" max_tokens = 100
             deadline: None,
             task: Some("Do something".to_string()),
             meeting_link: None,
+            needs_reply: true,
+            standing: Some("Waiting for Ana's quote".to_string()),
         };
 
         let json = serde_json::to_string(&card).unwrap();
@@ -229,6 +231,8 @@ api_key = "k" model = "m" max_tokens = 100
         assert_eq!(restored.task, Some("Do something".to_string()));
         assert_eq!(restored.attachments, vec![attachment("a.pdf", 9, "application/pdf")]);
         assert!(restored.html_only);
+        assert!(restored.needs_reply);
+        assert_eq!(restored.standing.as_deref(), Some("Waiting for Ana's quote"));
 
         // A card cached before attachments were listed still loads, with none.
         let mut old: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -237,6 +241,14 @@ api_key = "k" model = "m" max_tokens = 100
         let restored: EmailCard = serde_json::from_value(old).unwrap();
         assert!(restored.attachments.is_empty());
         assert!(!restored.html_only);
+
+        // A card cached before the line marks existed still loads, without them.
+        let mut old: serde_json::Value = serde_json::from_str(&json).unwrap();
+        old.as_object_mut().unwrap().remove("needs_reply");
+        old.as_object_mut().unwrap().remove("standing");
+        let restored: EmailCard = serde_json::from_value(old).unwrap();
+        assert!(!restored.needs_reply);
+        assert_eq!(restored.standing, None);
     }
 
     #[test]
@@ -376,6 +388,8 @@ api_key = "k" model = "m" max_tokens = 100
             deadline: None,
             task: None,
             meeting_link: None,
+            needs_reply: false,
+            standing: None,
         }
     }
 
@@ -884,6 +898,8 @@ max_tokens = 10
             deadline: chrono::NaiveDate::from_ymd_opt(2026, 11, 2),
             task: Some("Send manuscript".into()),
             meeting_link: None,
+            needs_reply: true,
+            standing: Some("Waiting for the jury".into()),
         };
         let back: ClassifiedEmail = serde_json::from_value(serde_json::to_value(&c).unwrap()).unwrap();
         assert_eq!(back, c);
@@ -892,6 +908,69 @@ max_tokens = 10
         assert!(!is_real_result(&failed));
         // The AI couldn't be reached (e.g. usage limit): sorted again at the next refresh.
         assert!(!is_real_result(&crate::ai_classifier::unclassified()));
+        // Nothing was sorted: no reply owed, nothing to say about where things stand.
+        assert!(!crate::ai_classifier::unclassified().needs_reply);
+        assert_eq!(crate::ai_classifier::unclassified().standing, None);
+    }
+
+    #[test]
+    fn test_ai_answer_with_and_without_the_line_marks() {
+        use crate::ai_classifier::parse_answer;
+        let owed = parse_answer(
+            r#"{"priority":"urgent","summary":"Ana sends the quote","project":null,"deadline":null,"task":null,"meeting_link":null,"needs_reply":true,"standing":"Waiting for Ana's quote"}"#,
+        )
+        .unwrap();
+        assert!(owed.needs_reply);
+        assert_eq!(owed.standing.as_deref(), Some("Waiting for Ana's quote"));
+        // An answer written by an older prompt, without either field: nothing owed, nothing shown.
+        let plain = parse_answer(
+            r#"{"priority":"information","summary":"Newsletter","project":null,"deadline":null,"task":null,"meeting_link":null}"#,
+        )
+        .unwrap();
+        assert!(!plain.needs_reply);
+        assert_eq!(plain.standing, None);
+        // The standing is a glance: longer than 6 words, it is cut short; "null" and blanks are nothing.
+        let long = parse_answer(
+            r#"{"priority":"task","summary":"Budget","standing":"Waiting for the quote from Ana and the budget"}"#,
+        )
+        .unwrap();
+        assert_eq!(long.standing.as_deref(), Some("Waiting for the quote from Ana"));
+        let null = parse_answer(r#"{"priority":"task","summary":"Budget","standing":"  null  "}"#).unwrap();
+        assert_eq!(null.standing, None);
+        // A model that answers `"true"` or `null` instead of a boolean still classifies the email.
+        let text =
+            parse_answer(r#"{"priority":"urgent","summary":"Ana asks","needs_reply":"true","standing":null}"#).unwrap();
+        assert!(text.needs_reply);
+        assert_eq!(text.priority, Priority::Urgent);
+        let none = parse_answer(r#"{"priority":"information","summary":"Receipt","needs_reply":null}"#).unwrap();
+        assert!(!none.needs_reply);
+        assert!(parse_answer("the AI answered in prose").is_none());
+    }
+
+    #[test]
+    fn test_old_cached_marks_fields_still_load() {
+        use crate::ai_classifier::ClassifiedEmail;
+        // A classification stored by an older version of the app (or another computer).
+        let old: ClassifiedEmail = serde_json::from_str(
+            r#"{"priority":"HighPriority","summary":"Jury asks","project":"Thesis","deadline":"2026-11-02","task":"Reply","meeting_link":null}"#,
+        )
+        .unwrap();
+        assert!(!old.needs_reply);
+        assert_eq!(old.standing, None);
+        // A card in cache-v2.json from before the fields existed.
+        let card: EmailCard = serde_json::from_str(
+            r#"{"uid":1,"subject":"Hi","from_name":"Ana","from_email":"ana@x.com","date_str":"9:00","date_full":"","date_ts":0,"summary":"Says hi","priority":"Urgent","is_read":false,"body_text":"Hi","body_html":"","project":null,"deadline":null,"task":null,"meeting_link":null}"#,
+        )
+        .unwrap();
+        assert!(!card.needs_reply);
+        assert_eq!(card.standing, None);
+    }
+
+    #[test]
+    fn test_classification_prompt_asks_for_the_line_marks() {
+        let prompt = crate::ai_classifier::build_system_prompt(&[]);
+        assert!(prompt.contains("\"needs_reply\""), "the prompt must ask whether a reply is owed");
+        assert!(prompt.contains("\"standing\""), "the prompt must ask where the discussion stands");
     }
 
     #[test]
@@ -1165,6 +1244,8 @@ max_tokens = 10
             deadline: chrono::NaiveDate::from_ymd_opt(2026, 11, 2),
             task: Some("Reply".into()),
             meeting_link: None,
+            needs_reply: false,
+            standing: Some("Waiting for the jury".into()),
         };
         crate::cloud::store_ai(&[("<e2e@x>".into(), c.clone())]).await;
         let found = crate::cloud::lookup_ai(&["<e2e@x>".into(), "<missing@x>".into()]).await;
