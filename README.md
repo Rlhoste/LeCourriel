@@ -183,7 +183,9 @@ cp config.toml.example config.toml
 Edit `config.toml` with your mailbox, SMTP server, Claude key and, optionally, your projects.
 You can change most of these later in the app under **⚙ Settings**.
 
-> `config.toml` holds your passwords and is git-ignored. Never commit it.
+> `config.toml` is git-ignored. Never commit it. When the app starts, it moves the passwords and
+> keys it finds there to your system's keychain (Windows Credential Manager, macOS Keychain,
+> Secret Service on Linux). Without a keychain they stay in `config.toml`, and the log says so.
 
 ### Build and run
 
@@ -222,7 +224,10 @@ Overview, Inbox and Tasks show, against local fake IMAP and AI servers. They nee
 mailbox and AI in environment variables (see `e2e/fresh-install.e2e.js`), they also run
 against real servers.
 
-The same suites run automatically on every push and pull request. Tests use isolated
+`npm run lint` runs ESLint on the JavaScript (only rules that catch bugs, no style).
+
+The same suites run automatically on every push and pull request, along with `cargo fmt`,
+`cargo clippy`, ESLint and a non-blocking mutation-testing job. Tests use isolated
 temporary data and local mock servers; they do not read your mailbox credentials or
 modify your Courriel data. The three tests that require real external services remain
 ignored by default and can be run explicitly with `cargo test -- --ignored`.
@@ -250,8 +255,8 @@ cargo tauri build --bundles nsis       # on Windows → target/release/bundle/ns
 | **Other** | Any OpenAI-compatible API (Groq, OpenRouter, LM Studio, DeepSeek…): its URL, key and model | That provider |
 
 Small local models are slower and classify less reliably than large cloud models; a 7–8B text
-model (`qwen2.5`, `llama3.1`) is a good start. Keys are stored per provider in `config.toml`,
-so you can switch back and forth.
+model (`qwen2.5`, `llama3.1`) is a good start. Keys are stored per provider in your system's
+keychain, so you can switch back and forth.
 
 With **Claude (subscription)**, emails are sorted by your own Claude Code (`claude -p`, with no
 tools and none of your Claude Code settings); the app stores no token. The choice is greyed out
@@ -326,6 +331,10 @@ The app writes these files there:
 | `dismissed.json` | Overview items you swiped away |
 | `overrides.json` | Projects you assigned by hand |
 | `session.json` | Your Supabase sign-in (only if cloud sync is used; private to your user) |
+
+Mail passwords and API keys are kept in your system's keychain, one entry per data folder,
+named after its `config.toml`. The QR export (Settings) carries server settings and logins,
+never passwords.
 
 Delete `cache-v2.json` to force a full re-classification.
 

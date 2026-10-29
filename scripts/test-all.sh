@@ -6,6 +6,7 @@ cd "$ROOT"
 
 npm test
 npm run check:js
+npm run lint
 python3 -m unittest discover -s scripts/tests -v
 (cd src-tauri && cargo test --locked)
 # The real app window, from a fresh install (scripts/e2e.sh). SKIP_E2E=1 skips it.
