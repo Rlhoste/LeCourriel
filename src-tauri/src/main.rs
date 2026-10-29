@@ -323,7 +323,12 @@ async fn send_email(
     };
     let account = cfg.accounts.get(index).ok_or("No accounts configured")?;
     let mail = smtp_sender::OutgoingMail {
-        to, cc, bcc, subject, html, in_reply_to,
+        to,
+        cc,
+        bcc,
+        subject,
+        html,
+        in_reply_to,
         attachments: attachments.unwrap_or_default(),
     };
     let smtp = account.smtp_for_sending(&cfg.user_name());
@@ -345,7 +350,9 @@ async fn prepare_attachments(paths: Vec<String>) -> Result<Vec<attachments::Atta
 /// What was dropped on the editor or the reply bar: the webview gives no disk path for a
 /// dropped file, so the bytes arrive base64-encoded and are written to a temp folder here.
 #[tauri::command]
-async fn save_dropped_attachments(items: Vec<attachments::DroppedItem>) -> Result<Vec<attachments::AttachmentInfo>, String> {
+async fn save_dropped_attachments(
+    items: Vec<attachments::DroppedItem>,
+) -> Result<Vec<attachments::AttachmentInfo>, String> {
     attachments::save_dropped(&items).map_err(|e| format!("{:#}", e))
 }
 

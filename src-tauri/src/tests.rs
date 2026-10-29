@@ -3552,10 +3552,7 @@ urgency = "high"
         names
     }
 
-    fn zip_file(
-        archive: &mut zip::ZipArchive<std::io::Cursor<Vec<u8>>>,
-        name: &str,
-    ) -> Vec<u8> {
+    fn zip_file(archive: &mut zip::ZipArchive<std::io::Cursor<Vec<u8>>>, name: &str) -> Vec<u8> {
         let mut file = archive.by_name(name).unwrap();
         let mut out = Vec::new();
         std::io::Read::read_to_end(&mut file, &mut out).unwrap();
@@ -3599,10 +3596,8 @@ urgency = "high"
 
     #[test]
     fn test_zip_bytes_keeps_the_inner_structure() {
-        let entries = vec![
-            ("Doc/a.txt".to_string(), b"first".to_vec()),
-            ("Doc/inner/b.txt".to_string(), b"second".to_vec()),
-        ];
+        let entries =
+            vec![("Doc/a.txt".to_string(), b"first".to_vec()), ("Doc/inner/b.txt".to_string(), b"second".to_vec())];
         let bytes = crate::attachments::zip_bytes(&entries).unwrap();
         let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
         assert_eq!(zip_names(&mut archive), vec!["Doc/a.txt", "Doc/inner/b.txt"]);
@@ -3669,8 +3664,7 @@ urgency = "high"
         assert_eq!(infos[0].size, 5);
         assert_eq!(std::fs::read(&infos[0].path).unwrap(), b"hello");
         assert_eq!(infos[1].name, "Project.zip");
-        let mut archive =
-            zip::ZipArchive::new(std::io::Cursor::new(std::fs::read(&infos[1].path).unwrap())).unwrap();
+        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(std::fs::read(&infos[1].path).unwrap())).unwrap();
         assert_eq!(zip_names(&mut archive), vec!["Project/a.txt", "Project/deep/b.txt"]);
         assert_eq!(zip_file(&mut archive, "Project/deep/b.txt"), b"hello");
     }

@@ -176,12 +176,8 @@ pub fn zip_bytes(entries: &[(String, Vec<u8>)]) -> Result<Vec<u8>> {
             if name.is_empty() {
                 continue;
             }
-            writer
-                .start_file(name.as_str(), options)
-                .with_context(|| format!("Cannot add {name} to the zip"))?;
-            writer
-                .write_all(data)
-                .with_context(|| format!("Cannot write {name} to the zip"))?;
+            writer.start_file(name.as_str(), options).with_context(|| format!("Cannot add {name} to the zip"))?;
+            writer.write_all(data).with_context(|| format!("Cannot write {name} to the zip"))?;
         }
         writer.finish().context("Cannot finish the zip")?;
     }
@@ -200,10 +196,7 @@ fn out_dir() -> PathBuf {
 /// A fresh folder for one written attachment, so two files of the same name never clash.
 fn staging_dir() -> PathBuf {
     static NEXT: AtomicU64 = AtomicU64::new(0);
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
     let dir = out_dir().join(format!("{stamp}-{}", NEXT.fetch_add(1, Ordering::Relaxed)));
     if let Err(e) = std::fs::create_dir_all(&dir) {
         tracing::warn!("Cannot create {}: {e}", dir.display());
@@ -216,11 +209,7 @@ fn write_staged(name: &str, bytes: Vec<u8>) -> Result<AttachmentInfo> {
     let size = bytes.len() as u64;
     let path = staging_dir().join(&clean);
     std::fs::write(&path, &bytes).with_context(|| format!("Cannot write {clean}"))?;
-    Ok(AttachmentInfo {
-        name: clean,
-        size,
-        path: path.to_string_lossy().into_owned(),
-    })
+    Ok(AttachmentInfo { name: clean, size, path: path.to_string_lossy().into_owned() })
 }
 
 /// Every file under `dir`, named as it sits inside `root`, prefixed with `top`.
@@ -279,14 +268,8 @@ pub fn prepare(paths: &[String]) -> Result<Vec<AttachmentInfo>> {
                 .and_then(|n| n.to_str())
                 .map(safe_file_name)
                 .ok_or_else(|| anyhow!("Cannot name {p}"))?;
-            let size = std::fs::metadata(path)
-                .with_context(|| format!("Cannot read {name}"))?
-                .len();
-            out.push(AttachmentInfo {
-                name,
-                size,
-                path: p.clone(),
-            });
+            let size = std::fs::metadata(path).with_context(|| format!("Cannot read {name}"))?.len();
+            out.push(AttachmentInfo { name, size, path: p.clone() });
         } else {
             return Err(anyhow!("This file is no longer there: {p}"));
         }
@@ -298,9 +281,7 @@ fn decode_base64(text: &str) -> Result<Vec<u8>> {
     // A data: URL may have been sent as it is; the payload is the last part.
     let body = text.rsplit(',').next().unwrap_or(text);
     let clean: String = body.chars().filter(|c| !c.is_whitespace()).collect();
-    base64::engine::general_purpose::STANDARD
-        .decode(clean)
-        .context("A dropped file could not be read")
+    base64::engine::general_purpose::STANDARD.decode(clean).context("A dropped file could not be read")
 }
 
 /// Write what was dropped: a file as it is, a folder as one zip of the dropped files.
@@ -333,17 +314,10 @@ pub fn load_all(paths: &[String]) -> Result<Vec<Loaded>> {
         .filter(|p| !p.trim().is_empty())
         .map(|p| {
             let path = Path::new(p);
-            let filename = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .ok_or_else(|| anyhow!("Cannot name {p}"))?
-                .to_string();
+            let filename =
+                path.file_name().and_then(|n| n.to_str()).ok_or_else(|| anyhow!("Cannot name {p}"))?.to_string();
             let data = std::fs::read(path).with_context(|| format!("Cannot read {filename}"))?;
-            Ok(Loaded {
-                content_type: guess_mime(&filename),
-                filename,
-                data,
-            })
+            Ok(Loaded { content_type: guess_mime(&filename), filename, data })
         })
         .collect()
 }

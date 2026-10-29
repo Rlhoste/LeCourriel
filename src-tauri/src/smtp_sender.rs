@@ -121,16 +121,15 @@ fn parse_list(list: &str, field: &str) -> Result<Vec<Mailbox>> {
 /// reader expects: the alternative/related part stays one piece of it.
 pub fn build_body(html: &str, files: &[Loaded]) -> MultiPart {
     let (html_body, images) = extract_inline_images(html);
-    let html_doc = format!("<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head><body>{}</body></html>", html_body);
+    let html_doc =
+        format!("<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head><body>{}</body></html>", html_body);
     let text = html2text::from_read(html.as_bytes(), 80);
 
     let mut related = MultiPart::related().singlepart(SinglePart::html(html_doc));
     for img in images {
         related = related.singlepart(inline_part(&img.cid, &img.content_type, img.data));
     }
-    let alternative = MultiPart::alternative()
-        .singlepart(SinglePart::plain(text))
-        .multipart(related);
+    let alternative = MultiPart::alternative().singlepart(SinglePart::plain(text)).multipart(related);
     if files.is_empty() {
         return alternative;
     }
@@ -189,9 +188,7 @@ pub async fn send_message(cfg: &SmtpConfig, mail: &OutgoingMail) -> Result<Vec<u
     }
 
     let files = attachments::load_all(&mail.attachments)?;
-    let email = builder
-        .multipart(build_body(&mail.html, &files))
-        .context("Failed to build email message")?;
+    let email = builder.multipart(build_body(&mail.html, &files)).context("Failed to build email message")?;
 
     let creds = Credentials::new(cfg.username.clone(), cfg.password.clone());
 
