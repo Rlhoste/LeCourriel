@@ -104,6 +104,7 @@
     const folderOf = new Map();
     for (const name of ['inbox', 'sent', 'trash', 'spam']) for (const e of folders?.[name] || []) folderOf.set(e, name);
     const drafts = new Set(folders?.drafts || []);
+    [markedBefore, markedNow] = [markedNow, new Map()];   // HTML already turned to text by the last build is reused
     const texts = newTexts([...folderOf.keys()], context.signatures || []);
     // A task taken from an email names it by its inbox id (other folders number theirs apart).
     const tasks = new Map((context.tasks || []).filter(t => t.source_uid != null).map(t => [t.source_uid, t]));
@@ -175,7 +176,7 @@
       if (!searchable.has(d)) {
         searchable.set(d, fold([
           ...d.people.flatMap(p => [p.name, p.address]), ...d.info.subjects,
-          ...d.items.map(i => i.text ?? (i.kind === 'page' ? htmlText(String(i.email.body_html || '')) : '')),
+          ...d.items.map(i => i.text ?? ''),
           ...d.items.filter(i => i.kind === 'attachment').map(i => i.name),
         ].join('\n')));
       }
@@ -299,76 +300,188 @@
 
   // What one email shows as: its text, split by each image of its body ('image' items,
   // the cid: images the backend put in the HTML as data: URLs), then an 'attachment' item per file.
-  // An email laid out as a page (newsletter, invoice) is one 'page' card instead of its text and images.
-  const BODY_IMAGE = /<img\b[^>]*?\bsrc\s*=\s*(["'])(data:image\/[^"']*)\1[^>]*>/gi;
   function emailParts(email, text) {
-    const html = String(email.body_html || '');
-    let parts = [];
-    let from = 0;
-    if (html && (email.html_only || mostlyTables(html))) parts.push({ kind: 'page' });
-    else for (const m of html.matchAll(BODY_IMAGE)) {
-      parts.push({ kind: 'message', text: htmlText(html.slice(from, m.index)) }, { kind: 'image', src: m[2] });
-      from = m.index + m[0].length;
+    const parts = [];
+    let lines = [];
+    const flush = () => {
+      const piece = lines.join('\n').trim();
+      if (piece) parts.push({ kind: 'message', text: piece });
+      lines = [];
+    };
+    for (const line of text.split('\n')) {
+      if (line.startsWith(IMAGE)) { flush(); parts.push({ kind: 'image', src: line.slice(1) }); } else lines.push(line);
     }
-    if (parts[0]?.kind !== 'page') parts.push({ kind: 'message', text: parts.length ? htmlText(html.slice(from)) : text });
-    // Once a piece reaches the quoted history or the signature, the rest (its images too) goes.
-    const cut = parts.findIndex(p => p.kind === 'message' && p.text && cutText(p.text) !== p.text);
-    if (parts.length > 1 && cut >= 0) parts.splice(cut, parts.length, { kind: 'message', text: cutText(parts[cut].text) });
-    // A signature only the plain text shows (mine, or the same last lines across a sender's emails),
-    // with a logo in the HTML: the pieces are cut at its first line too.
-    const full = newText(email);
-    if (parts.length > 1 && text && full !== text && full.startsWith(text)) {
-      const first = plainLine(full.slice(text.length).trim().split('\n')[0]);
-      const isFirst = line => plainLine(line) === first;
-      const at = parts.findLastIndex(p => p.kind === 'message' && p.text && p.text.split('\n').some(isFirst));
-      if (at >= 0) {
-        const lines = parts[at].text.split('\n');
-        parts.splice(at, parts.length, { kind: 'message', text: lines.slice(0, lines.findLastIndex(isFirst)).join('\n').trim() });
+    flush();
+    for (const a of email.attachments || []) parts.push({ kind: 'attachment', name: a.name, size: a.size, mime: a.mime });
+    return parts.length ? parts : [{ kind: 'message', text: '' }];
+  }
+
+  // An HTML body as bubble text: a line per block or table cell, **bold**, *italic*, [link](url),
+  // [[button]](url) for a link drawn as a button, and an IMAGE line (IMAGE + data: URL) per picture of the body.
+  // Head, styles, scripts, hidden text (a newsletter's preheader) and tracking pixels go.
+  const IMAGE = '\u0001';
+  const ENTITIES = {
+    nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", eacute: 'é', egrave: 'è', ecirc: 'ê', agrave: 'à',
+    acirc: 'â', ccedil: 'ç', ocirc: 'ô', ucirc: 'û', ugrave: 'ù', icirc: 'î', iuml: 'ï', euml: 'ë', Eacute: 'É', Agrave: 'À',
+    rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“', laquo: '«', raquo: '»', hellip: '…', mdash: '—', ndash: '–', bull: '•',
+    middot: '·', copy: '©', reg: '®', trade: '™', euro: '€', deg: '°', times: '×', zwnj: '', zwj: '', shy: '',
+  };
+  const decode = s => String(s)
+    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+\d*);/gi, (m, e) => {
+      if (e[0] !== '#') return ENTITIES[e] ?? ENTITIES[e.toLowerCase()] ?? m;
+      const code = /x/i.test(e[1]) ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+      return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : m;
+    })
+    .replace(/[­͏​-‏⁠﻿]/g, '');
+  // Each attribute of a tag, by lower-case name ('' when it has no value), values decoded.
+  function attrsOf(text) {
+    const map = new Map();
+    for (const m of String(text || '').matchAll(/([^\s=/"'>]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s"'>]+))?/g)) {
+      const value = m[2] ?? '';
+      map.set(m[1].toLowerCase(), decode(/^["']/.test(value) ? value.slice(1, -1) : value));
+    }
+    return map;
+  }
+  const styleOf = attrs => (attrs.get('style') || '').toLowerCase().replace(/\s+/g, '');
+  const VOID = new Set(['img', 'br', 'hr', 'input', 'meta', 'link', 'area', 'base', 'col', 'wbr', 'source']);
+  const OPEN_TAG = /<([a-z][\w:-]*)((?:"[^"]*"|'[^']*'|[^'">])*)>/gi;
+  // Where the element opening at `at` ends (after its closing tag; the end of the HTML when never closed).
+  function elementEnd(html, name, at) {
+    const tag = new RegExp(OPEN_TAG.source, 'iy');
+    tag.lastIndex = at;
+    const open = tag.exec(html)?.[0] || '';
+    if (VOID.has(name) || open.endsWith('/>')) return at + open.length;
+    const tags = new RegExp(`<(/?)${name}(?=[\\s/>])[^>]*>`, 'gi');
+    tags.lastIndex = at;
+    let depth = 0;
+    for (let m; (m = tags.exec(html));) {
+      depth += m[1] ? -1 : m[0].endsWith('/>') ? 0 : 1;
+      if (depth <= 0) return m.index + m[0].length;
+    }
+    return html.length;
+  }
+  // `html` without the elements `test(name, attrs)` picks (with all they hold).
+  function removeElements(html, test) {
+    let out = '';
+    let from = 0;
+    for (const m of html.matchAll(OPEN_TAG)) {
+      if (m.index < from || !test(m[1].toLowerCase(), attrsOf(m[2]))) continue;
+      out += html.slice(from, m.index);
+      from = elementEnd(html, m[1].toLowerCase(), m.index);
+    }
+    return out + html.slice(from);
+  }
+  const isHidden = (name, attrs) => {
+    const style = styleOf(attrs);
+    return attrs.has('hidden') || /(?:^|;)(?:display:none|visibility:hidden|opacity:0(?:\.0*)?(?:;|$))/.test(style)
+      || (/(?:^|;)max-height:0(?:px)?(?:;|$)/.test(style) && /overflow:hidden/.test(style));
+  };
+  const COLOURLESS = /^(?:none|transparent|inherit|initial|white|#fff(?:fff)?|rgba?\(255,255,255(?:,1)?\))?(?:!important)?$/;
+  const coloured = attrs => {
+    const background = /(?:^|;)background(?:-color)?:([^;]+)/.exec(styleOf(attrs))?.[1] ?? '';
+    return !COLOURLESS.test(background.replace(/url\([^)]*\)/g, '').trim()) || !COLOURLESS.test((attrs.get('bgcolor') || '').toLowerCase().trim());
+  };
+  const looksButton = attrs => (attrs.get('role') || '').toLowerCase() === 'button' || coloured(attrs)
+    || /(?:^|;)border(?:-[a-z]+)?:[^;]*(?:solid|dashed|dotted|double)/.test(styleOf(attrs))
+    || /(?:^|;)padding(?:-[a-z]+)?:[^;]*[1-9]/.test(styleOf(attrs));
+  // A cell holding one link and nothing else.
+  const onlyALink = inner => (inner.match(/<a\b/gi) || []).length === 1
+    && !decode(removeElements(inner, name => name === 'a').replace(/<[^>]*>/g, '')).trim();
+  const BREAK = new Set(['div', 'tr', 'td', 'th', 'li', 'dt', 'dd', 'center', 'section', 'article', 'header', 'footer', 'hr', 'address', 'pre', 'form', 'caption']);
+  const PARAGRAPH = new Set(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table', 'ul', 'ol', 'blockquote', 'dl']);
+  const TOKEN = /<(\/?)([a-z][\w:-]*)((?:"[^"]*"|'[^']*'|[^'">])*)>|<[!?/][^>]*>|([^<]+|<)/gi;
+  let markedNow = new Map();   // HTML → its text, for this build (and the one before)
+  let markedBefore = new Map();
+  function htmlMarked(source) {
+    const known = markedNow.get(source) ?? markedBefore.get(source);
+    if (known !== undefined) { markedNow.set(source, known); return known; }
+    const html = removeElements(String(source)
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<(head|style|script|title|template)\b[\s\S]*?<\/\1\s*>/gi, ''), isHidden);
+    let out = '';
+    let pending = 0;      // line breaks owed before the next text
+    let space = false;    // a space owed before the next text
+    let bold = 0, italic = 0;
+    const links = [];     // the <a> we are in: { url, button } or null (not a web or mail link)
+    const lists = [];     // the <ul>/<ol> we are in: a count for <ol>, null for <ul>
+    let open = { link: null, bold: false, italic: false };
+    let buttonUntil = -1; // a coloured cell around one link: that link is a button
+    const close = (keep = {}) => {
+      if (open.italic && !keep.italic) { out += '*'; open.italic = false; }
+      if (open.bold && !keep.bold) { out += '**'; open.bold = false; }
+      if (open.link && !keep.link) { out += `${open.link.button ? ']]' : ']'}(${open.link.url})`; open.link = null; }
+    };
+    const breakLine = n => { close(); pending = Math.max(pending, n); space = false; };
+    const startLine = () => {
+      if (out && pending) out += '\n'.repeat(pending);
+      pending = 0;
+    };
+    const write = text => {
+      const link = links.length ? links[links.length - 1] : null;
+      const want = { link, bold: !link && bold > 0, italic: !link && italic > 0 };
+      // What changes closes, inner marks first (and what was inside it opens again).
+      if (open.link !== want.link) close();
+      else if (open.bold !== want.bold) close({ link: true });
+      else if (open.italic !== want.italic) close({ link: true, bold: true });
+      if (pending) startLine();
+      else if (space && out && !out.endsWith('\n')) out += ' ';
+      space = false;
+      if (want.link && !open.link) { out += want.link.button ? '[[' : '['; open.link = want.link; }
+      if (want.bold && !open.bold) { out += '**'; open.bold = true; }
+      if (want.italic && !open.italic) { out += '*'; open.italic = true; }
+      out += link ? text.replace(/[[\]]/g, '') : text;
+    };
+    for (const m of html.matchAll(TOKEN)) {
+      if (m[4] !== undefined) {
+        const text = decode(m[4]).replace(/\s+/g, ' ');
+        if (!text.trim()) { space = true; continue; }
+        if (text.startsWith(' ')) space = true;
+        write(text.trim());
+        if (text.endsWith(' ')) space = true;
+        continue;
+      }
+      if (!m[2]) continue;
+      const name = m[2].toLowerCase();
+      const closing = m[1] === '/';
+      if (name === 'br') { close(); pending = Math.min(2, pending + 1); space = false; continue; }
+      if (PARAGRAPH.has(name)) breakLine(2);
+      else if (BREAK.has(name)) breakLine(1);
+      if (name === 'b' || name === 'strong') bold = Math.max(0, bold + (closing ? -1 : 1));
+      else if (name === 'i' || name === 'em') italic = Math.max(0, italic + (closing ? -1 : 1));
+      else if (name === 'ul' || name === 'ol') { if (closing) lists.pop(); else lists.push(name === 'ol' ? 0 : null); }
+      else if (name === 'li' && !closing) {
+        startLine();
+        const n = lists.length && lists[lists.length - 1] !== null ? ++lists[lists.length - 1] : null;
+        out += n === null ? '* ' : `${n}. `;
+      } else if ((name === 'td' || name === 'th') && !closing) {
+        const attrs = attrsOf(m[3]);
+        const end = elementEnd(html, name, m.index);
+        if (coloured(attrs) && onlyALink(html.slice(m.index + m[0].length, end))) buttonUntil = end;
+      } else if (name === 'a') {
+        if (closing) { links.pop(); continue; }
+        const attrs = attrsOf(m[3]);
+        const href = (attrs.get('href') || '').trim();
+        links.push(/^(?:https?:|mailto:)/i.test(href)
+          ? { url: href.replace(/\s+/g, '').replace(/\(/g, '%28').replace(/\)/g, '%29'), button: m.index < buttonUntil || looksButton(attrs) }
+          : null);
+      } else if (name === 'img') {
+        const attrs = attrsOf(m[3]);
+        const src = (attrs.get('src') || '').trim();
+        const size = key => parseInt(attrs.get(key) ?? new RegExp(`(?:^|;)${key}:(\\d+)`).exec(styleOf(attrs))?.[1], 10);
+        if (/^data:image\//i.test(src) && !(size('width') <= 2 || size('height') <= 2)) {
+          breakLine(1);
+          startLine();
+          out += IMAGE + src.replace(/\s+/g, '');
+          pending = 1;
+        } else if (links.length && (attrs.get('alt') || '').trim()) {
+          write(attrs.get('alt').replace(/\s+/g, ' ').trim());   // a picture used as a link: its words
+        }
       }
     }
-    for (const a of email.attachments || []) parts.push({ kind: 'attachment', name: a.name, size: a.size, mime: a.mime });
-    if (parts.length > 1) parts = parts.filter(p => p.kind !== 'message' || p.text);
-    return parts;
-  }
-
-  // Most of the text sits in tables: a layout, not a written message (a signature table is not enough).
-  // Only the new text counts: the quoted history (a quoted newsletter, say) stops the count.
-  function mostlyTables(html) {
-    let inside = 0, outside = 0, depth = 0, from = 0, ended = false;
-    const count = piece => {
-      if (ended) return;
-      const lines = htmlText(piece).split('\n');
-      const end = lines.findIndex((_, i) => cutStarts(lines, i));
-      ended = end >= 0;
-      const letters = (ended ? lines.slice(0, end) : lines).join('').replace(/\s/g, '').length;
-      if (depth > 0) inside += letters; else outside += letters;
-    };
-    for (const m of html.matchAll(/<(\/?)table\b[^>]*>/gi)) {
-      count(html.slice(from, m.index));
-      depth = Math.max(0, depth + (m[1] ? -1 : 1));
-      from = m.index + m[0].length;
-    }
-    count(html.slice(from));
-    return inside > outside;
-  }
-
-  // Plain text of a piece of HTML: one line per block, entities decoded.
-  const ENTITIES = { nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
-  function htmlText(html) {
-    return html
-      .replace(/\s+/g, ' ')
-      .replace(/<(head|style|script|title)\b[\s\S]*?<\/\1\s*>/gi, '')
-      .replace(/<!--[\s\S]*?-->/g, '')
-      .replace(/<br\b[^>]*>|<\/?(p|div|tr|li|ul|ol|table|blockquote|h[1-6])\b[^>]*>/gi, '\n')
-      .replace(/<[^>]*>/g, '')
-      .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
-        if (e[0] !== '#') return ENTITIES[e.toLowerCase()] ?? m;
-        const code = /x/i.test(e[1]) ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
-        return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : m;
-      })
-      .split('\n').map(line => line.replace(/\s+/g, ' ').trim()).join('\n')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
+    close();
+    const text = out.split('\n').map(line => line.trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    markedNow.set(source, text);
+    return text;
   }
 
   // Only what the person newly wrote, cut by rules (no AI): the quoted history goes.
@@ -380,14 +493,22 @@
   const QUOTE_INTRO = /^\s*(?:Le|On)\s.*\d.*(?:a\s+écrit|wrote)\s*:\s*$/i;
   const RULE_LINE = /^\s*(?:[-_─=]{3,}|-+\s*(?:Original Message|Message d'origine)\s*-+)?\s*$/i;
   function newText(email, signatures = []) {
+    const whole = emailText(email);
+    return cutText(whole, signatures) || whole;
+  }
+
+  // An email's whole text: its HTML as bubble text, else its plain text.
+  function emailText(email) {
+    const html = String(email.body_html || '');
+    const marked = html.trim() ? htmlMarked(html) : '';
+    if (marked) return marked;
     // A link shows as "[text][1]" with its address on a "[1]: url" line at the very end
     // (after any quote): put the address back beside it, as "[text](url)".
     const links = new Map();
     const body = String(email.body_text || '').replace(/\r\n?/g, '\n').split('\n')
       .filter(line => { const m = /^\[(\d+)\]:\s*(\S+)\s*$/.exec(line); if (m) links.set(m[1], m[2]); return !m; })
       .join('\n');
-    const whole = body.replace(/\[([^\]\n]*)\]\[(\d+)\]/g, (all, text, n) => (links.has(n) ? `[${text}](${links.get(n)})` : all)).trim();
-    return cutText(whole, signatures) || whole;
+    return body.replace(/\[([^\]\n]*)\]\[(\d+)\]/g, (all, text, n) => (links.has(n) ? `[${text}](${links.get(n)})` : all)).trim();
   }
 
   // A whole line only: "Envoyé de mon iPhone", "Sent from Outlook for Android", "Get Outlook for iOS".
@@ -411,6 +532,7 @@
   // ("-- ", a "sent from my phone" line, a legal notice, a "think before printing" line): it and all after go.
   function historyStarts(lines, i) {
     const line = lines[i];
+    if (line.startsWith(IMAGE)) return false;
     if ((QUOTE_FROM.test(line) && lines.slice(i + 1, i + 6).some(l => QUOTE_SUBJECT.test(l)))
       || QUOTE_INTRO.test(line) || QUOTE_INTRO.test(`${line} ${lines[i + 1]}`)
       || /^--\s?$/.test(line)   // signature delimiter "-- " (the space may be trimmed)
@@ -477,9 +599,10 @@
     return texts;
   }
 
-  // A line's words only: formatting marks (**bold**, *italic*, [link][1] / [link](url)) and spacing ignored.
-  const plainLine = line => String(line)
-    .replace(/\]\[\d+\]|\]\([^)]*\)/g, ']').replace(/[*[\]]/g, '').replace(/\s+/g, ' ').trim();
+  // A line's words only: formatting marks (**bold**, *italic*, [link][1] / [link](url)) and spacing ignored;
+  // an image line has none.
+  const plainLine = line => (String(line).startsWith(IMAGE) ? '' : String(line)
+    .replace(/\]\[\d+\]|\]\([^)]*\)/g, ']').replace(/[*[\]]/g, '').replace(/\s+/g, ' ').trim());
 
   // Removes from `lines` the first run whose non-empty lines are exactly `block`'s non-empty lines.
   function cutBlock(lines, block) {

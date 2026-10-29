@@ -399,7 +399,7 @@ test('an image in the middle of an email splits it: text before, the images, the
     })],
   }, ME);
   assert.deepEqual(d.items.slice(1).map(shown), [
-    ['message', 'Look at this:', 'F'],
+    ['message', 'Look at **this**:', 'F'],
     ['image', 'data:image/png;base64,AAA', ''],
     ['image', 'data:image/jpeg;base64,BBB', ''],
     ['message', 'Nice, isn\'t it?\nBye & see you', 'L'],
@@ -407,7 +407,7 @@ test('an image in the middle of an email splits it: text before, the images, the
   assert.ok(d.items.slice(1).every(i => i.email.uid === 1 && i.sender.address === 'person1@example.com' && i.date_ts === 10));
 });
 
-test('an email without an image in its HTML keeps its plain text whole', () => {
+test('an email without an image in its HTML is one message; an image from the web is left out', () => {
   const [d] = buildDiscussions({
     inbox: [mail(1, { body_text: 'Hello\n\nDavid', body_html: '<p>Hello</p><p>David</p><img src="https://x.com/logo.png">' })],
   }, ME);
@@ -435,27 +435,51 @@ test('each attachment shows as its own item after the text, with its name, size 
   assert.equal(d.items[4].email.uid, 2);
 });
 
-test('an email laid out as a page (mostly tables, or no plain-text part) shows as one card, not cut', () => {
-  const newsletter = '<p>View online</p><table><tr><td><img src="data:image/png;base64,LOGO"></td></tr>'
-    + '<tr><td><h1>October news</h1><p>Our new shop opens on Monday with a lot of offers.</p></td></tr></table>';
+test('an email laid out as a page (a newsletter) is plain text: its cells as lines, bold, italic, web and mail links', () => {
+  const newsletter = '<html><head><title>News</title><style>td { color: red }</style></head><body>'
+    + '<div style="display:none;max-height:0">Our best offers inside</div>'
+    + '<table><tr><td><img src="data:image/png;base64,LOGO" width="120"></td></tr>'
+    + '<tr><td><h1>October <b>news</b></h1><p>Our <i>new</i> shop opens <a href="https://shop.x.com/a?b=1&amp;c=2">on Monday</a>.</p>'
+    + '<p>Write to <a href="mailto:hi@x.com">us</a>, not <a href="javascript:alert(1)">here</a>.</p></td>'
+    + '<td>Opening hours:<br>9:00 – 18:00</td></tr></table>'
+    + '<img src="https://track.x.com/p.gif" width="1" height="1"><img src="data:image/gif;base64,PIXEL" width="1" height="1">'
+    + '<script>track()</script></body></html>';
   const [d] = buildDiscussions({
     inbox: [
       mail(1, { from_email: 'shop@x.com', message_id: '<a@x>', body_text: 'View online\nOctober news', body_html: newsletter,
         attachments: [{ name: 'invoice.pdf', size: 900, mime: 'application/pdf' }] }),
-      mail(2, { from_email: 'shop@x.com', references: '<a@x>', body_text: 'Hi', body_html: '<div>Hi</div>', html_only: true }),
+      mail(2, { from_email: 'shop@x.com', references: '<a@x>', body_html: '<div>Hi</div>', html_only: true }),
     ],
   }, ME);
-  assert.deepEqual(d.items.slice(1).map(shown), [['page', 1, 'F'], ['attachment', 'invoice.pdf', ''], ['page', 2, 'L']]);
+  assert.deepEqual(d.items.slice(1).map(shown), [
+    ['image', 'data:image/png;base64,LOGO', 'F'],
+    ['message', 'October **news**\n\nOur *new* shop opens [on Monday](https://shop.x.com/a?b=1&c=2).\n\n'
+      + 'Write to [us](mailto:hi@x.com), not here.\n\nOpening hours:\n9:00 – 18:00', ''],
+    ['attachment', 'invoice.pdf', ''],
+    ['message', 'Hi', 'L'],
+  ]);
 });
 
-test('a message whose signature is a small table is still a message', () => {
+test('a link drawn as a button (a coloured cell around it alone, a background, a border, padding, role=button) is a button', () => {
+  const html = '<p>Your invoice is ready.</p>'
+    + '<table><tr><td bgcolor="#1a73e8" style="padding:10px"><a href="https://pay.x.com/1" style="color:#fff">Pay now</a></td></tr></table>'
+    + '<p><a href="https://x.com/a" style="background-color:#e00;padding:8px 16px">Order</a> '
+    + '<a href="https://x.com/b" role="button">Track</a> <a href="https://x.com/c" style="color:#00f;text-decoration:none">Help</a></p>'
+    + '<table><tr><td style="background:#eee">See <a href="https://x.com/d">the terms</a> and <a href="https://x.com/e">privacy</a>.</td></tr></table>';
+  const [d] = buildDiscussions({ inbox: [mail(1, { body_html: html })] }, ME);
+  assert.deepEqual(d.items.slice(1).map(i => i.text), ['Your invoice is ready.\n\n[[Pay now]](https://pay.x.com/1)\n\n'
+    + '[[Order]](https://x.com/a) [[Track]](https://x.com/b) [Help](https://x.com/c)\n\n'
+    + 'See [the terms](https://x.com/d) and [privacy](https://x.com/e).']);
+});
+
+test('a message whose signature is a small table reads as lines', () => {
   const [d] = buildDiscussions({
     inbox: [mail(1, {
       body_text: 'Sure, the meeting is moved to Friday at ten, in the big room.\nLeo | CEO',
       body_html: '<p>Sure, the meeting is moved to Friday at ten, in the big room.</p><table><tr><td>Leo</td><td>CEO</td></tr></table>',
     })],
   }, ME);
-  assert.deepEqual(d.items.slice(1).map(shown), [['message', 'Sure, the meeting is moved to Friday at ten, in the big room.\nLeo | CEO', 'FL']]);
+  assert.deepEqual(d.items.slice(1).map(shown), [['message', 'Sure, the meeting is moved to Friday at ten, in the big room.\n\nLeo\nCEO', 'FL']]);
 });
 
 test('a short reply quoting an email laid out in tables is still a message', () => {
@@ -666,7 +690,7 @@ test('ordinary text about confidentiality, the environment or printing is kept',
   assert.deepEqual(cutEach(bodies), bodies);
 });
 
-test('a closing then a signature table (with a logo) is cut, and the email stays a message, not a page', () => {
+test('a closing then a signature table (with a logo) is cut with them', () => {
   const signature = '<table><tr><td><img src="data:image/png;base64,LOGO"></td><td><b>Leo Bianchini</b><br>Directeur financier'
     + '<br>D Corp – 12 rue de la Paix, 75002 Paris<br>Tél. : +33 1 23 45 67 89<br>www.d-corp.fr</td></tr></table>';
   const [d] = buildDiscussions({
@@ -834,7 +858,7 @@ test('the list search keeps discussions whose people, subjects or message text h
   assert.deepEqual(found('studio.fr'), ['Budget'], 'an address');
   assert.deepEqual(found('2027'), ['Budget'], 'any subject of the discussion');
   assert.deepEqual(found('pizza'), ['Lunch'], 'message text');
-  assert.deepEqual(found('promo'), ['News'], 'the text of an email shown as a page');
+  assert.deepEqual(found('promo'), ['News'], 'the text of an email with only HTML');
   assert.deepEqual(found('pret merci'), ['Budget'], 'words may sit in different messages');
   assert.deepEqual(found('pizza merci'), [], 'every word must match');
   assert.deepEqual(found('me@work.com'), [], 'not my own address: it is on every discussion');

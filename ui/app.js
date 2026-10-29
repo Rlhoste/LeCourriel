@@ -306,12 +306,9 @@ function renderDiscussion(d) {
   const conv = document.getElementById('dm-conv');
   // A reply being written survives refreshes of the same discussion.
   const reply = d && replyDraft?.id === d.id && replyDraft.text ? conv.querySelector('.dm-reply') : null;
-  // So does the reading position, unless it was at the newest message; and the page cards'
-  // heights, so that position holds while they load again.
+  // So does the reading position, unless it was at the newest message.
   const old = d && shownDiscussionId === d.id ? conv.querySelector('.dm-scroll') : null;
   const keepTop = old && old.scrollHeight - old.scrollTop - old.clientHeight >= 4 ? old.scrollTop : null;
-  const pageHeights = new Map(old ? [...old.querySelectorAll('.dm-page')]
-    .map(frame => [frame.closest('.dm-row')?.dataset.uid, frame.style.height]) : []);
   shownDiscussionId = d?.id ?? null;
   renderDiscussionInfo(d);
   if (!d) { conv.innerHTML = ''; replyDraft = null; return; }
@@ -347,12 +344,7 @@ function renderDiscussion(d) {
     conv.appendChild(replyBar(d));
   }
   const scroll = conv.querySelector('.dm-scroll');
-  conv.querySelectorAll('.dm-page').forEach(frame => {
-    const height = pageHeights.get(frame.closest('.dm-row')?.dataset.uid);
-    if (height) frame.style.height = height;
-  });
   scroll.scrollTop = keepTop ?? scroll.scrollHeight;
-  conv.querySelectorAll('.dm-page').forEach(frame => showPage(frame, d.items[frame.dataset.item].email, scroll));
   scroll.addEventListener('click', ev => {   // on the scroll: the find bar rebuilds the bubbles
     const go = ev.target.closest('.dm-task-go');
     if (go) { openTask(Number(go.closest('.dm-task').dataset.task)); return; }
@@ -386,6 +378,7 @@ function renderDiscussion(d) {
 // A bubble's text as written: **bold**, *italic* and [links](url); list lines stay as they are.
 function bubbleHtml(text) {
   return esc(text)
+    .replace(/\[\[([^\]\n]+)\]\]\(((?:https?:|mailto:)[^)\s]+)\)/g, '<a href="#" class="dm-btn" data-url="$2">$1</a>')
     .replace(/\[([^\]\n]+)\]\(((?:https?:|mailto:)[^)\s]+)\)/g, '<a href="#" data-url="$2">$1</a>')
     .replace(/\*\*(?=\S)([^*\n]+?)\*\*/g, '<b>$1</b>')
     .replace(/(^|[^*\w])\*(?=\S)([^*\n]+?)\*(?![*\w])/gm, '$1<i>$2</i>');
@@ -574,7 +567,7 @@ async function sendReply(bar) {
 }
 
 // One item of a discussion: a note, a day separator or a bubble (name once and avatar once per run).
-function discussionItem(item, index) {
+function discussionItem(item) {
   const time = ts => new Date(ts * 1000);
   if (item.kind === 'earlier') return `<div class="dm-earlier">${esc(t('dm.earlier'))}</div>`;
   if (item.kind === 'day') {
@@ -605,17 +598,16 @@ function discussionItem(item, index) {
       </div>
     </div>`;
   }
-  // Images, files and pages stay out of .dm-bubble: the find bar marks text inside bubbles.
+  // Images and files stay out of .dm-bubble: the find bar marks text inside bubbles.
   const content = item.kind === 'message' ? `<div class="dm-bubble">${bubbleHtml(item.text)}</div>`
     : item.kind === 'image' ? `<img class="dm-image" src="${esc(item.src)}" alt="" />`
     : item.kind === 'attachment' ? `<div class="dm-file"><span class="dm-file-icon">📎</span>`
       + `<span class="dm-file-name">${esc(item.name || t('dm.file'))}</span><span class="dm-file-size">${esc(fmtBytes(item.size))}</span></div>`
-    : item.kind === 'page' ? `<iframe class="dm-page" sandbox="allow-same-origin" data-item="${index}" title="${esc(item.email.subject || '')}"></iframe>`
     : null;
   if (!content) return '';
   const s = item.sender;
   return `
-    <div class="dm-row${item.mine ? ' me' : ''}${item.first ? ' first' : ''}${item.last ? ' last' : ''}${item.kind === 'page' ? ' page' : ''}" style="--pc:${s.colour}" data-folder="${esc(item.folder)}" data-uid="${esc(item.email.uid)}">
+    <div class="dm-row${item.mine ? ' me' : ''}${item.first ? ' first' : ''}${item.last ? ' last' : ''}" style="--pc:${s.colour}" data-folder="${esc(item.folder)}" data-uid="${esc(item.email.uid)}">
       <div class="dm-av-slot">${!item.mine && item.last ? avatar(s) : ''}</div>
       <div class="dm-msg">
         ${item.first ? postcardTop(s, time(item.date_ts)) : ''}
@@ -651,17 +643,6 @@ function postcardTop(s, date) {
 function fmtBytes(n) {
   const [unit, value] = n >= 1e6 ? ['megabyte', n / 1e6] : n >= 1e3 ? ['kilobyte', n / 1e3] : ['byte', n];
   return new Intl.NumberFormat(langInfo().locale, { style: 'unit', unit, unitDisplay: 'short', maximumFractionDigits: value < 10 ? 1 : 0 }).format(value);
-}
-
-// A page-layout email rendered as it is, as tall as its content; the discussion stays at the bottom.
-function showPage(frame, email, scroll) {
-  frame.addEventListener('load', () => {
-    const atBottom = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 4;
-    const doc = frame.contentDocument;
-    if (doc?.documentElement) frame.style.height = `${doc.documentElement.scrollHeight}px`;
-    if (atBottom) scroll.scrollTop = scroll.scrollHeight;
-  });
-  setIframeContent(frame, email);
 }
 
 const avatar = p => `<span class="dm-av" style="--pc:${p.colour}" title="${esc(p.name || p.address)}">${esc(p.initials)}</span>`;
