@@ -105,12 +105,12 @@
     for (const name of ['inbox', 'sent', 'trash', 'spam']) for (const e of folders?.[name] || []) folderOf.set(e, name);
     const drafts = new Set(folders?.drafts || []);
     [markedBefore, markedNow] = [markedNow, new Map()];   // HTML already turned to text by the last build is reused
-    const texts = newTexts([...folderOf.keys()], context.signatures || []);
+    const threads = groupThreads(sortEmails([...folderOf.keys(), ...drafts])).map(({ lead, replies }) => [lead, ...replies].reverse());
+    const texts = newTexts([...folderOf.keys()], context.signatures || [], threads);
     // A task taken from an email names it by its inbox id (other folders number theirs apart).
     const tasks = new Map((context.tasks || []).filter(t => t.source_uid != null).map(t => [t.source_uid, t]));
     const taskOf = email => (folderOf.get(email) === 'inbox' ? tasks.get(email.uid) : undefined);
-    return groupThreads(sortEmails([...folderOf.keys(), ...drafts]))
-      .map(({ lead, replies }) => [lead, ...replies].reverse())
+    return threads
       .filter(emails => emails.some(e => listed.has(e)))
       .map(emails => discussion(emails.filter(e => !drafts.has(e)), emails.filter(e => drafts.has(e)), context, folderOf, texts, taskOf))
       .sort((a, b) => b.date_ts - a.date_ts);
@@ -396,18 +396,31 @@
   const SIGNATURE_ID = /^(?:x_)?(?:Signature|AppleMailSignature|ms-outlook-mobile-signature)$/i;
   const isSignatureMark = (name, attrs) => (attrs.get('class') || '').split(/\s+/).some(c => SIGNATURE_CLASS.test(c))
     || attrs.get('data-smartmail') === 'gmail_signature' || SIGNATURE_ID.test(attrs.get('id') || '');
-  let markedNow = new Map();   // HTML → { text, signed }, for this build (and the one before)
+  // The quoted history a mail app marks in its HTML: the element goes (Gmail, Apple Mail, Thunderbird,
+  // Yahoo, Outlook for Mac), or all from it to the end (Outlook: the quote follows the header it marks).
+  const QUOTE_CLASS = /^(?:gmail_quote(?:_container)?|yahoo_quoted|moz-cite-prefix)$/i;
+  const QUOTE_ID = /^(?:yahoo_quoted_\d+|mail-editor-reference-message-container)$/i;
+  const isQuoteMark = (name, attrs) => (attrs.get('class') || '').split(/\s+/).some(c => QUOTE_CLASS.test(c))
+    || (name === 'blockquote' && (attrs.get('type') || '').toLowerCase() === 'cite') || QUOTE_ID.test(attrs.get('id') || '');
+  const QUOTE_TO_END = /<[a-z][^>]*?\sid\s*=\s*["']?(?:x_)?(?:divRplyFwdMsg|appendonsend|stopSpelling)\b/i;
+  const removeQuotes = html => removeElements(html.slice(0, QUOTE_TO_END.exec(html)?.index ?? html.length), isQuoteMark);
+  let markedNow = new Map();   // HTML → its texts, for this build (and the one before)
   let markedBefore = new Map();
-  // `signed`: a marked signature was cut. When cutting it leaves nothing, the text keeps it.
+  // { text, signed, full() }: `text` is without the marked quote and signature, `signed` when a marked
+  // signature was cut (when cutting leaves nothing, the text keeps what was cut); `full()` keeps the quote.
   function htmlMarked(source) {
     const known = markedNow.get(source) ?? markedBefore.get(source);
     if (known !== undefined) { markedNow.set(source, known); return known; }
     const html = removeElements(String(source)
       .replace(/<!--[\s\S]*?-->/g, '')
       .replace(/<(head|style|script|title|template)\b[\s\S]*?<\/\1\s*>/gi, ''), isHidden);
-    const unsigned = removeElements(html, isSignatureMark);
-    const text = unsigned !== html ? marked(unsigned) : '';
-    const result = text ? { text, signed: true } : { text: marked(html), signed: false };
+    const unquoted = removeQuotes(html);
+    const unsigned = removeElements(unquoted, isSignatureMark);
+    let text = unsigned !== unquoted ? marked(unsigned) : '';
+    const signed = Boolean(text);
+    if (!text) text = marked(unquoted) || marked(html);
+    let full;
+    const result = { text, signed, full: () => (full ??= marked(removeElements(html, isSignatureMark)) || marked(html)) };
     markedNow.set(source, result);
     return result;
   }
@@ -505,22 +518,47 @@
   const QUOTE_INTRO = /^\s*(?:Le|On)\s.*\d.*(?:a\s+écrit|wrote)\s*:\s*$/i;
   const RULE_LINE = /^\s*(?:[-_─=]{3,}|-+\s*(?:Original Message|Message d'origine)\s*-+)?\s*$/i;
   // `signed`: its HTML marked the signature, already cut; no closing is guessed then.
-  function newText(email, signatures = [], { text: whole, signed } = emailText(email)) {
-    return cutText(whole, signatures, signed) || whole;
+  // A forward: its note is cut, the forwarded message is kept whole after it.
+  function newText(email, signatures = [], body = emailText(email)) {
+    const cut = cutText(body.text, signatures, body.signed);
+    if (body.forwarded !== undefined) return [cut, body.forwarded].filter(Boolean).join('\n\n');
+    return cut || body.text;
   }
 
-  // An email's whole text ({ text, signed }): its HTML as bubble text, else its plain text.
+  // An email's whole text ({ text, signed, forwarded }): its HTML as bubble text, else its plain text.
+  // `forwarded`, for a forward, is the forwarded message, out of `text` (the note before it).
+  const FORWARD_SUBJECT = /^\s*(?:fwd?|tr|wg|rv|enc)\s*:/i;
+  const FORWARD_LINE = /^[\s-]*(?:forwarded message|message transféré|begin forwarded message|début du message (?:réexpédié|transféré))\s*:?[\s-]*$/i;
+  const FORWARD_WORDS = /forwarded message|message transféré|début du message (?:réexpédié|transféré)|moz-forward-container/i;
   function emailText(email) {
     const html = String(email.body_html || '');
     const fromHtml = html.trim() ? htmlMarked(html) : { text: '' };
-    if (fromHtml.text) return fromHtml;
+    if (fromHtml.text) {
+      const forward = (FORWARD_SUBJECT.test(email.subject || '') || FORWARD_WORDS.test(html)) && forwardOf(fromHtml.full(), email);
+      return forward || { text: fromHtml.text, signed: fromHtml.signed };
+    }
     // A link shows as "[text][1]" with its address on a "[1]: url" line at the very end
     // (after any quote): put the address back beside it, as "[text](url)".
     const links = new Map();
     const body = String(email.body_text || '').replace(/\r\n?/g, '\n').split('\n')
       .filter(line => { const m = /^\[(\d+)\]:\s*(\S+)\s*$/.exec(line); if (m) links.set(m[1], m[2]); return !m; })
       .join('\n');
-    return { text: body.replace(/\[([^\]\n]*)\]\[(\d+)\]/g, (all, text, n) => (links.has(n) ? `[${text}](${links.get(n)})` : all)).trim(), signed: false };
+    const text = body.replace(/\[([^\]\n]*)\]\[(\d+)\]/g, (all, t, n) => (links.has(n) ? `[${t}](${links.get(n)})` : all)).trim();
+    return forwardOf(text, email) || { text, signed: false };
+  }
+
+  // A forward: a "Forwarded message" line comes before any quote, or the subject says Fwd:/TR: and a quote starts.
+  // Never a reply (Re:, AW:…), even to a forward: what it quotes is history.
+  const REPLY_SUBJECT = /^\s*(?:re|aw|sv|antw|r|réf)\s*:/i;
+  function forwardOf(text, email) {
+    if (REPLY_SUBJECT.test(email.subject || '')) return null;
+    const lines = text.split('\n');
+    const split = i => ({ text: lines.slice(0, i).join('\n').trim(), signed: false, forwarded: lines.slice(i).join('\n').trim() });
+    for (let i = 0; i < lines.length; i++) {
+      if (FORWARD_LINE.test(plainLine(lines[i]))) return split(i);
+      if (quoteStarts(lines, i)) return FORWARD_SUBJECT.test(email.subject || '') ? split(i) : null;
+    }
+    return null;
   }
 
   // A whole line only: "Envoyé de mon iPhone", "Sent from Outlook for Android", "Get Outlook for iOS".
@@ -540,13 +578,26 @@
   // A line that reads as written text, not a signature line: a P.S., or a sentence of 5+ words.
   const isWritten = line => /^p\.?\s?s\b/i.test(line) || (/[.!?]$/.test(line) && line.split(/\s+/).length >= 5);
 
-  // Line i starts the quoted history (an Outlook header block, "Le … a écrit :") or a signature block
-  // ("-- ", a "sent from my phone" line, a legal notice, a "think before printing" line): it and all after go.
+  // Line i starts the quoted history: an Outlook header block (From: then Subject: within 5 lines,
+  // or 3+ header lines in a row), "Le … a écrit :", "-----Original Message-----".
+  const HEADER_LINE = /^(?:from|de|sent|envoyé|date|to|à|a|cc|subject|objet)\s*:/i;
+  const ORIGINAL_LINE = /^\s*-{2,}\s*(?:original message|message d'origine)\s*-{2,}\s*$/i;
+  function quoteStarts(lines, i) {
+    const line = lines[i];
+    if (line.startsWith(IMAGE)) return false;
+    if (QUOTE_FROM.test(plainLine(line))) {
+      const next = lines.slice(i + 1, i + 6).map(plainLine);
+      if (next.some(l => QUOTE_SUBJECT.test(l)) || (next.length >= 2 && next.slice(0, 2).every(l => HEADER_LINE.test(l)))) return true;
+    }
+    return QUOTE_INTRO.test(line) || QUOTE_INTRO.test(`${line} ${lines[i + 1]}`) || ORIGINAL_LINE.test(line);
+  }
+
+  // Line i starts the quoted history, or a signature block ("-- ", a "sent from my phone" line,
+  // a legal notice, a "think before printing" line): it and all after go.
   function historyStarts(lines, i) {
     const line = lines[i];
     if (line.startsWith(IMAGE)) return false;
-    if ((QUOTE_FROM.test(line) && lines.slice(i + 1, i + 6).some(l => QUOTE_SUBJECT.test(l)))
-      || QUOTE_INTRO.test(line) || QUOTE_INTRO.test(`${line} ${lines[i + 1]}`)
+    if (quoteStarts(lines, i)
       || /^--\s?$/.test(line)   // signature delimiter "-- " (the space may be trimmed)
       || MOBILE.test(line)
       || ENVIRONMENT.every(re => re.test(line))) return true;
@@ -583,19 +634,32 @@
     return kept.join('\n').trim();
   }
 
-  // Each email's new text, then the last lines one sender ends 2+ of their emails with
-  // (a signature we were not told about) are cut: the longest such block, up to MAX_TAIL lines.
-  // One line alone counts only when long and not a sentence: "Thanks" or "Merci" is no signature.
-  // Emails whose HTML marked their signature are left out: it is already cut.
+  // Each email's new text. Then, in each discussion (`threads`, oldest email first), the end of an email
+  // that repeats an earlier message (20+ letters) is cut: a quote no rule knew. Then the last lines one
+  // sender ends 2+ of their emails with (a signature we were not told about) are cut: the longest such
+  // block, up to MAX_TAIL lines. One line alone counts only when long and not a sentence: "Thanks" or
+  // "Merci" is no signature. Emails whose HTML marked their signature are left out (it is already cut),
+  // and forwards too (what they end with is the forwarded message).
   const MAX_TAIL = 15;
   const MIN_TAIL_LINE = 15;
-  function newTexts(emails, signatures) {
+  const MIN_REPEAT = 20;
+  function newTexts(emails, signatures, threads = []) {
     const unsigned = [];
+    const forwards = new Set();
     const texts = new Map(emails.map(e => {
       const whole = emailText(e);
-      if (!whole.signed) unsigned.push(e);
+      if (whole.forwarded !== undefined) forwards.add(e);
+      else if (!whole.signed) unsigned.push(e);
       return [e, newText(e, signatures, whole)];
     }));
+    for (const thread of threads) {
+      const earlier = [];
+      for (const email of thread.filter(e => texts.has(e)).sort((a, b) => (a.date_ts || 0) - (b.date_ts || 0))) {
+        if (!forwards.has(email)) texts.set(email, cutRepeat(texts.get(email), earlier));
+        const words = plainWords(texts.get(email));
+        if (words.length >= MIN_REPEAT) earlier.push(words);
+      }
+    }
     const tails = new Map();   // sender + last k lines → distinct emails ending so
     const tailKeys = email => {
       const lines = texts.get(email).split('\n').map(plainLine).filter(Boolean);
@@ -619,6 +683,27 @@
       texts.set(email, lines.slice(0, cut).join('\n').trim() || texts.get(email));
     }
     return texts;
+  }
+
+  // A text's words, for spotting it again quoted: no ">" quote marks, formatting, spacing or case.
+  const plainWords = text => text.split('\n').map(l => plainLine(l.replace(/^(?:\s*>)+/, ''))).join('').replace(/\s+/g, '').toLowerCase();
+
+  // `text` up to where its lines (from the 2nd) repeat one of the `earlier` texts (as plainWords),
+  // with the line just before when it introduces the quote ("…, 26.10.2026:"). Whole when that leaves nothing.
+  function cutRepeat(text, earlier) {
+    if (!earlier.length) return text;
+    const lines = text.split('\n');
+    let at = -1;
+    let rest = '';
+    for (let s = lines.length - 1; s >= 1; s--) {
+      const words = plainWords(lines[s]);
+      rest = words + rest;
+      if (words && earlier.some(w => rest.startsWith(w))) at = s;
+    }
+    if (at < 0) return text;
+    while (at > 0 && !lines[at - 1].trim()) at--;
+    if (at > 0 && /:\s*$/.test(lines[at - 1]) && plainLine(lines[at - 1]).length <= 100) at--;
+    return lines.slice(0, at).join('\n').trim() || text;
   }
 
   // A line's words only: formatting marks (**bold**, *italic*, [link][1] / [link](url)) and spacing ignored;

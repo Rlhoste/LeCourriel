@@ -656,6 +656,59 @@ test('where the HTML marks the signature, guesses from the text do not cut more'
 // Each body as its own email from its own sender; the bubbles in the bodies' order.
 const cutEach = bodies => bubbles(bodies.map((body_text, i) => mail(i + 1, { subject: `S${i}`, body_text }))).reverse();
 
+test('a quote its mail app marks in the HTML (Gmail, Apple Mail, Outlook, Thunderbird, Yahoo) is cut, whatever its language', () => {
+  assert.deepEqual(bubbles([
+    '<div dir="ltr">Sounds good.</div><br><div class="gmail_quote gmail_quote_container"><div dir="ltr" class="gmail_attr">'
+      + 'Am Mo., 26. Okt. 2026 um 09:12 Uhr schrieb Leo &lt;leo@d.com&gt;:<br></div><blockquote class="gmail_quote">Lunch?</blockquote></div>',
+    '<div dir="ltr">Parfait.</div><div dir="ltr"><br><blockquote type="cite">Il giorno 26 ott 2026, alle ore 09:12, Leo ha scritto:<br><br></blockquote></div>'
+      + '<blockquote type="cite"><div dir="ltr">Pranzo?</div></blockquote>',
+    '<div class="elementToProof">Agreed.</div><div id="appendonsend"></div><hr style="display:inline-block;width:98%">'
+      + '<div id="divRplyFwdMsg" dir="ltr"><b>Von:</b> Leo<br><b>Gesendet:</b> Montag<br><b>Betreff:</b> Budget</div><div>Hier ist das Budget.</div>',
+    '<div>Got it.</div><hr><div id="x_divRplyFwdMsg"><b>Från:</b> Leo</div><div>Budget</div>',
+    '<div class="WordSection1"><p class="MsoNormal">Bien reçu.</p><div id="stopSpelling"><p class="MsoNormal">Leo, 26/10</p></div><p>Voici le budget.</p></div>',
+    '<div class="moz-cite-prefix">Am 26.10.2026 um 09:12 schrieb Leo:<br></div><blockquote type="cite" cite="mid:1@d.com">Lunch?</blockquote><p>Yes, at noon.</p>',
+    '<div>¡Gracias!</div><div id="yahoo_quoted_8812" class="yahoo_quoted"><div>El lunes, 26 de octubre de 2026, Leo escribió:</div><div>Voici</div></div>',
+  ].map((body_html, i) => mail(i + 1, { subject: `S${i}`, body_html }))).reverse(),
+  ['Sounds good.', 'Parfait.', 'Agreed.', 'Got it.', 'Bien reçu.', 'Yes, at noon.', '¡Gracias!']);
+});
+
+test('an "-----Original Message-----" line, or 3+ header lines in a row from "From:" / "De :", start the quoted history', () => {
+  assert.deepEqual(cutEach([
+    'Vu.\n\n-----Message d\'origine-----\nExpéditeur : Leo\nVoici.',
+    'Noted.\n\n-----Original Message-----\nLeo wrote this on Monday\nHere is the budget.',
+    'Noted.\n\nFrom: Leo Bianchini\nSent: Monday, October 26, 2026 9:12 AM\nTo: Me\n\nHere is the budget.',
+    'OK pour moi.\n\n**De :** Leo Bianchini\n**Envoyé :** lundi 26 octobre\n**À :** Moi\n**Cc :** Ana\n**Objet :** Budget\n\nVoici.',
+    'Happy new year!\n\nFrom: the whole team\nTo: everyone',
+  ]), ['Vu.', 'Noted.', 'Noted.', 'OK pour moi.', 'Happy new year!\n\nFrom: the whole team\nTo: everyone']);
+});
+
+test('the end of an email that repeats an earlier message of the discussion is cut, even quoted in a way no rule knows', () => {
+  assert.deepEqual(bubbles([
+    mail(1, { subject: 'Budget', from_email: 'leo@d.com', body_text: 'Here is the budget for Q4,\nwith the new numbers.' }),
+    mail(2, { subject: 'RE: Budget', from_email: 'ana@d.com', body_text: 'Thanks! Can we talk on Friday?\n\nLeo Bianchini, 26.10.2026 09:12:\nHere is the budget for Q4, with the\nNEW numbers.' }),
+    mail(3, { subject: 'RE: Budget', from_email: 'leo@d.com', body_text: 'Yes, Friday 10:00.\n\nAna Costa, 27.10.2026:\n   thanks!  Can we talk on Friday?\nLeo Bianchini, 26.10.2026 09:12:\nHere is the budget for Q4, with the new numbers.' }),
+    mail(4, { subject: 'RE: Budget', from_email: 'me@work.com', body_text: 'OK.' }),
+    mail(5, { subject: 'RE: Budget', from_email: 'leo@d.com', body_text: 'Great.\nOK.' }),
+  ]), ['Here is the budget for Q4,\nwith the new numbers.', 'Thanks! Can we talk on Friday?', 'Yes, Friday 10:00.', 'OK.', 'Great.\nOK.']);
+});
+
+test('a forwarded email is kept: its note is cut as usual, the forwarded message shows whole; a reply to a forward is cut', () => {
+  const forwarded = '---------- Forwarded message ---------\nFrom: Ana Costa <ana@d.com>\nDate: Mon, Oct 26, 2026\nSubject: Planning\nTo: Leo <leo@d.com>\n\nThe launch moves to May.';
+  assert.deepEqual(bubbles([
+    mail(1, { subject: 'Fwd: Planning', from_email: 'leo@d.com', body_text: `FYI, see below.\n\nCordialement,\nLeo\n\n${forwarded}` }),
+    mail(2, { subject: 'TR: Devis', from_email: 'marc@e.com', body_html: '<div>Pour info.</div><div id="appendonsend"></div><hr>'
+      + '<div id="divRplyFwdMsg"><b>De :</b> Paul<br><b>Envoyé :</b> lundi<br><b>À :</b> Marc<br><b>Objet :</b> Devis</div><div>Le devis est validé.</div>' }),
+    mail(3, { subject: 'Fwd: Photos', from_email: 'leo@d.com', body_html: '<div dir="ltr"><br><br><div class="gmail_quote gmail_quote_container"><div dir="ltr" class="gmail_attr">'
+      + '---------- Forwarded message ---------<br>From: <b class="gmail_sendername">Ana</b> &lt;ana@d.com&gt;<br>Date: Mon, Oct 26, 2026<br>Subject: Photos<br></div>'
+      + '<br><br><div dir="ltr">Here are the photos.</div></div></div>' }),
+    mail(4, { subject: 'RE: TR: Devis', from_email: 'paul@e.com', body_text: 'Merci Marc.\n\nDe : Marc\nEnvoyé : mardi\nÀ : Paul\nObjet : TR: Devis\n\nPour info.\n\n-------- Message transféré --------\nDe : Paul\nLe devis est validé.' }),
+  ]), [
+    'Pour info.\n\n**De :** Paul\n**Envoyé :** lundi\n**À :** Marc\n**Objet :** Devis\nLe devis est validé.', 'Merci Marc.',
+    '---------- Forwarded message ---------\nFrom: **Ana** <ana@d.com>\nDate: Mon, Oct 26, 2026\nSubject: Photos\n\nHere are the photos.',
+    `FYI, see below.\n\n${forwarded}`,
+  ]);
+});
+
 test('a "sent from my phone" line (Envoyé de mon iPhone, Sent from Outlook for Android…) and all after it is cut', () => {
   assert.deepEqual(cutEach([
     'Je regarde ce soir.\n\nEnvoyé de mon iPhone',
