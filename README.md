@@ -104,7 +104,7 @@ you like.
 - **Premium**: graphite grey and champagne gold, with a serif greeting.
 - **Midnight**: the classic dark theme with blue accents.
 - **Modern**: light, airy and rounded.
-- **Brutalist**: thick black borders, loud yellow, monospace, hard shadows.
+- **Brutalist**: thick black borders, loud yellow, heavy type, hard shadows.
 - **Frutiger Aero**: glossy bubbles and sky gradients, 2008 nostalgia included.
 - **Terminal**: green on black, for those who never left the shell.
 
@@ -128,9 +128,14 @@ never leave it. See [Choose your AI](#choose-your-ai).
   emails are added automatically, and the AI moves them to Done when your sent mail shows they're handled.
 - **Calendar**: deadlines shown in their day's cell.
 - **Reading pane**: Reply, Forward, Spam, Delete, Move to project, Mark as unread, Save as `.eml`, Print.
+- **Discussion mode**: email threads read like a chat, named after their subject with the people as
+  coloured labels. Each line shows files, tasks, urgency, whether you owe a reply and a one-line AI
+  status ("Waiting for Ana's quote"). Reply from the bar below the thread, set or delete the task of a
+  message in place, and confirm before deleting a message or a whole discussion.
 - **Gmail-style composer**: fonts, sizes, bold/italic/underline, colours, alignment, lists, links, images,
   GIFs (GIPHY), and AI tools (*make formal*, *translate to English*, *correct*, *auto answer*).
-  Sent mail is saved to your IMAP Sent folder.
+  Attach files and folders (a folder goes as one `.zip`, 25 MB in all) with the 📎 button or by
+  dropping them on the editor or the discussion reply bar. Sent mail is saved to your IMAP Sent folder.
 
 ## Install
 
