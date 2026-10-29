@@ -2615,16 +2615,17 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
   transition: transform 0.12s, box-shadow 0.12s;
 }
 [data-theme="brutalist"] .dm-send::before { content: ""; position: absolute; left: 12px; right: 12px; top: 26px; height: 5px; border-radius: 3px; background: #000; }
-/* The letter sticking out of the slot slides in when pointed at and drops on click. */
+/* The letter sticking out of the slot slides in when pointed at and drops on click, staying in while
+   the mail is sent. Its bottom edge sits in the middle of the slot (top 26px to 31px), where it shrinks away. */
 [data-theme="brutalist"] .dm-send::after {
-  content: ""; position: absolute; left: 50%; bottom: 23px; width: 26px; height: 20px; margin-left: -13px;
+  content: ""; position: absolute; left: 50%; bottom: 18px; width: 26px; height: 20px; margin-left: -13px;
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='20'%3E%3Crect x='1' y='1' width='24' height='18' fill='white' stroke='black' stroke-width='2'/%3E%3Cpath d='M1 1l12 9 12-9' fill='none' stroke='black' stroke-width='2'/%3E%3Crect x='18' y='3' width='5' height='6' fill='%23c0262d'/%3E%3C/svg%3E") center top / 26px 20px no-repeat;
   transform: rotate(-8deg); transform-origin: bottom center; transition: height 0.25s ease-in, transform 0.2s;
 }
 [data-theme="brutalist"] .dm-send:hover:not(:disabled) { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 #000; }
-[data-theme="brutalist"] .dm-send:hover:not(:disabled)::after { transform: rotate(0); height: 9px; }
+[data-theme="brutalist"] .dm-send:hover:not(:active, :disabled)::after { transform: rotate(0); height: 9px; }
 [data-theme="brutalist"] .dm-send:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
-[data-theme="brutalist"] .dm-send:active:not(:disabled)::after { height: 0; transition-duration: 0.1s; }
+[data-theme="brutalist"] .dm-send:is(:active, :disabled)::after { transform: rotate(0); height: 0; }
 
 /* The ⓘ sheet is a receipt; the message menu and Show original carry the airmail stripe. */
 [data-theme="brutalist"] .dm-info { background: #fff8e6; border-inline-start: 3px solid #000; }
