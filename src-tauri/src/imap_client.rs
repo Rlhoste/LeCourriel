@@ -22,7 +22,7 @@ pub async fn connect(cfg: &ImapConfig) -> Result<ImapSession> {
     info!("Connecting to IMAP {}:{}", cfg.host, cfg.port);
 
     let tls = TlsConnector::builder()
-        .min_protocol_version(Some(native_tls::Protocol::Tlsv10))
+        .min_protocol_version(Some(native_tls::Protocol::Tlsv12))
         .build()
         .context("Failed to build TLS connector")?;
     let tls = tokio_native_tls::TlsConnector::from(tls);
