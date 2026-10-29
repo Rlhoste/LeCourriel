@@ -111,7 +111,7 @@ STRINGS.ar = {
     'dm.earlier': 'الرسائل السابقة غير محمّلة', 'dm.draft': 'مسودة', 'dm.file': 'ملف مرفق', 'dm.cc': '{name} (نسخة)',
     'dm.added': 'أضاف {who} {names}', 'dm.removed': 'أزال {who} {names}', 'dm.youAdded': 'أضفت {names}', 'dm.youRemoved': 'أزلت {names}',
     'dm.details': "التفاصيل", 'dm.archive': "أرشفة", 'dm.people': "الأشخاص", 'dm.subjects': "المواضيع", 'dm.where': "المكان", 'dm.summary': "ملخص الذكاء الاصطناعي", 'dm.files': "الملفات المشتركة",
-    'dm.me': "أنت", 'dm.addTask': "إضافة كمهمة", 'dm.taskAdded': "أُضيفت إلى المهام", 'dm.original': "عرض الأصل", 'dm.headers': "كل الترويسات", 'dm.openTask': "فتح المهمة", 'dm.deleteAsk': "حذف هذه المحادثة؟ ستنتقل رسائلها إلى المهملات: {n}",
+    'dm.me': "أنت", 'dm.addTask': "إضافة كمهمة", 'dm.taskAdded': "أُضيفت إلى المهام", 'dm.original': "عرض الأصل", 'dm.headers': "كل الترويسات", 'dm.openTask': "انتقل إلى المهمة", 'dm.notDone': "لم تُنجز", 'dm.taskStatus': "حالة المهمة", 'dm.deleteAsk': "حذف هذه المحادثة؟ ستنتقل رسائلها إلى المهملات: {n}",
     'dm.newCard': "✎ بطاقة جديدة", 'dm.searchMail': "ابحث في البريد…", 'dm.addCard': "+ عنوان", 'dm.replyCard': "اكتب على ظهر البطاقة…", 'dm.greetings': "تحيات من", 'dm.notSent': "لم تُرسل بعد", 'dm.unread.other': "{n} جديدة",
     'set.fontScale': 'حجم الخط', 'set.theme': 'السمة', 'set.language': 'اللغة',
     "set.signature": "التوقيع", "set.sigChoose": "📄 اختر ملف HTML…", "set.sigRemove": "إزالة", "set.sigOnNew": "إضافة إلى الرسائل الجديدة", "set.sigOnReply": "إضافة إلى الردود وإعادة التوجيه", "set.sigHint": "لا يوجد توقيع بعد. صدّره من برنامج البريد لديك (Outlook وGmail…) كملف HTML، أو أنشئ واحدًا بأي مولّد توقيعات.", "set.sigImported": "تم استيراد التوقيع", "set.sigRemoved": "تمت إزالة التوقيع", "set.sigFileFilter": "ملفات HTML",
