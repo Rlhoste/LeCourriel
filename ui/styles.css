@@ -2257,9 +2257,15 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 }
 .dm-row.me .dm-task { align-self: flex-end; }
 .dm-task-title { min-width: 0; overflow-wrap: anywhere; }
-.dm-task-status { padding: 0 2px; border: 1px solid currentColor; border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
-.dm-task-status option { color: #000; background: #fff; }
+.dm-task-status { display: inline-flex; border: 1px solid currentColor; border-radius: 6px; overflow: hidden; }
+.dm-task-status button { padding: 0 6px; border: none; background: transparent; color: inherit; font: inherit; font-weight: 500; cursor: pointer; }
+.dm-task-status button + button { border-inline-start: 1px solid currentColor; }
+.dm-task-status button:hover { background: color-mix(in srgb, currentColor 12%, transparent); }
+.dm-task-status button.on { background: color-mix(in srgb, currentColor 25%, transparent); font-weight: 800; cursor: default; }
+.dm-task-given-up { font-style: italic; opacity: 0.8; }
 .dm-task-go { padding: 0; border: none; background: none; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
+.dm-task-del { padding: 0 2px; border: none; background: none; color: inherit; font: inherit; cursor: pointer; opacity: 0.7; }
+.dm-task-del:hover { opacity: 1; }
 .rp-menu.dm-menu { position: fixed; right: auto; z-index: 120; }
 .kanban-card.kanban-landed { animation: dm-landed 2.5s ease-out; }
 
@@ -2590,6 +2596,8 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
   border-radius: 50%; background: var(--post); color: #fff; font-size: 11px; font-weight: 900;
 }
 [data-theme="brutalist"] .dm-task-status { border: 2px solid #000; border-radius: 0; font-weight: 800; }
+[data-theme="brutalist"] .dm-task-status button + button { border-inline-start-width: 2px; }
+[data-theme="brutalist"] .dm-task-status button.on { background: #000; color: #fff; }
 /* Day separators are rubber stamps, missing messages a tear line, recipient changes a parcel tag. */
 [data-theme="brutalist"] .dm-sep {
   margin: 26px 0 4px; padding: 2px 12px; color: var(--post); border: 3px double var(--post);

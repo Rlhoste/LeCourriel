@@ -104,7 +104,7 @@ STRINGS.ja = {
     'dm.earlier': '以前のメッセージは読み込まれていません', 'dm.draft': '下書き', 'dm.file': '添付ファイル', 'dm.cc': '{name}（Cc）',
     'dm.added': '{who}が{names}を追加しました', 'dm.removed': '{who}が{names}を外しました', 'dm.youAdded': '{names}を追加しました', 'dm.youRemoved': '{names}を外しました',
     'dm.details': "詳細", 'dm.archive': "アーカイブ", 'dm.people': "参加者", 'dm.subjects': "件名", 'dm.where': "保存場所", 'dm.summary': "AI 要約", 'dm.files': "共有ファイル",
-    'dm.me': "あなた", 'dm.addTask': "タスクとして追加", 'dm.taskAdded': "タスクに追加しました", 'dm.original': "元のメールを表示", 'dm.headers': "すべてのヘッダー", 'dm.openTask': "タスクへ移動", 'dm.notDone': "未完了", 'dm.taskStatus': "タスクの状態", 'dm.deleteAsk': "この会話を削除しますか？メールはゴミ箱に移動します：{n}", 'dm.deleteOneAsk': "このメッセージを削除しますか？ゴミ箱に移動します。",
+    'dm.me': "あなた", 'dm.addTask': "タスクとして追加", 'dm.taskAdded': "タスクに追加しました", 'dm.original': "元のメールを表示", 'dm.headers': "すべてのヘッダー", 'dm.openTask': "タスクへ移動", 'dm.notDone': "未完了", 'dm.taskStatus': "タスクの状態", 'dm.deleteAsk': "この会話を削除しますか？メールはゴミ箱に移動します：{n}", 'dm.deleteTask': "タスクを削除", 'dm.deleteTaskAsk': "このタスクを削除しますか？ボードからも削除されます。", 'dm.deleteOneAsk': "このメッセージを削除しますか？ゴミ箱に移動します。",
     'dm.newCard': "✎ 新しいはがき", 'dm.searchMail': "郵便を検索…", 'dm.search': "会話を検索…", 'dm.addCard': "+ 宛先", 'dm.replyCard': "はがきの裏に書く…", 'dm.greetings': "お便り", 'dm.notSent': "まだ送信していません", 'dm.unread.other': "新着 {n} 件",
     'set.fontScale': '文字の大きさ', 'set.theme': 'テーマ', 'set.language': '言語',
     "set.signature": "署名", "set.sigChoose": "📄 HTML ファイルを選択…", "set.sigRemove": "削除", "set.sigOnNew": "新規メッセージに追加", "set.sigOnReply": "返信と転送に追加", "set.sigHint": "署名はまだありません。メールソフト（Outlook、Gmail など）から HTML ファイルとして書き出すか、署名作成ツールで作成してください。", "set.sigImported": "署名を読み込みました", "set.sigRemoved": "署名を削除しました", "set.sigFileFilter": "HTML ファイル",
