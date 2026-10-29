@@ -33,3 +33,6 @@ tauri-plugin-notification = "2"
 base64 = "0.22"
 encoding_rs = "0.8"
 quick-xml = "0.42"
+# Only what writing a folder as one .zip needs (#43). The deflate backend is the one Tauri
+# already builds, so no new crate arrives with it.
+zip = { version = "4", default-features = false, features = ["deflate-flate2-zlib-rs"] }

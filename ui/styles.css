@@ -1437,6 +1437,66 @@ body.compose-window .composer-resize { display: none; }
 }
 .composer-icon:hover { background: var(--paper-3); color: var(--danger); }
 
+/* ── Inline SVG icons (#42) ───────────────────────────────────────────────
+   They take the colour and the size of the button that holds them, so each of the six
+   themes paints them like the icons next to them. */
+.ic {
+  width: 1em;
+  height: 1em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: none;
+}
+.composer-header-btns button { display: flex; align-items: center; justify-content: center; }
+.composer-header-btns .ic { width: 14px; height: 14px; }
+.composer-header-btns .ic-collapse { display: none; }
+.composer.expanded .ic-expand { display: none; }
+.composer.expanded .ic-collapse { display: block; }
+.composer-toolbar #tb-attach { display: flex; align-items: center; justify-content: center; }
+.composer-toolbar #tb-attach .ic { width: 15px; height: 15px; }
+
+/* ── Attachments (#43) and the drop zone (#44) ────────────────────────────
+   The editor is "paper": its chips, its menu and its sign use the paper colours. */
+.attach-list { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 16px 0; font-size: 0.78rem; }
+.attach-list.hidden { display: none; }
+.attach-item {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 3px 8px;
+  border: var(--border-w) solid var(--paper-border); border-radius: 999px;
+  background: var(--paper-3); color: var(--paper-text);
+}
+.attach-item .ic { width: 13px; height: 13px; color: var(--paper-text-dim); }
+.attach-name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attach-size { color: var(--paper-text-dim); }
+.attach-x { border: none; background: none; padding: 0 2px; color: var(--paper-text-dim); font: inherit; cursor: pointer; }
+.attach-x:hover { color: var(--danger); }
+.attach-menu {
+  position: fixed; z-index: 300; display: flex; flex-direction: column; min-width: 150px; padding: 4px;
+  background: var(--paper); border: var(--border-w) solid var(--paper-border);
+  border-radius: var(--radius-sm); box-shadow: var(--shadow-pop);
+}
+.attach-menu button {
+  border: none; background: none; padding: 6px 10px; text-align: left; cursor: pointer;
+  color: var(--paper-text); font: inherit; font-size: 0.82rem; border-radius: var(--radius-sm);
+}
+.attach-menu button:hover { background: var(--paper-3); }
+/* The menu opened from the reply bar follows the theme, not the paper. */
+.attach-menu.dm-menu { background: var(--bg2); border-color: var(--border); }
+.attach-menu.dm-menu button { color: var(--text); }
+.attach-menu.dm-menu button:hover { background: var(--bg3); }
+.drop-overlay {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  border-radius: inherit; background: var(--paper); opacity: 0; pointer-events: none;
+  transition: opacity 0.12s; z-index: 8;
+}
+.dropping .drop-overlay { opacity: 0.94; }
+.drop-box {
+  padding: 14px 22px; border: 2px dashed var(--link); border-radius: 10px;
+  background: var(--paper); color: var(--link); font-size: 0.9rem; font-weight: 600;
+}
+
 #toast {
   position: fixed;
   left: 24px;
@@ -2216,7 +2276,7 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 .dm-row.draft .dm-bubble { background: transparent; color: var(--text-dim); border: 1px dashed var(--text-dim); }
 
 /* The reply bar: From/To/Cc bubbles (once something is typed) above the message field. */
-.dm-reply { border-top: 1px solid var(--border); background: var(--bg2); padding: 8px 16px 12px; }
+.dm-reply { position: relative; border-top: 1px solid var(--border); background: var(--bg2); padding: 8px 16px 12px; }
 .dm-recips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 0.85rem; }
 .dm-recips.hidden { display: none; }
 .dm-grp { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
@@ -2237,6 +2297,17 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
   border: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit;
 }
 .dm-expand { border: none; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 1.1rem; height: 40px; }
+.dm-attach, .dm-expand { display: flex; align-items: center; justify-content: center; padding: 0; flex: none; }
+.dm-attach { border: none; background: transparent; color: var(--text-dim); cursor: pointer; height: 40px; }
+.dm-attach:hover, .dm-expand:hover { color: var(--text); }
+.dm-attach .ic, .dm-expand .ic { width: 17px; height: 17px; }
+/* The reply bar is not paper: its chips, its menu and its sign follow the theme. */
+.dm-attach-list { padding: 8px 0 0; }
+.dm-attach-list .attach-item { border-color: var(--border); background: var(--bg3); color: var(--text); }
+.dm-attach-list .attach-item .ic, .dm-attach-list .attach-size, .dm-attach-list .attach-x { color: var(--text-dim); }
+.dm-attach-list .attach-x:hover { color: var(--danger); }
+.dm-reply .drop-overlay { background: var(--bg2); }
+.dm-reply .drop-box { border-color: var(--accent); background: var(--bg); color: var(--accent); }
 .dm-send {
   height: 40px; padding: 0 18px; border: none; border-radius: 20px; cursor: pointer;
   background: var(--accent); color: var(--on-accent); font: inherit; font-weight: 600;

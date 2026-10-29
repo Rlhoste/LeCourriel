@@ -3461,4 +3461,208 @@ urgency = "high"
         assert!(error.to_string().contains("Failed to write config.toml"));
         let _ = std::fs::remove_dir_all(dir);
     }
+
+    // ── Attachments: files and folders (#43), drag and drop (#44) ─────────────
+
+    fn zip_names(archive: &mut zip::ZipArchive<std::io::Cursor<Vec<u8>>>) -> Vec<String> {
+        let mut names: Vec<String> =
+            (0..archive.len()).map(|i| archive.by_index(i).unwrap().name().to_string()).collect();
+        names.sort();
+        names
+    }
+
+    fn zip_file(
+        archive: &mut zip::ZipArchive<std::io::Cursor<Vec<u8>>>,
+        name: &str,
+    ) -> Vec<u8> {
+        let mut file = archive.by_name(name).unwrap();
+        let mut out = Vec::new();
+        std::io::Read::read_to_end(&mut file, &mut out).unwrap();
+        out
+    }
+
+    #[test]
+    fn test_guess_mime_follows_the_extension() {
+        use crate::attachments::guess_mime;
+        assert_eq!(guess_mime("Report.PDF"), "application/pdf");
+        assert_eq!(guess_mime("photo.jpeg"), "image/jpeg");
+        assert_eq!(guess_mime("notes.txt"), "text/plain");
+        assert_eq!(guess_mime("pic.png"), "image/png");
+        assert_eq!(guess_mime("sheet.xlsx"), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        assert_eq!(guess_mime("archive.tar.gz"), "application/gzip");
+        assert_eq!(guess_mime("noextension"), "application/octet-stream");
+        assert_eq!(guess_mime("mystery.qqq"), "application/octet-stream");
+    }
+
+    #[test]
+    fn test_zip_entry_name_keeps_the_folder_and_blocks_escapes() {
+        use crate::attachments::zip_entry_name;
+        assert_eq!(zip_entry_name(None, "a/b.txt"), "a/b.txt");
+        assert_eq!(zip_entry_name(Some("Doc"), "a.txt"), "Doc/a.txt");
+        // The paths a dropped folder gives already start with its name.
+        assert_eq!(zip_entry_name(Some("Doc"), "Doc/a.txt"), "Doc/a.txt");
+        assert_eq!(zip_entry_name(Some("Doc"), "../../secret.txt"), "Doc/secret.txt");
+        assert_eq!(zip_entry_name(Some("Doc"), "/etc/passwd"), "Doc/etc/passwd");
+        assert_eq!(zip_entry_name(Some("Doc"), "a\\b\\c.txt"), "Doc/a/b/c.txt");
+        assert_eq!(zip_entry_name(Some("Doc"), "./a/../b.txt"), "Doc/b.txt");
+    }
+
+    #[test]
+    fn test_safe_file_name_flattens_separators() {
+        use crate::attachments::safe_file_name;
+        assert_eq!(safe_file_name("a/b\\c:d.txt"), "a_b_c_d.txt");
+        assert_eq!(safe_file_name("  report.pdf  "), "report.pdf");
+        assert_eq!(safe_file_name(""), "attachment");
+        assert_eq!(safe_file_name(".."), "attachment");
+    }
+
+    #[test]
+    fn test_zip_bytes_keeps_the_inner_structure() {
+        let entries = vec![
+            ("Doc/a.txt".to_string(), b"first".to_vec()),
+            ("Doc/inner/b.txt".to_string(), b"second".to_vec()),
+        ];
+        let bytes = crate::attachments::zip_bytes(&entries).unwrap();
+        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        assert_eq!(zip_names(&mut archive), vec!["Doc/a.txt", "Doc/inner/b.txt"]);
+        assert_eq!(zip_file(&mut archive, "Doc/inner/b.txt"), b"second");
+    }
+
+    #[test]
+    fn test_prepare_files_stay_files_and_folders_become_zips() {
+        let dir = isolated_test_dir("attach-prepare");
+        std::fs::create_dir_all(dir.join("My Doc/inner")).unwrap();
+        std::fs::write(dir.join("My Doc/a.txt"), "first").unwrap();
+        std::fs::write(dir.join("My Doc/inner/b.txt"), "second").unwrap();
+        std::fs::write(dir.join("notes.md"), "# hi").unwrap();
+
+        let infos = crate::attachments::prepare(&[
+            dir.join("My Doc").to_string_lossy().to_string(),
+            dir.join("notes.md").to_string_lossy().to_string(),
+        ])
+        .unwrap();
+
+        assert_eq!(infos.len(), 2);
+        assert_eq!(infos[0].name, "My Doc.zip");
+        let bytes = std::fs::read(&infos[0].path).unwrap();
+        assert_eq!(bytes.len() as u64, infos[0].size);
+        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        assert_eq!(zip_names(&mut archive), vec!["My Doc/a.txt", "My Doc/inner/b.txt"]);
+        assert_eq!(zip_file(&mut archive, "My Doc/a.txt"), b"first");
+
+        // A plain file is sent from where it sits: nothing is copied.
+        assert_eq!(infos[1].name, "notes.md");
+        assert_eq!(infos[1].size, 4);
+        assert_eq!(infos[1].path, dir.join("notes.md").to_string_lossy());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_prepare_reports_a_gone_file_and_an_empty_folder() {
+        let dir = isolated_test_dir("attach-empty");
+        std::fs::create_dir(dir.join("Empty")).unwrap();
+        let gone = crate::attachments::prepare(&[dir.join("Gone.pdf").to_string_lossy().to_string()]);
+        assert!(gone.is_err());
+        let empty = crate::attachments::prepare(&[dir.join("Empty").to_string_lossy().to_string()]);
+        assert!(empty.unwrap_err().to_string().contains("Empty is empty"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_save_dropped_writes_a_file_and_zips_a_folder() {
+        use base64::Engine;
+        let b64 = base64::engine::general_purpose::STANDARD.encode(b"hello");
+        let items: Vec<crate::attachments::DroppedItem> = serde_json::from_value(serde_json::json!([
+            { "name": "note.txt", "dir": false,
+              "files": [{ "path": "note.txt", "data": format!("data:text/plain;base64,{}", b64) }] },
+            { "name": "Project", "dir": true,
+              "files": [{ "path": "Project/a.txt", "data": b64 },
+                        { "path": "Project/deep/b.txt", "data": b64 }] },
+        ]))
+        .unwrap();
+
+        let infos = crate::attachments::save_dropped(&items).unwrap();
+
+        assert_eq!(infos.len(), 2);
+        assert_eq!(infos[0].name, "note.txt");
+        assert_eq!(infos[0].size, 5);
+        assert_eq!(std::fs::read(&infos[0].path).unwrap(), b"hello");
+        assert_eq!(infos[1].name, "Project.zip");
+        let mut archive =
+            zip::ZipArchive::new(std::io::Cursor::new(std::fs::read(&infos[1].path).unwrap())).unwrap();
+        assert_eq!(zip_names(&mut archive), vec!["Project/a.txt", "Project/deep/b.txt"]);
+        assert_eq!(zip_file(&mut archive, "Project/deep/b.txt"), b"hello");
+    }
+
+    #[test]
+    fn test_save_dropped_refuses_an_empty_folder() {
+        let items: Vec<crate::attachments::DroppedItem> =
+            serde_json::from_value(serde_json::json!([{ "name": "Void", "dir": true, "files": [] }])).unwrap();
+        assert!(crate::attachments::save_dropped(&items).unwrap_err().to_string().contains("Void is empty"));
+    }
+
+    #[test]
+    fn test_load_all_names_and_types_each_file() {
+        let dir = isolated_test_dir("attach-load");
+        std::fs::write(dir.join("photo.png"), [1, 2, 3]).unwrap();
+        let loaded = crate::attachments::load_all(&[dir.join("photo.png").to_string_lossy().to_string()]).unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].filename, "photo.png");
+        assert_eq!(loaded[0].content_type, "image/png");
+        assert_eq!(loaded[0].data, vec![1, 2, 3]);
+        assert!(crate::attachments::load_all(&[dir.join("nope.png").to_string_lossy().to_string()]).is_err());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_message_with_attachments_is_multipart_mixed() {
+        use base64::Engine;
+        let png: Vec<u8> = vec![0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0xff, 0xfe];
+        let files = vec![
+            crate::attachments::Loaded {
+                filename: "report.pdf".into(),
+                content_type: "application/pdf".into(),
+                data: b"%PDF-1.4".to_vec(),
+            },
+            crate::attachments::Loaded {
+                filename: "photo.png".into(),
+                content_type: "image/png".into(),
+                data: png.clone(),
+            },
+        ];
+        let mail = lettre::Message::builder()
+            .from("me@example.com".parse().unwrap())
+            .to("you@example.com".parse().unwrap())
+            .subject("With a file")
+            .multipart(crate::smtp_sender::build_body("<p>Signed</p>", &files))
+            .unwrap();
+        let raw = String::from_utf8_lossy(&mail.formatted()).replace("\r\n", "\n");
+
+        assert!(raw.contains("multipart/mixed"), "{raw}");
+        assert!(raw.contains("multipart/alternative"));
+        assert!(raw.contains("multipart/related"));
+        assert!(raw.contains("Content-Disposition: attachment; filename=\"report.pdf\""), "{raw}");
+        assert!(raw.contains("Content-Type: application/pdf"));
+        assert!(raw.contains("%PDF-1.4"), "the ASCII file travels as it is");
+        // A binary file must not travel as raw bytes.
+        assert!(raw.contains("filename=\"photo.png\""));
+        assert!(raw.contains("Content-Transfer-Encoding: base64"), "{raw}");
+        let want = base64::engine::general_purpose::STANDARD.encode(&png);
+        assert!(raw.contains(&want), "{raw}");
+        assert!(raw.contains("Signed"), "the body is still there");
+    }
+
+    #[test]
+    fn test_message_without_attachments_keeps_the_old_shape() {
+        let mail = lettre::Message::builder()
+            .from("me@example.com".parse().unwrap())
+            .to("you@example.com".parse().unwrap())
+            .subject("Plain")
+            .multipart(crate::smtp_sender::build_body("<p>Hi</p>", &[]))
+            .unwrap();
+        let raw = String::from_utf8_lossy(&mail.formatted()).replace("\r\n", "\n");
+        assert!(!raw.contains("multipart/mixed"), "{raw}");
+        assert!(raw.contains("multipart/alternative"));
+        assert!(raw.contains("Hi"));
+    }
 }

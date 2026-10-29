@@ -6,6 +6,7 @@ use lettre::{
 };
 use tracing::info;
 
+use crate::attachments::{self, Loaded};
 use crate::config::SmtpConfig;
 
 /// Test SMTP connectivity and auth without sending any email.
@@ -41,6 +42,8 @@ pub struct OutgoingMail {
     pub html: String,
     /// Message-ID of the email being replied to, if any.
     pub in_reply_to: Option<String>,
+    /// Files attached to the message: paths on disk (#43, #44).
+    pub attachments: Vec<String>,
 }
 
 pub struct InlineImage {
@@ -113,7 +116,47 @@ fn parse_list(list: &str, field: &str) -> Result<Vec<Mailbox>> {
     Ok(boxes.into_iter().collect())
 }
 
-/// Send an HTML message (with a plain-text alternative and inline images).
+/// The message body: the plain-text alternative of the HTML, its inline images, and the
+/// attached files. With attachments the whole becomes `multipart/mixed`, which is what a
+/// reader expects: the alternative/related part stays one piece of it.
+pub fn build_body(html: &str, files: &[Loaded]) -> MultiPart {
+    let (html_body, images) = extract_inline_images(html);
+    let html_doc = format!("<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head><body>{}</body></html>", html_body);
+    let text = html2text::from_read(html.as_bytes(), 80);
+
+    let mut related = MultiPart::related().singlepart(SinglePart::html(html_doc));
+    for img in images {
+        related = related.singlepart(inline_part(&img.cid, &img.content_type, img.data));
+    }
+    let alternative = MultiPart::alternative()
+        .singlepart(SinglePart::plain(text))
+        .multipart(related);
+    if files.is_empty() {
+        return alternative;
+    }
+    let mut mixed = MultiPart::mixed().multipart(alternative);
+    for file in files {
+        mixed = mixed.singlepart(attachment_part(&file.filename, &file.content_type, file.data.clone()));
+    }
+    mixed
+}
+
+/// An inline part (a picture in the message) with a safe content type.
+fn inline_part(cid: &str, content_type: &str, data: Vec<u8>) -> SinglePart {
+    Attachment::new_inline(cid.to_string()).body(data, mime(content_type))
+}
+
+/// An attached file, named as the recipient should see it.
+fn attachment_part(filename: &str, content_type: &str, data: Vec<u8>) -> SinglePart {
+    Attachment::new(filename.to_string()).body(data, mime(content_type))
+}
+
+fn mime(content_type: &str) -> ContentType {
+    ContentType::parse(content_type)
+        .unwrap_or_else(|_| ContentType::parse("application/octet-stream").expect("static type"))
+}
+
+/// Send an HTML message (with a plain-text alternative, inline images and attachments).
 /// Returns the raw RFC 822 bytes so a copy can be stored in the Sent folder.
 pub async fn send_message(cfg: &SmtpConfig, mail: &OutgoingMail) -> Result<Vec<u8>> {
     let from_mailbox: Mailbox = cfg.from_address.parse().with_context(|| {
@@ -145,18 +188,9 @@ pub async fn send_message(cfg: &SmtpConfig, mail: &OutgoingMail) -> Result<Vec<u
         builder = builder.in_reply_to(id.trim().to_string()).references(id.trim().to_string());
     }
 
-    let (html, images) = extract_inline_images(&mail.html);
-    let html_doc = format!("<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head><body>{}</body></html>", html);
-    let text = html2text::from_read(mail.html.as_bytes(), 80);
-
-    let mut related = MultiPart::related().singlepart(SinglePart::html(html_doc));
-    for img in images {
-        let ct = ContentType::parse(&img.content_type)
-            .unwrap_or_else(|_| ContentType::parse("application/octet-stream").unwrap());
-        related = related.singlepart(Attachment::new_inline(img.cid).body(img.data, ct));
-    }
+    let files = attachments::load_all(&mail.attachments)?;
     let email = builder
-        .multipart(MultiPart::alternative().singlepart(SinglePart::plain(text)).multipart(related))
+        .multipart(build_body(&mail.html, &files))
         .context("Failed to build email message")?;
 
     let creds = Credentials::new(cfg.username.clone(), cfg.password.clone());

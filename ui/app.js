@@ -452,10 +452,207 @@ function runDiscussionFind(move, scrollTo = true) {
   count.textContent = t('dm.findCount', { n: fmtNumber(dmFind.at + 1), total: fmtNumber(marks.length) });
 }
 
+// ── Icons, attachments and drop zones (#42, #43, #44) ───────────────────
+// Inline SVG icons: they take the colour and the size of the button that holds them, so
+// every theme paints them like their neighbours.
+const ICON = {
+  expand: '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>',
+  clip: '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>',
+};
+
+// An attachment is { name, size, path }: a file on disk, or the zip the backend built from
+// a folder. The editor and the reply bar each keep a list of them.
+const attachListHtml = items => items.map((a, i) =>
+  `<span class="attach-item" title="${esc(a.path)}">${ICON.clip}`
+  + `<span class="attach-name">${esc(a.name)}</span>`
+  + `<span class="attach-size">${esc(fmtBytes(a.size))}</span>`
+  + `<button class="attach-x" data-at="${i}" title="${esc(t('dm.remove'))}">✕</button></span>`).join('');
+
+// One place that can hold attachments: the composer, or a discussion's reply bar.
+function attachTarget(list, items, onError, onChange) {
+  const show = () => {
+    list.classList.toggle('hidden', !items.length);
+    list.innerHTML = attachListHtml(items);
+  };
+  list.addEventListener('click', e => {
+    const x = e.target.closest('.attach-x');
+    if (!x) return;
+    items.splice(Number(x.dataset.at), 1);
+    show();
+    if (onChange) onChange();
+  });
+  const add = got => { items.push(...got); show(); if (onChange) onChange(); };
+  const fail = err => onError(t('cmp.attachFailed', { err: String(err) }));
+  show();
+  return {
+    items,
+    show,
+    clear: () => { items.length = 0; show(); },
+    // The OS picker takes files or a folder, never both at once: hence the small menu.
+    async pick(kind) {
+      try {
+        const paths = await pickedPaths(kind);
+        if (paths.length) add(await cmd('prepare_attachments', { paths }));
+      } catch (err) { fail(err); }
+    },
+    async drop(e, skip) {
+      try {
+        const dropped = await droppedItems(e, skip);
+        if (dropped.length) add(await cmd('save_dropped_attachments', { items: dropped }));
+      } catch (err) { fail(err); }
+    },
+  };
+}
+
+async function pickedPaths(kind) {
+  const dialog = window.__TAURI__.dialog;
+  if (kind === 'folder') {
+    const one = await dialog.open({ title: t('cmp.attachFolder'), directory: true });
+    return one ? [one] : [];
+  }
+  const many = await dialog.open({ title: t('cmp.attachFiles'), multiple: true });
+  return Array.isArray(many) ? many.filter(Boolean) : (many ? [many] : []);
+}
+
+// "Files… / Folder…", just under the paperclip that opened it.
+let attachMenu = null;
+
+function closeAttachMenu() {
+  if (!attachMenu) return;
+  attachMenu.el.remove();
+  document.removeEventListener('mousedown', attachMenu.onDown, true);
+  document.removeEventListener('keydown', attachMenu.onKey, true);
+  attachMenu = null;
+}
+
+function openAttachMenu(anchor, target) {
+  const reopening = attachMenu && attachMenu.anchor === anchor;
+  closeAttachMenu();
+  if (reopening) return;
+  const el = document.createElement('div');
+  el.className = anchor.closest('.dm-reply') ? 'attach-menu dm-menu' : 'attach-menu';
+  el.innerHTML = `<button type="button" data-kind="files">${esc(t('cmp.attachFiles'))}</button>
+    <button type="button" data-kind="folder">${esc(t('cmp.attachFolder'))}</button>`;
+  document.body.appendChild(el);
+  const box = anchor.getBoundingClientRect();
+  const under = box.bottom + el.offsetHeight + 10 < window.innerHeight;
+  el.style.left = Math.max(8, Math.min(box.left, window.innerWidth - el.offsetWidth - 8)) + 'px';
+  el.style.top = `${(under ? box.bottom + 4 : box.top - el.offsetHeight - 4)}px`;
+  el.addEventListener('click', e => {
+    const btn = e.target.closest('button[data-kind]');
+    if (!btn) return;
+    const kind = btn.dataset.kind;
+    closeAttachMenu();
+    target.pick(kind);
+  });
+  const onDown = e => {
+    if (!el.contains(e.target) && !anchor.contains(e.target)) closeAttachMenu();
+  };
+  const onKey = e => { if (e.key === 'Escape') closeAttachMenu(); };
+  document.addEventListener('mousedown', onDown, true);
+  document.addEventListener('keydown', onKey, true);
+  attachMenu = { el, anchor, onDown, onKey };
+}
+
+// #44: files and folders can be dropped on the editor or on the reply bar. The zone shows a
+// sign while something is dragged over it, and hides it again on leave or drop.
+function setupDropZone(zone, target, skipFor) {
+  // The editor already carries its sign in the HTML shell; the reply bar gets one here.
+  let overlay = zone.querySelector(':scope > .drop-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.className = 'drop-overlay';
+    overlay.innerHTML = `<span class="drop-box">${esc(t('cmp.dropHere'))}</span>`;
+    zone.appendChild(overlay);
+  }
+  let depth = 0;
+  const carriesFiles = e => Array.from(e.dataTransfer?.types || []).includes('Files');
+  zone.addEventListener('dragenter', e => {
+    if (!carriesFiles(e)) return;
+    e.preventDefault();
+    depth++;
+    zone.classList.add('dropping');
+  });
+  zone.addEventListener('dragover', e => {
+    if (!carriesFiles(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  });
+  zone.addEventListener('dragleave', () => {
+    if (--depth <= 0) { depth = 0; zone.classList.remove('dropping'); }
+  });
+  zone.addEventListener('drop', e => {
+    if (!carriesFiles(e)) return;
+    e.preventDefault();
+    depth = 0;
+    zone.classList.remove('dropping');
+    target.drop(e, skipFor ? skipFor(e) : null);
+  });
+}
+
+// What was dropped: a file keeps its name, a folder brings every file inside it with its
+// path within the folder. The webview gives no disk path for a dropped file, so the bytes
+// travel base64-encoded and the backend writes them (or zips the folder).
+async function droppedItems(e, skip) {
+  const empty = [];
+  const items = [];
+  for (const entry of droppedEntries(e.dataTransfer)) {
+    const files = await entryFiles(entry, '');
+    if (!files.length) { if (entry.isDirectory) empty.push(entry.name); continue; }
+    items.push({ name: entry.name, dir: !!entry.isDirectory, files });
+  }
+  if (empty.length) showToast(t('cmp.attachEmpty', { name: empty.join(', ') }));
+  return skip ? items.filter(it => !skip(it)) : items;
+}
+
+function droppedEntries(dt) {
+  const items = [...(dt?.items || [])].filter(i => i.kind === 'file');
+  const entries = items.map(i => (typeof i.webkitGetAsEntry === 'function' ? i.webkitGetAsEntry() : null));
+  if (entries.length && entries.every(Boolean)) return entries;
+  // Without the entry API a folder cannot be walked: keep the files that came through.
+  return [...(dt?.files || [])].map(f => ({ name: f.name, isFile: true, isDirectory: false, _file: f }));
+}
+
+async function entryFiles(entry, base) {
+  if (entry.isDirectory) {
+    const out = [];
+    for (const child of await readFolder(entry)) {
+      out.push(...await entryFiles(child, base + entry.name + '/'));
+    }
+    return out;
+  }
+  const file = entry._file || await new Promise((res, rej) => entry.file(res, rej));
+  return [{ path: base + entry.name, data: await readAsDataUrl(file) }];
+}
+
+// readEntries hands back a batch at a time (about a hundred), so ask until it answers none.
+async function readFolder(dirEntry) {
+  const reader = dirEntry.createReader();
+  const all = [];
+  for (;;) {
+    const batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+    if (!batch.length) return all;
+    all.push(...batch);
+  }
+}
+
+const readAsDataUrl = file => new Promise((res, rej) => {
+  const reader = new FileReader();
+  reader.onload = () => res(String(reader.result));   // the backend keeps the payload only
+  reader.onerror = () => rej(reader.error || new Error(file.name));
+  reader.readAsDataURL(file);
+});
+
+const isImageName = name => /\.(png|jpe?g|gif|webp|bmp|svg|heic|tiff?)$/i.test(name);
+
 // ── Discussion mode: the reply bar ──
 // Reply-all to the latest message. The From/To/Cc bubbles appear once something is typed;
-// Send goes through the usual send path, ⤢ moves the reply to the full editor.
+// Send goes through the usual send path, the expand icon moves the reply to the full editor.
+const replyAttachments = [];   // { name, size, path }, sent with the reply
+let replyAttach = null;        // the open bar's attach target
+
 function replyBar(d) {
+  replyAttachments.length = 0;
   replyDraft = {
     id: d.id, email: d.reply.email, subject: d.reply.subject, from: d.reply.from,
     to: [...d.reply.to], cc: [...d.reply.cc], bcc: [], text: '', more: false, adding: false,
@@ -466,9 +663,11 @@ function replyBar(d) {
     <div class="dm-recips hidden"></div>
     <div class="dm-compose">
       <textarea class="dm-text" rows="1" placeholder="${esc(t(postOffice() ? 'dm.replyCard' : 'dm.reply'))}"></textarea>
-      <button class="dm-expand" title="${esc(t('cmp.expand'))}">⤢</button>
+      <button class="dm-attach" title="${esc(t('cmp.attach'))}">${ICON.clip}</button>
+      <button class="dm-expand" title="${esc(t('cmp.expand'))}">${ICON.expand}</button>
       <button class="dm-send" title="${esc(t('cmp.sendTitle'))}">${esc(t('cmp.send'))}</button>
-    </div>`;
+    </div>
+    <div class="attach-list dm-attach-list hidden"></div>`;
   const text = bar.querySelector('.dm-text');
   text.addEventListener('input', () => {
     replyDraft.text = text.value;
@@ -476,13 +675,19 @@ function replyBar(d) {
   });
   text.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendReply(bar); } });
   bar.querySelector('.dm-send').addEventListener('click', () => sendReply(bar));
+  replyAttach = attachTarget(bar.querySelector('.dm-attach-list'), replyAttachments, msg => showToast(msg));
+  const clip = bar.querySelector('.dm-attach');
+  clip.addEventListener('click', () => openAttachMenu(clip, replyAttach));
+  setupDropZone(bar, replyAttach);
   bar.querySelector('.dm-expand').addEventListener('click', () => {
     const r = replyDraft;
     openCompose({
       mode: 'reply', email: r.email, subject: r.subject, account: r.from, html: replyHtml(r.text),
       to: addressList(r.to), cc: addressList(r.cc), bcc: addressList(r.bcc),
+      attachments: replyAttachments.map(a => ({ ...a })),
     });
     text.value = r.text = '';
+    replyAttach.clear();   // they went to the editor with the text
   });
   bar.querySelector('.dm-recips').addEventListener('click', e => replyRecipientClick(bar, e));
   bar.querySelector('.dm-recips').addEventListener('change', e => {
@@ -557,9 +762,11 @@ async function sendReply(bar) {
       to: addressList(r.to), cc: addressList(r.cc), bcc: addressList(r.bcc), subject: r.subject,
       html: replyHtml(r.text) + signatureBlock(r.from, 'reply') + replyQuote(r.email),
       inReplyTo: r.email.message_id || null, account: r.from,
+      attachments: replyAttachments.map(a => a.path),
     });
     showToast(t('cmp.sent'));
     bar.querySelector('.dm-text').value = r.text = '';
+    if (replyAttach) replyAttach.clear();
   } catch (e) {
     showToast(t('cmp.sendFailed', { err: e }));
   }
@@ -2223,6 +2430,8 @@ let composeDirty = false;      // user typed something since the composer opened
 let composeRange = null;       // last selection inside the body (toolbar widgets steal focus)
 let composeOriginal = null;    // email being replied to / forwarded
 let composeMode = 'new';
+let composeAttachments = [];   // files and folders to send: { name, size, path }
+let composeAttach = null;      // their target (list, picker, drop zone)
 
 const COMPOSE_COLORS = ['#000000', '#444444', '#888888', '#cccccc', '#c62828', '#ef6c00',
   '#f9a825', '#2e7d32', '#00838f', '#1565c0', '#6a1b9a', '#ad1457'];
@@ -2246,8 +2455,14 @@ function setupCompose() {
     $c('composer').classList.remove('expanded');
   });
   $c('composer-max').addEventListener('click', () => {
-    $c('composer').classList.toggle('expanded');
-    $c('composer').classList.remove('minimized');
+    const win = $c('composer');
+    win.classList.toggle('expanded');
+    win.classList.remove('minimized');
+    // The icon turns into a collapse one (styles.css), and so does the tooltip.
+    const on = win.classList.contains('expanded');
+    const max = $c('composer-max');
+    max.title = t(on ? 'cmp.collapse' : 'cmp.expand');
+    max.dataset.i18nTitle = on ? 'cmp.collapse' : 'cmp.expand';
   });
   // Clicking the title bar of a minimised composer restores it.
   document.querySelector('.composer-header').addEventListener('click', e => {
@@ -2273,6 +2488,7 @@ function setupCompose() {
   });
 
   setupComposeToolbar();
+  setupComposeAttach();
   setupComposeImages();
   setupComposeGifs();
   setupComposeAi();
@@ -2423,6 +2639,19 @@ function applyLink() {
     execCompose('insertHTML', `<a href="${esc(url)}">${esc(text)}</a>&nbsp;`);
   }
   composeDirty = true;
+}
+
+// #43 and #44 in the editor: the paperclip picks files or a folder, and anything dropped on
+// the window joins them. An image dropped inside the text stays inline (setupComposeImages).
+function setupComposeAttach() {
+  composeAttach = attachTarget($c('compose-attach'), composeAttachments,
+    msg => setComposeStatus(msg, true), () => { composeDirty = true; });
+  const clip = $c('tb-attach');
+  clip.addEventListener('mousedown', e => e.preventDefault());   // keep the body selection
+  clip.addEventListener('click', () => openAttachMenu(clip, composeAttach));
+  setupDropZone($c('composer'), composeAttach,
+    e => (e.target.closest && e.target.closest('#compose-body')
+      ? (item => !item.dir && isImageName(item.name)) : null));
 }
 
 function setupComposeImages() {
@@ -2782,7 +3011,8 @@ function replyQuote(email) {
 // `to`, `cc`, `bcc`, `subject`, `account` and the typed `html` replace the defaults.
 function fillCompose({ mode = 'new', email = null, to: presetTo = '', subject: presetSubject = '',
                        cc: presetCc = '', bcc: presetBcc = '', html: presetHtml = '',
-                       inReplyTo: presetInReplyTo = null, account: presetAccount = null } = {}) {
+                       inReplyTo: presetInReplyTo = null, account: presetAccount = null,
+                       attachments: presetAttachments = [] } = {}) {
   let to = presetTo, subject = presetSubject, html = presetHtml || '<div><br></div>';
   composeInReplyTo = presetInReplyTo;
 
@@ -2819,6 +3049,12 @@ function fillCompose({ mode = 'new', email = null, to: presetTo = '', subject: p
 
   composeOriginal = email;
   composeMode = email ? mode : 'new';
+  // Files brought from the reply bar, or none for a new message.
+  composeAttachments.length = 0;
+  if (Array.isArray(presetAttachments)) {
+    presetAttachments.forEach(a => { if (a && a.name && a.path) composeAttachments.push(a); });
+  }
+  if (composeAttach) composeAttach.show();
   // Auto answer needs an email to answer.
   $c('tb-ai-auto').disabled = composeMode !== 'reply';
   $c('tb-ai-auto').title = composeMode === 'reply' ? t('ai.autoTitle') : t('ai.autoDisabled');
@@ -2881,8 +3117,12 @@ function closeCompose() {
   }
   $c('composer').classList.add('hidden');
   $c('composer').classList.remove('minimized', 'expanded');
+  $c('composer-max').title = t('cmp.expand');
+  $c('composer-max').dataset.i18nTitle = 'cmp.expand';
   $c('compose-body').innerHTML = '';
   composeDirty = false;
+  composeAttachments.length = 0;
+  if (composeAttach) composeAttach.show();
 }
 
 function setComposeStatus(msg, isError = false) {
@@ -2904,7 +3144,8 @@ async function sendEmail() {
   setComposeStatus(t('cmp.sending'));
   try {
     await cmd('send_email', { to, cc, bcc, subject, html, inReplyTo: composeInReplyTo,
-                              account: Number($c('compose-from').value) || 0 });
+                              account: Number($c('compose-from').value) || 0,
+                              attachments: composeAttachments.map(a => a.path) });
     if (window.__COMPOSE__) window.__TAURI__.event.emit('compose-sent').catch(() => {});
     else showToast(t('cmp.sent'));
     closeCompose();
