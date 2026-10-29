@@ -293,6 +293,18 @@
     // Once a piece reaches the quoted history or the signature, the rest (its images too) goes.
     const cut = parts.findIndex(p => p.kind === 'message' && p.text && cutText(p.text) !== p.text);
     if (parts.length > 1 && cut >= 0) parts.splice(cut, parts.length, { kind: 'message', text: cutText(parts[cut].text) });
+    // A signature only the plain text shows (mine, or the same last lines across a sender's emails),
+    // with a logo in the HTML: the pieces are cut at its first line too.
+    const full = newText(email);
+    if (parts.length > 1 && text && full !== text && full.startsWith(text)) {
+      const first = plainLine(full.slice(text.length).trim().split('\n')[0]);
+      const isFirst = line => plainLine(line) === first;
+      const at = parts.findLastIndex(p => p.kind === 'message' && p.text && p.text.split('\n').some(isFirst));
+      if (at >= 0) {
+        const lines = parts[at].text.split('\n');
+        parts.splice(at, parts.length, { kind: 'message', text: lines.slice(0, lines.findLastIndex(isFirst)).join('\n').trim() });
+      }
+    }
     for (const a of email.attachments || []) parts.push({ kind: 'attachment', name: a.name, size: a.size, mime: a.mime });
     if (parts.length > 1) parts = parts.filter(p => p.kind !== 'message' || p.text);
     return parts;
@@ -305,7 +317,7 @@
     const count = piece => {
       if (ended) return;
       const lines = htmlText(piece).split('\n');
-      const end = lines.findIndex((_, i) => historyStarts(lines, i));
+      const end = lines.findIndex((_, i) => cutStarts(lines, i));
       ended = end >= 0;
       const letters = (ended ? lines.slice(0, end) : lines).join('').replace(/\s/g, '').length;
       if (depth > 0) inside += letters; else outside += letters;
@@ -357,20 +369,58 @@
     return cutText(whole, signatures) || whole;
   }
 
-  // Line i starts the quoted history (an Outlook header block, "Le … a écrit :") or the signature.
+  // A whole line only: "Envoyé de mon iPhone", "Sent from Outlook for Android", "Get Outlook for iOS".
+  const MOBILE = new RegExp('^\\s*(?:(?:envoyée?|sent|expédiée?)\\s+(?:de|depuis|à partir de|from|with|via)\\s+(?:mon|ma|my)?\\s*(?:\\S+\\s+)?'
+    + '(?:iphone|ipad|android|blackberry|samsung|galaxy|mobile|smartphone|téléphone|phone|tablet|tablette|appareil|outlook|mail|yahoo|gmail|protonmail|courrier)[^\\s,;:]*'
+    + '|(?:get|obtenir|télécharger)\\s+outlook\\s+(?:for|pour)\\s+[^\\s,;:]+)(?:\\s+[^\\s,;:]+){0,3}'
+    // "…, please excuse brevity" / "…, excusez la brièveté"; any other comma means a sentence ("Sent from my phone, call me").
+    + '(?:\\s*[,.]\\s*(?:please\\s+|veuillez\\s+|merci\\s+d\'|désolée?\\s+pour\\s+)?(?:excuse|excusez|pardon|sorry|la\\s+brièveté).*)?\\s*$', 'i');
+  // A paragraph of 100+ characters, starting like a legal notice and saying it is confidential and for its recipient only.
+  const DISCLAIMER_START = /^\W*(?:(?:ce|cet|le présent)\s+(?:message|courriel|e-?mail|mail)|les informations|this\s+(?:e-?mail|message|communication|transmission)|the information|confidential|confidentialit|avertissement|disclaimer|avis de confidentialit|privileged)/i;
+  const DISCLAIMER_WORDS = [/confiden|privil/i, /destinataire|destiné|intended|addressee|recipient|erreur|error/i];
+  // "Please consider the environment before printing", "Pensez à la planète avant d'imprimer".
+  const ENVIRONMENT = [/environ|planet|planète|tree|arbre|paper|papier/i,
+    /before printing|avant d'imprimer|avant impression|n'imprimez|ne pas imprimer|n'imprimer|need to print|print only if|imprimer (?:que|uniquement) si/i];
+  // A closing alone on its line: "Cordialement,", "Bien à vous", "Best regards".
+  const CLOSING = /^\s*(?:(?:bien|très|tres)\s+cordialement|cordialement|cdlt|bien\s+à\s+(?:vous|toi)|(?:bien\s+)?amicalement|(?:sincères|meilleures|bonnes)\s+salutations(?:\s+distinguées)?|salutations(?:\s+distinguées)?|(?:thanks\s+(?:&|and)\s+|best|kind|warm|warmest|many)?\s*regards|best(?:\s+wishes)?|(?:yours\s+)?(?:sincerely|faithfully|truly)|cheers)\s*[,.!]?\s*$/i;
+  // A line that reads as written text, not a signature line: a P.S., or a sentence of 5+ words.
+  const isWritten = line => /^p\.?\s?s\b/i.test(line) || (/[.!?]$/.test(line) && line.split(/\s+/).length >= 5);
+
+  // Line i starts the quoted history (an Outlook header block, "Le … a écrit :") or a signature block
+  // ("-- ", a "sent from my phone" line, a legal notice, a "think before printing" line): it and all after go.
   function historyStarts(lines, i) {
     const line = lines[i];
-    return (QUOTE_FROM.test(line) && lines.slice(i + 1, i + 6).some(l => QUOTE_SUBJECT.test(l)))
+    if ((QUOTE_FROM.test(line) && lines.slice(i + 1, i + 6).some(l => QUOTE_SUBJECT.test(l)))
       || QUOTE_INTRO.test(line) || QUOTE_INTRO.test(`${line} ${lines[i + 1]}`)
-      || /^--\s?$/.test(line);   // signature delimiter "-- " (the space may be trimmed)
+      || /^--\s?$/.test(line)   // signature delimiter "-- " (the space may be trimmed)
+      || MOBILE.test(line)
+      || ENVIRONMENT.every(re => re.test(line))) return true;
+    if (!DISCLAIMER_START.test(line)) return false;
+    const end = lines.findIndex((l, j) => j > i && !l.trim());
+    const paragraph = lines.slice(i, end < 0 ? lines.length : end).join(' ');
+    return paragraph.length >= 100 && DISCLAIMER_WORDS.every(re => re.test(paragraph));
   }
+
+  // Line i is a closing ("Cordialement,") followed only by signature lines (name, title, phone…)
+  // up to the end or the quoted history: it and all after go. Real text after it keeps it.
+  function closingStarts(lines, i) {
+    if (!CLOSING.test(lines[i])) return false;
+    const rest = [];
+    for (let j = i + 1; j < lines.length && !historyStarts(lines, j); j++) {
+      const line = plainLine(lines[j]);
+      if (line && !line.startsWith('>')) rest.push(line);
+    }
+    return rest.length <= MAX_TAIL && !rest.some(isWritten);
+  }
+
+  const cutStarts = (lines, i) => historyStarts(lines, i) || closingStarts(lines, i);
 
   // What is left of a text once the quoted history and the signatures go ('' when nothing).
   function cutText(whole, signatures = []) {
     const lines = whole.split('\n');
     const kept = [];
     for (let i = 0; i < lines.length; i++) {
-      if (historyStarts(lines, i)) break;
+      if (cutStarts(lines, i)) break;
       if (!lines[i].trimStart().startsWith('>')) kept.push(lines[i]);
     }
     for (const signature of signatures) cutBlock(kept, signature.split('\n'));
