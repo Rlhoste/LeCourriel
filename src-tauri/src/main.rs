@@ -30,6 +30,7 @@ mod ai_classifier;
 mod ai_project;
 mod ai_writer;
 mod app_state;
+mod attachments;
 mod auto_scan;
 mod auto_setup;
 mod claude_code;
@@ -308,6 +309,8 @@ async fn send_email(
     html: String,
     in_reply_to: Option<String>,
     account: Option<usize>,
+    // Paths of the files attached to the message (#43, #44).
+    attachments: Option<Vec<String>>,
     shared: State<'_, SharedState>,
 ) -> Result<(), String> {
     // The account chosen in the composer's "From" (the first one by default).
@@ -317,7 +320,10 @@ async fn send_email(
         (s.cfg.clone(), s.sent_folders.get(index).cloned().unwrap_or_else(|| "Sent".into()))
     };
     let account = cfg.accounts.get(index).ok_or("No accounts configured")?;
-    let mail = smtp_sender::OutgoingMail { to, cc, bcc, subject, html, in_reply_to };
+    let mail = smtp_sender::OutgoingMail {
+        to, cc, bcc, subject, html, in_reply_to,
+        attachments: attachments.unwrap_or_default(),
+    };
     let smtp = account.smtp_for_sending(&cfg.user_name());
     let raw = smtp_sender::send_message(&smtp, &mail).await.map_err(|e| format!("{:#}", e))?;
     // The SMTP relay doesn't keep a copy, so store one in Sent ourselves.
@@ -325,6 +331,20 @@ async fn send_email(
         tracing::warn!("Could not save a copy to {}: {:#}", sent_folder, e);
     }
     Ok(())
+}
+
+/// What the attach picker chose: files as they are, each folder as one `FolderName.zip`.
+#[tauri::command]
+async fn prepare_attachments(paths: Vec<String>) -> Result<Vec<attachments::AttachmentInfo>, String> {
+    // Async: a big folder is zipped off the main thread, the window doesn't freeze.
+    attachments::prepare(&paths).map_err(|e| format!("{:#}", e))
+}
+
+/// What was dropped on the editor or the reply bar: the webview gives no disk path for a
+/// dropped file, so the bytes arrive base64-encoded and are written to a temp folder here.
+#[tauri::command]
+async fn save_dropped_attachments(items: Vec<attachments::DroppedItem>) -> Result<Vec<attachments::AttachmentInfo>, String> {
+    attachments::save_dropped(&items).map_err(|e| format!("{:#}", e))
 }
 
 #[tauri::command]
@@ -1239,6 +1259,8 @@ fn main() {
             refresh_emails,
             get_email,
             send_email,
+            prepare_attachments,
+            save_dropped_attachments,
             get_settings,
             save_settings,
             get_qr,

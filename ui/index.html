@@ -228,7 +228,10 @@
     <span id="composer-title" data-i18n="cmp.newMessage">New Message</span>
     <div class="composer-header-btns">
       <button id="composer-min" title="Minimise" data-i18n-title="cmp.minimise">&#8211;</button>
-      <button id="composer-max" title="Expand" data-i18n-title="cmp.expand">&#10530;</button>
+      <button id="composer-max" title="Expand" data-i18n-title="cmp.expand">
+        <svg class="ic ic-expand" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>
+        <svg class="ic ic-collapse" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="M14 10l7-7"/><path d="M3 21l7-7"/></svg>
+      </button>
       <button id="composer-close" title="Close" data-i18n-title="cmp.close">&#10005;</button>
     </div>
   </div>
@@ -256,6 +259,9 @@
     </div>
 
     <div id="compose-body" class="composer-body" contenteditable="true" spellcheck="true" dir="auto"></div>
+
+    <!-- Files and folders attached to the message (#43). -->
+    <div id="compose-attach" class="attach-list hidden"></div>
 
     <div class="composer-toolbar" id="composer-toolbar">
       <select data-cmd="fontName" title="Font" data-i18n-title="cmp.font">
@@ -306,6 +312,9 @@
           </div>
         </div>
       </div>
+      <button id="tb-attach" title="Attach files or a folder" data-i18n-title="cmp.attach">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+      </button>
       <button id="tb-image" title="Insert image" data-i18n-title="cmp.image">&#128444;</button>
       <input type="file" id="tb-image-file" accept="image/*" hidden />
       <div class="tb-pop-wrap">
@@ -347,6 +356,8 @@
       <button id="compose-discard" class="composer-icon" title="Discard draft" data-i18n-title="cmp.discardTitle">&#128465;</button>
     </div>
   </div>
+  <!-- Shown while files or folders are dragged over the editor (#44). -->
+  <div class="drop-overlay"><span class="drop-box" data-i18n="cmp.dropHere">Drop files here</span></div>
 </div>
 
 <!-- ── Search & AI assistant ──────────────────────────────────────────────── -->
