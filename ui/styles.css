@@ -2119,17 +2119,16 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
   background: var(--accent); color: var(--on-accent); font-weight: 600; white-space: nowrap;
 }
 .dm-lines { overflow-y: auto; flex: 1; }
-/* The first column fits the people stamp: three 28px avatars, each overlapping the one before by 12px. */
+/* One line per discussion: its subject on top, its people under it, its last message under that. */
 .dm-line {
-  display: grid; grid-template-columns: 60px minmax(0, 1fr) auto; gap: 2px 10px; align-items: center;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center;
   padding: 10px 12px; cursor: pointer; position: relative;
   border-bottom: var(--border-w) solid var(--border);
 }
 .dm-line:hover, .dm-line.active { background: var(--bg3); }
-.dm-line > .dm-av-stack { grid-row: span 3; }
 .dm-who { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dm-when { font-size: 0.75rem; color: var(--text-dim); }
-.dm-subj { grid-column: 2 / 4; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dm-line > .dm-people { grid-column: 1 / 3; }
 .dm-last { font-size: 0.85rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dm-badge {
   justify-self: end; min-width: 18px; padding: 1px 6px; border-radius: 999px; text-align: center;
@@ -2149,6 +2148,18 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 .dm-av-stack { display: flex; }
 .dm-av-stack .dm-av { width: 28px; height: 28px; font-size: 0.7rem; border: 2px solid var(--bg2); }
 .dm-av-stack .dm-av + .dm-av { margin-inline-start: -12px; }
+/* The people of a discussion, on a list line and in the header: their first names as labels, each in
+   that person's colour (--pc), and "+N" for the ones the line has no room for (fitPeopleLabels). */
+.dm-people { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
+.dm-tag {
+  flex: none; max-width: 12ch; padding: 0 6px; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--bg); color: var(--pc, var(--accent));
+  font-size: 0.72rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dm-rest { flex: none; font-size: 0.72rem; font-weight: 700; color: var(--text-dim); white-space: nowrap; }
+.dm-people :is(.dm-tag, .dm-rest)[hidden] { display: none; }
+/* One label alone: it takes the line and cuts itself short. */
+.dm-people.single .dm-tag { flex: 0 1 auto; min-width: 0; }
 
 .dm-conv { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
 .dm-head {
@@ -2156,8 +2167,8 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
   border-bottom: var(--border-w) solid var(--border); background: var(--bg2);
 }
 .dm-titles { min-width: 0; }
-.dm-people { font-weight: 700; }
-.dm-subject { font-size: 0.85rem; color: var(--text-dim); }
+.dm-subject { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dm-titles > .dm-people { margin-top: 2px; }
 .dm-scroll { flex: 1; overflow-y: auto; padding: 16px 24px 24px; display: flex; flex-direction: column; gap: 3px; }
 .dm-sep { align-self: center; margin: 16px 0 8px; font-size: 0.8rem; font-weight: 600; color: var(--text-dim); }
 /* Mine on the end side, the others on the start side (so the sides swap right to left). */
@@ -2349,6 +2360,10 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
   background: rgba(255, 255, 255, 0.7); border: 1px solid #fff;
 }
 [data-theme="aero"] .dm-av { box-shadow: inset 0 8px 10px rgba(255, 255, 255, 0.45), 0 1px 3px rgba(0, 0, 0, 0.3); }
+[data-theme="aero"] .dm-tag {
+  border-color: #fff; background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 1px 2px rgba(0, 60, 120, 0.2);
+}
 [data-theme="aero"] .dm-reply {
   background: var(--bg2); border-top-color: #fff;
   backdrop-filter: blur(14px) saturate(1.3);
@@ -2389,6 +2404,10 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 [data-theme="premium"] .dm-sep::before { content: "── "; }
 [data-theme="premium"] .dm-sep::after { content: " ──"; }
 [data-theme="premium"] .dm-people-note { font-family: Georgia, "Times New Roman", serif; }
+[data-theme="premium"] .dm-tag {
+  padding: 0 6px; border: 0; border-radius: 2px; background: #ece4d2;
+  font-family: Georgia, "Times New Roman", serif; font-style: italic; font-weight: normal;
+}
 [data-theme="premium"] .dm-text {
   border-radius: 4px; border-color: rgba(201, 165, 78, 0.45);
   background: #fdfbf6; color: #2b2720; font-family: Georgia, "Times New Roman", serif;
@@ -2425,6 +2444,8 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 [data-theme="terminal"] .dm-earlier { padding: 0; border: 0; color: var(--text-faint); }
 [data-theme="terminal"] .dm-earlier::before { content: "# "; }
 [data-theme="terminal"] .dm-av { background: var(--bg2); color: var(--pc, var(--accent)); border: 1px solid var(--pc, var(--accent)); }
+[data-theme="terminal"] .dm-tag { padding: 0 2px; border: 0; background: none; font-size: inherit; font-weight: normal; }
+[data-theme="terminal"] .dm-rest { color: var(--text-faint); }
 [data-theme="terminal"] :is(.dm-av, .dm-new, .dm-search, .dm-badge, .dm-pill, .dm-add, .dm-text, .dm-send, .dm-find button, .dm-act, .dm-task, .dm-task-status, .dm-tile, .dm-tile img) { border-radius: 0; }
 [data-theme="terminal"] .dm-task { order: 3; flex: 0 1 auto; min-width: 0; max-width: 50%; align-self: baseline; margin: 0; background: none; color: var(--task); border: 1px solid var(--task); }
 [data-theme="terminal"] .dm-task::before { content: "[ "; }
@@ -2493,13 +2514,19 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 }
 [data-theme="brutalist"] .dm-prio-high_priority::after { content: "URGENT"; }
 
-/* The header: ✉ names over an airmail stripe, the buttons are stamps that tilt when pointed at. */
+/* The header: ✉ subject over an airmail stripe, its people in coloured labels, the buttons are
+   stamps that tilt when pointed at. */
 [data-theme="brutalist"] .dm-head {
   padding-bottom: 16px; border-bottom: 3px solid #000;
   background: var(--airmail) bottom / 100% 6px no-repeat, #fff;
 }
-[data-theme="brutalist"] .dm-people { text-transform: uppercase; font-weight: 900; }
-[data-theme="brutalist"] .dm-people::before { content: "✉ "; }
+[data-theme="brutalist"] .dm-subject { text-transform: uppercase; font-weight: 900; }
+[data-theme="brutalist"] .dm-subject::before { content: "✉ "; }
+[data-theme="brutalist"] .dm-tag {
+  padding: 0 6px; border: 2px solid #000; border-radius: 0; background: var(--pc, #000); color: #fff;
+  font-size: 11px; font-weight: 900; text-transform: uppercase; box-shadow: 2px 2px 0 #000;
+}
+[data-theme="brutalist"] .dm-rest { color: #000; font-size: 11px; font-weight: 900; }
 [data-theme="brutalist"] .dm-acts { gap: 6px; }
 [data-theme="brutalist"] .dm-act {
   width: 42px; height: 48px; border-radius: 0; background: #fff; color: #000;
