@@ -340,7 +340,7 @@ function renderDiscussion(d) {
       <button class="dm-find-next" title="${esc(t('dm.findNext'))}">↓</button>
       <button class="dm-find-close" title="${esc(t('cmp.close'))}">✕</button>
     </div>
-    <div class="dm-scroll">${d.items.map(discussionItem).join('')}</div>`;
+    <div class="dm-scroll">${discussionHtml(d.items)}</div>`;
   if (reply) {   // kept in place, so the field keeps the focus
     conv.querySelectorAll('.dm-head, .dm-find, .dm-scroll').forEach(el => el.remove());
     reply.insertAdjacentHTML('beforebegin', html);
@@ -796,6 +796,20 @@ async function sendReply(bar) {
     showToast(t('cmp.sendFailed', { err: e }));
   }
   btn.disabled = false;
+}
+
+// The parts of one email (text, image, text…) sit together in one .dm-mail and share its width.
+function discussionHtml(items) {
+  let html = '';
+  for (let i = 0; i < items.length;) {
+    const email = items[i].email;
+    if (!email) { html += discussionItem(items[i++]); continue; }
+    const mine = items[i].mine || items[i].kind === 'draft';
+    let rows = '';
+    for (; i < items.length && items[i].email === email; i++) rows += discussionItem(items[i]);
+    html += `<div class="dm-mail${mine ? ' me' : ''}">${rows}</div>`;
+  }
+  return html;
 }
 
 // One item of a discussion: a note, a day separator or a bubble (name once and avatar once per run).

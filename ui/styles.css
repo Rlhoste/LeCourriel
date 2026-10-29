@@ -2253,6 +2253,15 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 .dm-row.me .dm-av-slot { display: none; }
 .dm-msg { display: flex; flex-direction: column; min-width: 0; }
 .dm-row.me .dm-msg { align-items: flex-end; }
+/* One email's parts (text, image, text…) share one width: the widest part sets the .dm-mail's,
+   and every text bubble of it fills that width. */
+.dm-mail { display: flex; flex-direction: column; gap: 3px; max-width: 80%; align-self: flex-start; }
+.dm-mail.me { align-self: flex-end; }
+.dm-scroll .dm-mail > .dm-row { min-width: 0; max-width: none; align-self: stretch; }
+.dm-mail .dm-msg { flex: 1; }
+.dm-mail .dm-bubble { align-self: stretch; }
+.dm-mail .dm-image { align-self: flex-start; }
+.dm-mail.me .dm-image { align-self: flex-end; }
 .dm-name { font-size: 0.8rem; font-weight: 700; color: var(--pc); margin: 0 10px 2px; }
 /* Every message has a name line; by default only the others' first message of a run shows it. */
 .dm-row:is(.me, :not(.first)) .dm-name { display: none; }
@@ -2480,7 +2489,7 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 
 /* Premium: each message is a paper letter card with a gold top edge and a serif italic name line. */
 [data-theme="premium"] .dm-scroll { gap: 10px; }
-[data-theme="premium"] .dm-row { max-width: 78%; }
+[data-theme="premium"] :is(.dm-row, .dm-mail) { max-width: 78%; }
 [data-theme="premium"] .dm-av-slot { display: none; }
 [data-theme="premium"] .dm-msg {
   padding: 14px 20px; border-radius: 4px; border-top: 3px solid var(--accent);
@@ -2523,6 +2532,7 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 [data-theme="terminal"] .dm-scroll { gap: 0; padding: 16px; }
 [data-theme="terminal"] .dm-row,
 [data-theme="terminal"] .dm-row.me { max-width: none; align-self: stretch; flex-direction: row; margin-top: 0; }
+[data-theme="terminal"] .dm-mail { max-width: none; align-self: stretch; gap: 0; }
 [data-theme="terminal"] .dm-av-slot { display: none; }
 [data-theme="terminal"] .dm-msg,
 [data-theme="terminal"] .dm-row.me .dm-msg { flex-direction: row; align-items: baseline; gap: 8px; }
@@ -2565,7 +2575,7 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 [data-theme="terminal"] .dm-bubble a.dm-btn::after { content: " ]"; }
 
 /* Brutalist: a post office. A run of messages from one person is one postcard ("Greetings from ORG",
-   a perforated stamp with the initials under a round postmark, a sorting barcode); a draft is a dashed
+   a perforated stamp with the initials under a round postmark); a draft is a dashed
    card stamped DRAFT; the reply bar is the back of the card and Send is a mailbox. */
 [data-theme="brutalist"] {
   --kraft: #c8a46a; --ink: #1d2a6b; --post: #c0262d;
@@ -2648,7 +2658,8 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 [data-theme="brutalist"] .dm-conv { background: #f4f1ea radial-gradient(rgba(0, 0, 0, 0.07) 1px, transparent 1.4px) 0 0 / 14px 14px; }
 [data-theme="brutalist"] .dm-scroll { gap: 0; padding: 16px 28px 32px; }
 /* A card grows with its text up to 80%; it stays wide enough for the band, stamp and postmark. */
-[data-theme="brutalist"] .dm-row { min-width: min(360px, 80%); max-width: 80%; }
+[data-theme="brutalist"] :is(.dm-row, .dm-mail) { min-width: min(360px, 80%); max-width: 80%; }
+[data-theme="brutalist"] .dm-mail { gap: 0; }
 /* Sturdy sans-serif for the cards and the list instead of the theme's thin monospace; weight keeps the look. */
 [data-theme="brutalist"] :is(.dm-bubble, .dm-text) { font-size: 15px; font-weight: 600; line-height: 1.45; }
 [data-theme="brutalist"] .dm-row.first { margin-top: 22px; }
@@ -2661,15 +2672,11 @@ body.discussion-mode .nav-btn[data-panel="discussions"] { display: block; }
 }
 [data-theme="brutalist"] .dm-row.me .dm-msg { background: #ffde00; }
 [data-theme="brutalist"] .dm-row.first .dm-msg { border-top-width: 3px; padding-top: 0; }
-[data-theme="brutalist"] .dm-row.last .dm-msg { border-bottom-width: 3px; padding-bottom: 26px; }
+[data-theme="brutalist"] .dm-row.last .dm-msg { border-bottom-width: 3px; padding-bottom: 12px; }
 /* A one-message card lies a little crooked and straightens up when pointed at. */
 [data-theme="brutalist"] .dm-row.first.last:not(.draft) .dm-msg { transform: rotate(-0.3deg); }
 [data-theme="brutalist"] .dm-row.me.first.last:not(.draft) .dm-msg { transform: rotate(0.4deg); }
 [data-theme="brutalist"] .dm-row.first.last:not(.draft) .dm-msg:hover { transform: translate(-2px, -2px); box-shadow: 8px 8px 0 #000; }
-[data-theme="brutalist"] .dm-row.last:not(.draft) .dm-msg::after {
-  content: ""; position: absolute; inset-inline-end: 14px; bottom: 8px; width: 110px; height: 12px; opacity: 0.8;
-  background: repeating-linear-gradient(90deg, #000 0 2px, transparent 2px 4px, #000 4px 5px, transparent 5px 8px, #000 8px 11px, transparent 11px 13px);
-}
 [data-theme="brutalist"] .dm-band {
   display: block; min-height: 66px; margin-bottom: 4px; padding: 10px 0; padding-inline: 16px 150px; line-height: 1.1;
   background: var(--pc); color: #fff; border-bottom: 3px solid #000;
