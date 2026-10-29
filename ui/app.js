@@ -756,7 +756,9 @@ function messageMenu(d, item, x, y) {
   const acts = [
     ['reply', t('rp.reply'), () => openCompose({ mode: 'reply', email })],
     ['forward', t('rp.forward'), () => openCompose({ mode: 'forward', email })],
-    folder !== 'trash' && ['delete', t('rp.delete'), () => moveEmails([{ email, folder }], 'trash_email')],
+    folder !== 'trash' && ['delete', t('rp.delete'), async () => {
+      if (await askInApp(t('dm.deleteOneAsk'), t('rp.delete'))) await moveEmails([{ email, folder }], 'trash_email');
+    }],
     folder === 'inbox' && !hasTask && ['task', t('dm.addTask'), async () => {
       try {
         setTasks(await cmd('create_task', {
