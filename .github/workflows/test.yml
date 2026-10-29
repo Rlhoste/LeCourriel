@@ -23,8 +23,10 @@ jobs:
           python-version: "3.12"
       - name: JavaScript and locale tests
         run: |
+          npm ci
           npm test
           npm run check:js
+          npm run lint
       - name: Updater manifest tests
         run: python3 -m unittest discover -s scripts/tests -v
 
