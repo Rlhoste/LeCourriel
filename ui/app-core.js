@@ -164,7 +164,8 @@
   }
 
   // The search bar over the discussion list: the discussions where every word of `query` is found
-  // in a person's name or address (not mine), a subject or a message text; case and accents ignored.
+  // in a person's name or address (not mine), a subject, a message text or an attachment name;
+  // case and accents ignored.
   const fold = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   const searchable = new WeakMap();   // discussion → its folded text, made once per built list
   function filterDiscussions(list, query) {
@@ -175,6 +176,7 @@
         searchable.set(d, fold([
           ...d.people.flatMap(p => [p.name, p.address]), ...d.info.subjects,
           ...d.items.map(i => i.text ?? (i.kind === 'page' ? htmlText(String(i.email.body_html || '')) : '')),
+          ...d.items.filter(i => i.kind === 'attachment').map(i => i.name),
         ].join('\n')));
       }
       return searchable.get(d);

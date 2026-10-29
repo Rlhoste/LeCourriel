@@ -840,6 +840,16 @@ test('the list search keeps discussions whose people, subjects or message text h
   assert.deepEqual(found('me@work.com'), [], 'not my own address: it is on every discussion');
 });
 
+test('the list search also looks at attachment names', () => {
+  const list = buildDiscussions({
+    inbox: [
+      mail(1, { subject: 'Contract', body_text: 'Here it is.', attachments: [{ name: 'Devis_Été.pdf', size: 1, mime: 'application/pdf' }] }),
+      mail(2, { subject: 'Lunch', body_text: 'Pizza?' }),
+    ],
+  }, ME);
+  assert.deepEqual(filterDiscussions(list, 'devis ete').map(d => d.subject), ['Contract']);
+});
+
 test('an empty list search shows the whole list', () => {
   const list = buildDiscussions({ inbox: [mail(1), mail(2)] }, ME);
   assert.equal(filterDiscussions(list, '   '), list);
