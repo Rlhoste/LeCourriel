@@ -496,9 +496,9 @@ function renderReplyRecipients(bar) {
     <span class="dm-pill" title="${esc(p.address)}">${esc(p.label)}<button class="dm-x" data-kind="${kind}" data-address="${esc(p.address)}" title="${esc(t('dm.remove'))}">✕</button></span>`;
   bar.querySelector('.dm-recips').innerHTML = `
     <button class="dm-add" title="${esc(t('dm.add'))}">${postOffice() ? esc(t('dm.addCard')) : '+'}</button>
-    <label class="dm-pill dm-from">${esc(t('meta.from'))}
+    ${composeAccounts.length > 1 ? `<label class="dm-pill dm-from">${esc(t('meta.from'))}
       <select>${composeAccounts.map((a, i) => `<option value="${i}"${i === r.from ? ' selected' : ''}>${esc(a.from)}</option>`).join('')}</select>
-    </label>
+    </label>` : ''}
     ${['to', 'cc', 'bcc'].map(kind => {
       const pills = shown.filter(x => x.kind === kind);
       return pills.length ? `<span class="dm-grp"><span class="dm-lbl">${esc(t(`cmp.${kind}`))}</span>${pills.map(pill).join('')}</span>` : '';
@@ -3732,8 +3732,8 @@ async function loadComposeAccounts() {
   catch (_) { composeAccounts = []; }
   $c('compose-from').innerHTML = composeAccounts
     .map((a, i) => `<option value="${i}">${esc(a.from.replace(/"/g, ''))}</option>`).join('');
-  // Always shown, so the sender is visible even with a single account.
-  $c('compose-from-row').classList.toggle('hidden', composeAccounts.length === 0);
+  // Only a choice with two accounts or more; with one, the hidden select still sends from it.
+  $c('compose-from-row').classList.toggle('hidden', composeAccounts.length < 2);
 }
 
 // The account that received an email: the one its uid belongs to (To/Cc miss mailing lists,
