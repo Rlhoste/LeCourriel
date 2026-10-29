@@ -584,15 +584,114 @@ test('my accounts\' signatures are cut wherever they appear, matched exactly', (
 
 test('the same last lines at the end of 2+ emails from one sender are cut; a cut leaving nothing keeps all', () => {
   const leoSignature = '\n\nLeo Bianchini\nDirecteur financier\nTél. 01 23 45 67 89';
-  const bobSignature = '\n\nBob\nSent from my phone';
+  const bobSignature = '\n\nBob\nSales team';
   assert.deepEqual(bubbles([
     mail(1, { subject: 'A', from_email: 'leo@d.com', body_text: `Bonjour,\n\nVoici le budget.${leoSignature}` }),
     mail(2, { subject: 'B', from_email: 'leo@d.com', body_text: `Merci !\n\nÀ lundi.${leoSignature}` }),
     mail(3, { subject: 'C', from_email: 'ana@d.com', body_text: 'OK.\n\nTél. 01 23 45 67 89' }),
     mail(4, { subject: 'D', from_email: 'bob@e.com', body_text: `Sure.${bobSignature}` }),
     mail(5, { subject: 'E', from_email: 'bob@e.com', body_text: `Done.${bobSignature}` }),
-    mail(6, { subject: 'F', from_email: 'bob@e.com', body_text: 'Bob\nSent from my phone' }),
-  ]), ['Bob\nSent from my phone', 'Done.', 'Sure.', 'OK.\n\nTél. 01 23 45 67 89', 'Merci !\n\nÀ lundi.', 'Bonjour,\n\nVoici le budget.']);
+    mail(6, { subject: 'F', from_email: 'bob@e.com', body_text: 'Bob\nSales team' }),
+  ]), ['Bob\nSales team', 'Done.', 'Sure.', 'OK.\n\nTél. 01 23 45 67 89', 'Merci !\n\nÀ lundi.', 'Bonjour,\n\nVoici le budget.']);
+});
+
+// Each body as its own email from its own sender; the bubbles in the bodies' order.
+const cutEach = bodies => bubbles(bodies.map((body_text, i) => mail(i + 1, { subject: `S${i}`, body_text }))).reverse();
+
+test('a "sent from my phone" line (Envoyé de mon iPhone, Sent from Outlook for Android…) and all after it is cut', () => {
+  assert.deepEqual(cutEach([
+    'Je regarde ce soir.\n\nEnvoyé de mon iPhone',
+    'OK for me.\n\nSent from my iPhone\n\nOn Mon, Oct 26, 2026 at 9:12 AM Leo <leo@d.com> wrote:\n> Lunch?',
+    'Bien reçu.\n\nEnvoyé depuis mon smartphone Samsung Galaxy.',
+    'Noted.\n\nSent from Outlook for Android',
+    'Thanks!\n\nGet Outlook for iOS',
+    'Merci.\n\nObtenir Outlook pour Android',
+    'Got it.\n\nSent from Yahoo Mail on Android',
+    'Parfait.\n\nEnvoyé à partir de Courrier pour Windows',
+    'See you.\n\nSent with Proton Mail secure email.',
+    'Yes.\n\nSent from my iPhone, please excuse brevity',
+    'Oui.\n\nEnvoyé de mon iPhone, excusez la brièveté.',
+  ]), ['Je regarde ce soir.', 'OK for me.', 'Bien reçu.', 'Noted.', 'Thanks!', 'Merci.', 'Got it.', 'Parfait.', 'See you.', 'Yes.', 'Oui.']);
+});
+
+test('a sentence that only starts like a "sent from my phone" line is kept', () => {
+  const bodies = [
+    'Envoyé de mon téléphone le rapport que tu m\'as demandé, regarde la page 3.\nMerci.',
+    'I sent from my phone the photos of the site.\nTell me if they arrived.',
+    'Done.\nSent from my phone, call me back later\nThanks',
+  ];
+  assert.deepEqual(cutEach(bodies), bodies);
+});
+
+test('a closing (Cordialement, Best regards…) followed only by signature lines is cut with them', () => {
+  assert.deepEqual(cutEach([
+    'Bonjour,\n\nVoici le devis.\n\nCordialement,\n\nLeo Bianchini\nDirecteur financier\nD Corp\nTél. : +33 1 23 45 67 89\n12 rue de la Paix, 75002 Paris\nwww.d-corp.fr',
+    'Hi,\n\nHere is the quote.\n\nBest regards,\nAna Smith | Head of Sales\nE Ltd · 10 Downing Road, London\nM: +44 20 7946 0000\nhttps://e-ltd.co.uk',
+    'Je confirme pour jeudi.\n\nBien à vous,\nMarie',
+    'Ça marche.\n\nBien cordialement\n\n-- \nJean',
+    'Sounds good.\n\nKind regards\n\n> Shall we meet?',
+    'Merci pour tout.\n\nSincères salutations,\nPaul Martin',
+  ]), ['Bonjour,\n\nVoici le devis.', 'Hi,\n\nHere is the quote.', 'Je confirme pour jeudi.', 'Ça marche.', 'Sounds good.', 'Merci pour tout.']);
+});
+
+test('a closing is kept when real text follows it, or when it is inside a sentence', () => {
+  const bodies = [
+    'Voici le devis.\n\nCordialement,\nLeo\n\nPS : n\'oublie pas la réunion de lundi.',
+    'Here is the quote.\n\nBest regards,\nAna\nP.S. Lunch?',
+    'Best regards,\nI will send the signed contract tomorrow morning.',
+    'Merci pour hier.\nKind regards to your team!',
+    'Je te transmets ses cordialement salutations, il a apprécié.',
+  ];
+  assert.deepEqual(cutEach(bodies), bodies);
+});
+
+test('a confidentiality notice and a "think before printing" line are cut with all after them', () => {
+  assert.deepEqual(cutEach([
+    'Voici le contrat.\n\nLeo\n\nCe message et ses pièces jointes sont confidentiels et destinés exclusivement à leurs destinataires. '
+      + 'Si vous avez reçu ce message par erreur, merci de le supprimer et d\'en avertir l\'expéditeur.',
+    'Here is the contract.\n\nAna\n\nCONFIDENTIALITY NOTICE: This e-mail and any attachments are confidential and intended solely for the '
+      + 'addressee. If you are not the intended recipient, please delete it.',
+    'Voici la facture.\n\nPensez à l\'environnement avant d\'imprimer ce message.',
+    'Here is the invoice.\n\nPlease consider the environment before printing this e-mail.\nE Ltd',
+  ]), ['Voici le contrat.\n\nLeo', 'Here is the contract.\n\nAna', 'Voici la facture.', 'Here is the invoice.']);
+});
+
+test('ordinary text about confidentiality, the environment or printing is kept', () => {
+  const bodies = [
+    'Ce message est confidentiel : ne le transfère pas au client.\nOn en parle lundi.',
+    'This message is confidential, please do not forward it.\nThe intended date is Monday.',
+    'Could you print the environment report before Monday?',
+    'Avant d\'imprimer le rapport environnement, relis la page 2.',
+  ];
+  assert.deepEqual(cutEach(bodies), bodies);
+});
+
+test('a closing then a signature table (with a logo) is cut, and the email stays a message, not a page', () => {
+  const signature = '<table><tr><td><img src="data:image/png;base64,LOGO"></td><td><b>Leo Bianchini</b><br>Directeur financier'
+    + '<br>D Corp – 12 rue de la Paix, 75002 Paris<br>Tél. : +33 1 23 45 67 89<br>www.d-corp.fr</td></tr></table>';
+  const [d] = buildDiscussions({
+    inbox: [mail(1, {
+      body_text: 'Voici le devis.\n\nCordialement,\n\nLeo Bianchini\nDirecteur financier\nD Corp – 12 rue de la Paix, 75002 Paris\nTél. : +33 1 23 45 67 89\nwww.d-corp.fr',
+      body_html: `<p>Voici le devis.</p><p>Cordialement,</p>${signature}`,
+    })],
+  }, ME);
+  assert.deepEqual(d.items.slice(1).map(shown), [['message', 'Voici le devis.', 'FL']]);
+});
+
+test('in an email split by images, a signature with a logo is cut where the plain text cuts it; a picture before it stays', () => {
+  const leo = { from_email: 'leo@d.com' };
+  const signature = '\n\nLeo Bianchini\nD Corp';
+  const html = '<p>Voici le plan :</p><img src="data:image/png;base64,PLAN"><p>Leo Bianchini</p>'
+    + '<img src="data:image/png;base64,LOGO"><p>D Corp</p>';
+  const [d] = buildDiscussions({
+    inbox: [
+      mail(1, { ...leo, message_id: '<a@x>', body_text: `Merci.${signature}` }),
+      mail(2, { ...leo, references: '<a@x>', body_text: `Voici le plan :${signature}`, body_html: html }),
+    ],
+  }, ME);
+  assert.deepEqual(d.items.slice(1).map(shown), [
+    ['message', 'Merci.', 'F'], ['message', 'Voici le plan :', ''], ['image', 'data:image/png;base64,PLAN', 'L'],
+  ]);
 });
 
 test('bold, italic, lists and links stay; a link\'s address, noted at the very end, comes back beside it', () => {
