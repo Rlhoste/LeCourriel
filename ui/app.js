@@ -348,14 +348,17 @@ function renderDiscussion(d) {
   scroll.addEventListener('click', ev => {   // on the scroll: the find bar rebuilds the bubbles
     const go = ev.target.closest('.dm-task-go');
     if (go) { openTask(Number(go.closest('.dm-task').dataset.task)); return; }
+    const status = ev.target.closest('.dm-task-status button');
+    if (status) {
+      if (!status.classList.contains('on')) setTaskStatus(Number(status.closest('.dm-task').dataset.task), status.dataset.status).catch(e => showToast(String(e)));
+      return;
+    }
+    const del = ev.target.closest('.dm-task-del');
+    if (del) { deleteTask(Number(del.closest('.dm-task').dataset.task)).catch(e => showToast(String(e))); return; }
     const a = ev.target.closest('a[data-url]');
     if (!a) return;
     ev.preventDefault();
     window.__TAURI__.shell.open(a.dataset.url).catch(err => console.error('open link', err));
-  });
-  scroll.addEventListener('change', ev => {
-    const box = ev.target.closest('.dm-task');
-    if (box) setTaskStatus(Number(box.dataset.task), ev.target.value).catch(e => showToast(String(e)));
   });
   scroll.addEventListener('contextmenu', ev => {
     const item = dmItemOf(d, ev.target.closest('.dm-row[data-uid]'));
@@ -620,15 +623,21 @@ function discussionItem(item) {
 }
 
 // The task taken from a message: its status, set from here, and the way to it on the board.
-// Not done is the board's Todo; Given up stays the board's own, listed only when the task is there.
+// Not done is the board's Todo; Given up stays the board's own, shown read-only when the task is there.
 function taskBox(task) {
-  const labels = { todo: t('dm.notDone'), in_progress: t('kanban.inProgress'), done: t('kanban.done'), given_up: t('kanban.givenUp') };
-  const statuses = ['todo', 'in_progress', 'done', ...(task.status === 'given_up' ? ['given_up'] : [])];
+  const labels = { todo: t('dm.notDone'), in_progress: t('kanban.inProgress'), done: t('kanban.done') };
   return `<div class="dm-task" data-task="${esc(task.id)}">`
     + `<span class="dm-task-title">✓ ${esc(task.title)}</span>`
-    + `<select class="dm-task-status" aria-label="${esc(t('dm.taskStatus'))}">`
-    + statuses.map(s => `<option value="${s}"${s === task.status ? ' selected' : ''}>${esc(labels[s])}</option>`).join('')
-    + `</select><button class="dm-task-go">${esc(t('dm.openTask'))}</button></div>`;
+    + (task.status === 'given_up' ? `<span class="dm-task-given-up">${esc(t('kanban.givenUp'))}</span>` : '')
+    + `<span class="dm-task-status" role="group" aria-label="${esc(t('dm.taskStatus'))}">`
+    + Object.entries(labels).map(([s, label]) => `<button data-status="${s}"${s === task.status ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"'}>${esc(label)}</button>`).join('')
+    + `</span><button class="dm-task-go">${esc(t('dm.openTask'))}</button>`
+    + `<button class="dm-task-del" title="${esc(t('dm.deleteTask'))}" aria-label="${esc(t('dm.deleteTask'))}">🗑</button></div>`;
+}
+
+// Same command as the board's delete; the board and the discussion both redraw from setTasks.
+async function deleteTask(id) {
+  if (await askInApp(t('dm.deleteTaskAsk'), t('rp.delete'))) setTasks(await cmd('delete_task', { id }));
 }
 
 // The top of a postcard (only the Brutalist look shows it): "Greetings from ORG", the stamp, the postmark.
