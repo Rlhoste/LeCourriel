@@ -44,6 +44,8 @@
     <button class="nav-btn" id="btn-settings" data-i18n="nav.settings">⚙ Settings</button>
     <button class="nav-btn compose-btn" id="btn-compose" data-i18n="nav.compose">+ Compose</button>
   </nav>
+  <div class="pane-resizer app-resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize navigation"
+       data-resize-key="sidebar" data-target="#sidebar" data-default="220" data-min="150" data-max="420" data-reserve="520"></div>
 
   <!-- Main area -->
   <main id="main">
@@ -141,13 +143,15 @@
         <button id="contacts-add" class="primary-btn" data-i18n="contacts.add">+ Add</button>
       </header>
       <div id="contacts-layout">
-        <div class="contacts-column">
+        <div class="contacts-column" id="contacts-people">
           <h2 data-i18n="contacts.people">People</h2>
           <div id="contacts-list"></div>
           <h2 class="potential-title" data-i18n="contacts.potential">Potential contacts</h2>
           <p class="potential-hint" data-i18n="contacts.potentialHint">Received mail only. These senders are not trusted contacts.</p>
           <div id="potential-contacts-list"></div>
         </div>
+        <div class="pane-resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize contacts"
+             data-resize-key="contacts-people" data-target="#contacts-people" data-default="300" data-min="220" data-max="520" data-reserve="500"></div>
         <form id="contact-editor" class="contact-editor hidden">
           <h2 data-i18n="contacts.people">People</h2>
           <label for="contact-name" data-i18n="contacts.name">Name</label>
@@ -165,6 +169,8 @@
           </div>
           <div id="contact-error" class="contact-error"></div>
         </form>
+        <div class="pane-resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize contact editor"
+             data-resize-key="contacts-editor" data-target="#contact-editor" data-default="340" data-min="280" data-max="560" data-reserve="300"></div>
         <div class="contacts-column companies-column">
           <div class="contacts-company-heading">
             <h2 data-i18n="contacts.companies">Companies</h2>
@@ -215,6 +221,8 @@
           </div>
           <div id="projects-list"></div>
         </div>
+        <div class="pane-resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize project list"
+             data-resize-key="projects-list" data-target="#projects-sidebar" data-default="200" data-min="180" data-max="420" data-reserve="500"></div>
         <div id="projects-detail" class="hidden">
           <div id="projects-detail-header">
             <div class="projects-detail-title-wrap">
@@ -240,6 +248,8 @@
           <button id="projects-save-desc" data-i18n="proj.save">Save</button>
           <div id="projects-emails-list"></div>
         </div>
+        <div class="pane-resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize project details"
+             data-resize-key="projects-detail" data-target="#projects-detail" data-default="360" data-min="280" data-max="620" data-reserve="280"></div>
         <div id="projects-reading-pane" class="reading-pane hidden">
           <div id="proj-rp-header"></div>
           <iframe id="proj-rp-iframe" sandbox="allow-same-origin"></iframe>
@@ -420,6 +430,8 @@
     </div>
     <div class="search-body">
       <div class="search-results" id="search-results"></div>
+      <div class="pane-resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize search results"
+           data-resize-key="search-results" data-target="#search-results" data-default="430" data-min="280" data-max="700" data-reserve="280"></div>
       <div class="search-side" id="search-side">
         <div class="search-help" id="search-help">
           <p data-i18n="search.help1">Type to search instantly. Press Enter to ask the AI: find, write an email, summarise or answer.</p>
@@ -666,6 +678,8 @@
     </div>
     <div class="email-list"></div>
   </div>
+  <div class="pane-resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize message list"
+       data-resize-key="mail-list" data-target=".email-list-col" data-default="420" data-min="260" data-max="760" data-reserve="320"></div>
   <div class="reading-pane">
     <div class="rp-placeholder" data-i18n="rp.select">Select an email to read</div>
     <div class="rp-content hidden">

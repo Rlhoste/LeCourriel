@@ -55,6 +55,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupContacts();
   setupKanban();
   setupSearch();
+  setupPaneResizers();
 
   // Apply saved font scale and theme
   try {
@@ -101,6 +102,120 @@ function setupSidebar() {
     to: BUG_REPORT_TO,
     subject: 'Sorry Remi, a new bug in your list',
   }));
+}
+
+// ── Persisted vertical pane splitters ──────────────────────────────────────
+const PANE_SIZE_PREFIX = 'courriel:pane-width:';
+
+function paneTarget(resizer) {
+  return resizer.parentElement?.querySelector(resizer.dataset.target) || document.querySelector(resizer.dataset.target);
+}
+
+function preferredPaneSize(resizer) {
+  const fallback = Number(resizer.dataset.default) || 300;
+  try {
+    const saved = Number(localStorage.getItem(PANE_SIZE_PREFIX + resizer.dataset.resizeKey));
+    return Number.isFinite(saved) && saved > 0 ? saved : fallback;
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function paneLimits(resizer) {
+  const minimum = Number(resizer.dataset.min) || 120;
+  let maximum = Number(resizer.dataset.max) || Number.MAX_SAFE_INTEGER;
+  const parentWidth = resizer.parentElement?.getBoundingClientRect().width || 0;
+  const reserve = Number(resizer.dataset.reserve) || 0;
+  if (parentWidth > reserve + minimum) maximum = Math.min(maximum, parentWidth - reserve);
+  return { minimum, maximum: Math.max(minimum, maximum) };
+}
+
+function applyPaneSize(resizer, requested) {
+  const target = paneTarget(resizer);
+  if (!target) return requested;
+  const { minimum, maximum } = paneLimits(resizer);
+  const size = Math.round(Math.max(minimum, Math.min(maximum, requested)));
+  target.style.width = `${size}px`;
+  target.style.flexBasis = `${size}px`;
+  resizer.setAttribute('aria-valuemin', String(minimum));
+  resizer.setAttribute('aria-valuemax', String(maximum));
+  resizer.setAttribute('aria-valuenow', String(size));
+  return size;
+}
+
+function applySharedPaneSize(key, requested) {
+  document.querySelectorAll(`.pane-resizer[data-resize-key="${key}"]`).forEach(resizer =>
+    applyPaneSize(resizer, requested));
+}
+
+function savePaneSize(key, size) {
+  try { localStorage.setItem(PANE_SIZE_PREFIX + key, String(Math.round(size))); } catch (_) {}
+}
+
+function setupPaneResizers() {
+  const resizers = [...document.querySelectorAll('.pane-resizer')];
+  for (const resizer of resizers) {
+    applyPaneSize(resizer, preferredPaneSize(resizer));
+    const refresh = () => {
+      if ((resizer.parentElement?.getBoundingClientRect().width || 0) > 0) {
+        applyPaneSize(resizer, preferredPaneSize(resizer));
+      }
+    };
+    if (window.ResizeObserver && resizer.parentElement) new window.ResizeObserver(refresh).observe(resizer.parentElement);
+
+    resizer.addEventListener('pointerdown', event => {
+      if (event.button !== 0) return;
+      const target = paneTarget(resizer);
+      if (!target) return;
+      event.preventDefault();
+      resizer.setPointerCapture(event.pointerId);
+      resizer.classList.add('dragging');
+      document.body.classList.add('resizing-pane');
+    });
+    resizer.addEventListener('pointermove', event => {
+      if (!resizer.hasPointerCapture(event.pointerId)) return;
+      const target = paneTarget(resizer);
+      if (!target) return;
+      const targetRect = target.getBoundingClientRect();
+      const dividerRect = resizer.getBoundingClientRect();
+      const targetIsLeft = targetRect.left < dividerRect.left;
+      const requested = targetIsLeft ? event.clientX - targetRect.left : targetRect.right - event.clientX;
+      const size = applyPaneSize(resizer, requested);
+      applySharedPaneSize(resizer.dataset.resizeKey, size);
+      savePaneSize(resizer.dataset.resizeKey, size);
+    });
+    const stop = event => {
+      if (resizer.hasPointerCapture(event.pointerId)) resizer.releasePointerCapture(event.pointerId);
+      resizer.classList.remove('dragging');
+      document.body.classList.remove('resizing-pane');
+    };
+    resizer.addEventListener('pointerup', stop);
+    resizer.addEventListener('pointercancel', stop);
+    resizer.addEventListener('dblclick', () => {
+      const size = Number(resizer.dataset.default) || 300;
+      savePaneSize(resizer.dataset.resizeKey, size);
+      applySharedPaneSize(resizer.dataset.resizeKey, size);
+    });
+    resizer.addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home'].includes(event.key)) return;
+      event.preventDefault();
+      const target = paneTarget(resizer);
+      if (!target) return;
+      if (event.key === 'Home') {
+        const size = Number(resizer.dataset.default) || 300;
+        savePaneSize(resizer.dataset.resizeKey, size);
+        applySharedPaneSize(resizer.dataset.resizeKey, size);
+        return;
+      }
+      const targetIsLeft = target.getBoundingClientRect().left < resizer.getBoundingClientRect().left;
+      const direction = event.key === 'ArrowRight' ? 1 : -1;
+      const step = event.shiftKey ? 40 : 10;
+      const current = Number(resizer.getAttribute('aria-valuenow')) || preferredPaneSize(resizer);
+      const size = applyPaneSize(resizer, current + direction * step * (targetIsLeft ? 1 : -1));
+      savePaneSize(resizer.dataset.resizeKey, size);
+      applySharedPaneSize(resizer.dataset.resizeKey, size);
+    });
+  }
 }
 
 function switchPanel(panel) {
