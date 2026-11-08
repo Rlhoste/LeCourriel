@@ -551,7 +551,8 @@ function renderActions(bar, email, onGone, onLoadRemote = null) {
     <div class="rp-more">
       <button class="rp-btn" data-act="more" title="${t('rp.more')}">⋯</button>
       <div class="rp-menu hidden">
-        ${inInbox ? `<button data-act="unread">${t('rp.markUnread')}</button>` : ''}
+        ${inInbox ? `<button data-act="unread">${t('rp.markUnread')}</button>
+        <button data-act="trainNotSpam">${t('rp.notSpam')}</button>` : ''}
         <button data-act="save">${t('rp.saveAs')}</button>
         <button data-act="print">${t('rp.print')}</button>
       </div>
@@ -603,6 +604,14 @@ function renderActions(bar, email, onGone, onLoadRemote = null) {
     delete: () => moveAway('trash_email', 'Moved to trash'),
     more: () => menu.classList.toggle('hidden'),
     unread: () => { setRead(email, false); flash(t('rp.markedUnread')); },
+    trainNotSpam: async () => {
+      try {
+        await cmd('train_not_spam', { uid: email.uid });
+        flash(t('rp.notSpam'));
+      } catch (e) {
+        flash(String(e), true);
+      }
+    },
     save: () => saveEmail(email).then(msg => msg && flash(msg)).catch(e => flash(String(e), true)),
     print: () => printEmail(email),
     loadRemote: () => {

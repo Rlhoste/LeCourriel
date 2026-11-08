@@ -1734,6 +1734,98 @@ max_tokens = 10
         spam_guard::reset();
     }
 
+    #[test]
+    fn test_adaptive_spam_learns_both_classes_locally() {
+        use crate::adaptive_spam::{self, Label};
+
+        adaptive_spam::reset();
+        let card = |uid: u64, message_id: &str, subject: &str, body: &str, sender: &str| EmailCard {
+            uid,
+            message_id: message_id.into(),
+            subject: subject.into(),
+            body_text: body.into(),
+            from_email: sender.into(),
+            ..make_test_card(uid, Priority::Information)
+        };
+
+        // One report cannot activate automatic filtering. Both user-defined classes need
+        // several examples, which prevents one mistaken click from becoming a sender block.
+        let first =
+            card(1, "<spam-1@example>", "Exclusive lottery winner", "Claim cheap pills and cash now", "sales@bad.test");
+        adaptive_spam::train(&first, Label::Spam);
+        adaptive_spam::train(&first, Label::Spam);
+        let state: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(crate::paths::file("adaptive-spam.json")).unwrap()).unwrap();
+        assert_eq!(state["spam_documents"], 1, "repeating an action must not double-train a message");
+        adaptive_spam::train(&first, Label::Ham);
+        let state: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(crate::paths::file("adaptive-spam.json")).unwrap()).unwrap();
+        assert_eq!(state["spam_documents"], 0);
+        assert_eq!(state["ham_documents"], 1, "a correction must move, not duplicate, its training sample");
+        adaptive_spam::reset();
+        adaptive_spam::train(&first, Label::Spam);
+        let candidate = RawEmail {
+            uid: 50,
+            subject: "Exclusive lottery winner".into(),
+            from: "sales@bad.test".into(),
+            to: String::new(),
+            cc: String::new(),
+            reply_to: String::new(),
+            bcc: String::new(),
+            message_id: "<candidate@example>".into(),
+            references: String::new(),
+            seen: false,
+            deleted: false,
+            date: None,
+            body_text: "Claim cheap pills and cash now".into(),
+            body_html: None,
+            security: Default::default(),
+        };
+        assert_eq!(adaptive_spam::marks_spam(&candidate), None);
+
+        for index in 2..=3 {
+            adaptive_spam::train(
+                &card(
+                    index,
+                    &format!("<spam-{index}@example>"),
+                    "Exclusive lottery winner",
+                    "Claim cheap pills and cash now",
+                    "sales@bad.test",
+                ),
+                Label::Spam,
+            );
+        }
+        for index in 1..=3 {
+            adaptive_spam::train(
+                &card(
+                    100 + index,
+                    &format!("<ham-{index}@example>"),
+                    "Project meeting agenda",
+                    "Please review the attached report before our team meeting",
+                    "colleague@good.test",
+                ),
+                Label::Ham,
+            );
+        }
+        assert!(adaptive_spam::marks_spam(&candidate).is_some());
+
+        let legitimate = RawEmail {
+            uid: 51,
+            subject: "Project meeting agenda".into(),
+            from: "colleague@good.test".into(),
+            body_text: "Please review the attached report before our team meeting".into(),
+            message_id: "<legitimate@example>".into(),
+            ..candidate.clone()
+        };
+        assert!(adaptive_spam::marks_spam(&legitimate).is_none());
+
+        // Persisted vocabulary and sample identifiers are hashes, not readable mail content.
+        let persisted = std::fs::read_to_string(crate::paths::file("adaptive-spam.json")).unwrap();
+        assert!(!persisted.contains("lottery"));
+        assert!(!persisted.contains("colleague@good.test"));
+        adaptive_spam::reset();
+    }
+
     // ── Data directory ────────────────────────────────────────────────────────
 
     #[test]

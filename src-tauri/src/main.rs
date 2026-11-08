@@ -24,6 +24,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
 use tracing::info;
 
+mod adaptive_spam;
 mod ai;
 mod ai_assistant;
 mod ai_classifier;
@@ -917,6 +918,20 @@ fn spam_name(folders: &app_state::SpecialFolders) -> String {
     folders.spam.clone().unwrap_or_else(|| "Junk".into())
 }
 
+/// Snapshot a message before moving it so an explicit Spam/Not-spam action can train the local
+/// model. Folder-qualified lookup matters because IMAP UIDs repeat between folders.
+fn training_card(shared: &SharedState, uid: u64, folder: search::Folder) -> Option<models::EmailCard> {
+    let s = shared.lock().unwrap();
+    if folder == search::Folder::Inbox {
+        s.emails.iter().find(|email| email.uid == uid).cloned()
+    } else {
+        s.search_index
+            .iter()
+            .find(|(found, email)| *found == folder && email.uid == uid)
+            .map(|(_, email)| email.clone())
+    }
+}
+
 /// Move an inbox email to another folder, then forget it locally.
 async fn move_email(shared: &SharedState, uid: u64, folder: String) -> Result<(), String> {
     let (account, _, imap_uid) = account_of(shared, uid)?;
@@ -942,6 +957,7 @@ async fn trash_email(uid: u64, shared: State<'_, SharedState>) -> Result<(), Str
 #[tauri::command]
 async fn not_spam_email(uid: u64, shared: State<'_, SharedState>) -> Result<(), String> {
     let (account, folders, imap_uid) = account_of(shared.inner(), uid)?;
+    let training = training_card(shared.inner(), uid, search::Folder::Spam);
     // move_message moves from the configured mailbox: point it at the spam folder.
     let from_spam = config::ImapConfig { mailbox: spam_name(&folders), ..account.imap.clone() };
     imap_client::move_message(&from_spam, imap_uid, &account.imap.mailbox).await.map_err(|e| format!("{:#}", e))?;
@@ -949,6 +965,10 @@ async fn not_spam_email(uid: u64, shared: State<'_, SharedState>) -> Result<(), 
     // back in the inbox at the next refresh.
     let mut s = shared.lock().unwrap();
     s.search_index.retain(|(f, e)| !(*f == search::Folder::Spam && e.uid == uid));
+    drop(s);
+    if let Some(card) = training {
+        adaptive_spam::train(&card, adaptive_spam::Label::Ham);
+    }
     Ok(())
 }
 
@@ -956,10 +976,23 @@ async fn not_spam_email(uid: u64, shared: State<'_, SharedState>) -> Result<(), 
 #[tauri::command]
 async fn spam_email(uid: u64, shared: State<'_, SharedState>) -> Result<(), String> {
     let (account, folders, _) = account_of(shared.inner(), uid)?;
+    let training = training_card(shared.inner(), uid, search::Folder::Inbox);
     let folder = spam_name(&folders);
     // Many mailboxes have no spam folder: create it the first time, like other mail clients.
     imap_client::ensure_folder(&account.imap, &folder).await.map_err(|e| format!("{:#}", e))?;
-    move_email(shared.inner(), uid, folder).await
+    move_email(shared.inner(), uid, folder).await?;
+    if let Some(card) = training {
+        adaptive_spam::train(&card, adaptive_spam::Label::Spam);
+    }
+    Ok(())
+}
+
+/// Teach the local model that an inbox message is legitimate without moving it.
+#[tauri::command]
+fn train_not_spam(uid: u64, shared: State<'_, SharedState>) -> Result<(), String> {
+    let card = training_card(shared.inner(), uid, search::Folder::Inbox).ok_or("Email not found")?;
+    adaptive_spam::train(&card, adaptive_spam::Label::Ham);
+    Ok(())
 }
 
 /// Mark an inbox email read or unread, on the server and locally.
@@ -1215,6 +1248,7 @@ fn main() {
             trash_email,
             spam_email,
             not_spam_email,
+            train_not_spam,
             set_read,
             set_email_project,
             save_email,

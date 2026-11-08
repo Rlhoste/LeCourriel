@@ -235,17 +235,27 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
         &trusted_correspondents,
         chrono::Utc::now().timestamp(),
     );
-    let guard_rejected: std::collections::HashSet<u64> = guard
+    let mut adaptive_rejected = crate::adaptive_spam::marked_in_batch(&new_raw);
+    adaptive_rejected.retain(|uid, _| !matches!(guard.get(uid), Some(crate::spam_guard::Decision::Spam(_))));
+    let mut rejected: std::collections::HashSet<u64> = guard
         .iter()
         .filter_map(|(uid, decision)| matches!(decision, crate::spam_guard::Decision::Spam(_)).then_some(*uid))
         .collect();
+    rejected.extend(adaptive_rejected.keys().copied());
     // Rejected content must not leak into the separate automatic task-check prompt either.
-    recent_inbox.retain(|(_, mail)| !guard_rejected.contains(&mail.uid));
+    recent_inbox.retain(|(_, mail)| !rejected.contains(&mail.uid));
     let mut classify_raw = Vec::new();
     let mut guarded_raw = Vec::new();
     let mut ensured_spam = std::collections::HashSet::new();
     for raw in new_raw {
-        let Some(crate::spam_guard::Decision::Spam(reason)) = guard.get(&raw.uid) else {
+        let hard_reason = match guard.get(&raw.uid) {
+            Some(crate::spam_guard::Decision::Spam(reason)) => Some(*reason),
+            _ => None,
+        };
+        let reason = hard_reason.map(str::to_string).or_else(|| {
+            adaptive_rejected.get(&raw.uid).map(|probability| format!("local score {:.1}%", probability * 100.0))
+        });
+        let Some(reason) = reason else {
             classify_raw.push(raw);
             continue;
         };
@@ -271,7 +281,9 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
         match moved {
             Ok(()) => {
                 info!("Spam guard moved uid={} to {} ({})", raw.uid, folder, reason);
-                crate::spam_guard::mark_moved(account, imap_uid);
+                if hard_reason.is_some() {
+                    crate::spam_guard::mark_moved(account, imap_uid);
+                }
             }
             Err(e) => {
                 // Fail closed for token use: show it unsorted, retry the move next refresh,
