@@ -228,6 +228,84 @@ test('two accounts: actions reach the right server (#17), removing one removes i
   }
 });
 
+test('spam attacks are quarantined before AI, including a sender burst', async () => {
+  await withFreshApp(async browser => {
+    await h.fillAccount(browser, account());
+    await h.fillAi(browser, { url: aiUrl, key: AI_KEY, model: 'fake-model' });
+    await h.save(browser);
+    await assertTriaged(browser);
+    ai.requests = [];
+
+    const serverMarkedSubject = 'Attack server verdict';
+    const marked = fx.eml({
+      from: 'Attacker <attacker@evil.test>',
+      subject: serverMarkedSubject,
+      body: 'This attacker-controlled content must never reach the model.',
+      hoursAgo: 0,
+    }).replace('MIME-Version: 1.0', 'X-Spam-Flag: YES\r\nMIME-Version: 1.0');
+    imap.append('INBOX', marked);
+    for (let index = 1; index <= 7; index++) {
+      imap.append('INBOX', fx.eml({
+        from: 'Burst attacker <burst@evil.test>',
+        subject: `Attack burst ${index}`,
+        body: `Attacker payload ${index}`,
+        hoursAgo: 0,
+      }));
+    }
+
+    await (await browser.$('#btn-refresh')).click();
+    await browser.waitUntil(() => imap.mailboxes.Junk.length >= 3, {
+      timeout: 30000,
+      interval: 300,
+      timeoutMsg: `Only ${imap.mailboxes.Junk.length} attack messages reached Junk`,
+    });
+    const subjectOf = message => (/^Subject: (.*)$/m.exec(message.raw.toString()) || [])[1];
+    const junkSubjects = imap.mailboxes.Junk.map(subjectOf);
+    assert.ok(junkSubjects.includes(serverMarkedSubject), junkSubjects.join(', '));
+    assert.ok(junkSubjects.includes('Attack burst 6'), junkSubjects.join(', '));
+    assert.ok(junkSubjects.includes('Attack burst 7'), junkSubjects.join(', '));
+
+    const classified = ai.classifications().map(request => request.subject);
+    for (const rejected of [serverMarkedSubject, 'Attack burst 6', 'Attack burst 7']) {
+      assert.ok(!classified.includes(rejected), `${rejected} was sent to AI: ${classified.join(', ')}`);
+    }
+  });
+});
+
+test('a verification code appears temporarily outside Important and the empty section stays hidden', async () => {
+  await withFreshApp(async browser => {
+    await h.fillAccount(browser, account());
+    await h.fillAi(browser, { url: aiUrl, key: AI_KEY, model: 'fake-model' });
+    await h.save(browser);
+    await assertTriaged(browser);
+    assert.equal(await browser.execute(() => document.getElementById('ov-verification-box').classList.contains('hidden')), true);
+
+    const subject = 'Login verification for Example Platform';
+    imap.append('INBOX', fx.eml({
+      from: 'Example Platform <security@platform.test>',
+      subject,
+      body: 'Your verification code is 847-219. It expires soon.',
+      hoursAgo: 0,
+    }));
+    await (await browser.$('#btn-refresh')).click();
+    await h.showPanel(browser, 'overview');
+    await h.waitText(browser, '#ov-verification-list', '847-219');
+    await browser.waitUntil(
+      () => browser.execute(() => appState?.briefing?.kind === 'live'),
+      { timeout: 30000, timeoutMsg: 'refresh did not finish before verification interaction' },
+    );
+    assert.ok(!(await h.textOf(browser, '#ov-urgent-list')).includes(subject), 'verification email appeared as important');
+
+    await (await browser.$('#ov-verification-list .verification-dismiss')).click();
+    await browser.waitUntil(() => browser.execute(
+      () => document.getElementById('ov-verification-box').classList.contains('hidden'),
+    ), {
+      timeout: 5000,
+      timeoutMsg: 'empty verification section remained visible',
+    });
+  });
+});
+
 // Opt-in, against a real mailbox and a real AI:
 //   E2E_LIVE=1 E2E_IMAP_HOST=… E2E_IMAP_USER=… E2E_IMAP_PASS=… [E2E_IMAP_PORT=993]
 //   E2E_AI_URL=https://api.openai.com/v1 E2E_AI_KEY=… E2E_AI_MODEL=… scripts/e2e.sh

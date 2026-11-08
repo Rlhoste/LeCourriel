@@ -10,7 +10,7 @@ use crate::config::{Config, ImapConfig};
 use crate::dismissals::Dismissals;
 use crate::dto::*;
 use crate::i18n;
-use crate::imap_client::{connect, fetch_emails, fetch_folder};
+use crate::imap_client::{connect, fetch_all_contact_headers, fetch_emails, fetch_folder};
 use crate::models::{EmailCard, Priority, RawEmail};
 use crate::state::AppState;
 use crate::tasks::{Board, Status};
@@ -122,6 +122,24 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     let mut spam_raw = Vec::new();
     let mut inbox_ok = false;
     let mut mailboxes = Vec::new();
+    let own_addresses: std::collections::HashSet<String> = cfg
+        .accounts
+        .iter()
+        .flat_map(|account| {
+            [account.imap.username.as_str(), account.smtp.username.as_str(), account.smtp.from_address.as_str()]
+                .into_iter()
+                .flat_map(crate::search::split_addresses)
+        })
+        .filter_map(|entry| {
+            let address = entry
+                .rsplit_once('<')
+                .map(|(_, tail)| tail.trim_end_matches('>'))
+                .unwrap_or(&entry)
+                .trim()
+                .to_lowercase();
+            address.contains('@').then_some(address)
+        })
+        .collect();
 
     for (index, account) in cfg.accounts.iter().enumerate() {
         let folders = guess_folder_names(&account.imap).await;
@@ -190,6 +208,34 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
             }
             Err(e) => warn!("Spam[{}]: {}", account.name, e),
         }
+
+        // A first-run address-book scan reads only headers and covers the complete Sent history.
+        // Incoming history is kept separate as untrusted potential contacts.
+        let sent_scan = crate::contacts::scan_key("sent", &account.imap.host, &account.imap.username, &sent_name);
+        if crate::contacts::scan_needed(&sent_scan) {
+            match fetch_all_contact_headers(&account.imap, &sent_name).await {
+                Ok(headers) => {
+                    if let Err(error) = crate::contacts::complete_sent_scan(&sent_scan, &headers, &own_addresses) {
+                        warn!("Could not save complete Sent contact scan: {}", error);
+                    }
+                }
+                Err(error) => warn!("Sent contact scan[{}]: {:#}", account.name, error),
+            }
+        }
+        let inbox_scan =
+            crate::contacts::scan_key("potential", &account.imap.host, &account.imap.username, &account.imap.mailbox);
+        if crate::contacts::scan_needed(&inbox_scan) {
+            match fetch_all_contact_headers(&account.imap, &account.imap.mailbox).await {
+                Ok(mut headers) => {
+                    headers.retain(|email| !crate::spam_guard::server_marks_spam(&email.security));
+                    if let Err(error) = crate::contacts::complete_potential_scan(&inbox_scan, &headers, &own_addresses)
+                    {
+                        warn!("Could not save potential-contact scan: {}", error);
+                    }
+                }
+                Err(error) => warn!("Potential contact scan[{}]: {:#}", account.name, error),
+            }
+        }
     }
 
     // If no inbox could be fetched, keep the cache untouched rather than wiping it.
@@ -225,23 +271,33 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     // Split inbox into already-known (reuse cache) and new (need AI).
     let (known_raw, new_raw): (Vec<_>, Vec<_>) = raw_emails.into_iter().partition(|r| cached_uids.contains(&r.uid));
 
-    // People the user has written to are a weak trust signal only when the incoming mail also
-    // passes DKIM/DMARC. It raises the burst threshold; it never bypasses the global AI budget.
-    let trusted_correspondents: std::collections::HashSet<String> =
-        sent_raw.iter().flat_map(|mail| crate::spam_guard::addresses(&format!("{},{}", mail.to, mail.cc))).collect();
-    let guard = crate::spam_guard::assess_batch(
-        &cfg.accounts,
-        &new_raw,
-        &trusted_correspondents,
-        chrono::Utc::now().timestamp(),
-    );
+    // Sent recipients become known contacts. Trust affects sender/domain burst checks and the
+    // adaptive model only when the receiving server reports aligned DMARC; it never bypasses the
+    // global emergency ceiling or a server spam verdict.
+    crate::contacts::ingest_sent(&sent_raw, &own_addresses);
+    let directory = crate::contacts::load();
+    let trust = crate::contacts::trust_signals(&directory);
+    let guard = crate::spam_guard::assess_batch(&cfg.accounts, &new_raw, &trust, chrono::Utc::now().timestamp());
     let mut adaptive_rejected = crate::adaptive_spam::marked_in_batch(&new_raw);
-    adaptive_rejected.retain(|uid, _| !matches!(guard.get(uid), Some(crate::spam_guard::Decision::Spam(_))));
+    adaptive_rejected.retain(|uid, _| {
+        !matches!(guard.get(uid), Some(crate::spam_guard::Decision::Spam(_)))
+            && new_raw
+                .iter()
+                .find(|email| email.uid == *uid)
+                .is_none_or(|email| !crate::spam_guard::authenticated_trusted(email, &trust))
+    });
     let mut rejected: std::collections::HashSet<u64> = guard
         .iter()
         .filter_map(|(uid, decision)| matches!(decision, crate::spam_guard::Decision::Spam(_)).then_some(*uid))
         .collect();
     rejected.extend(adaptive_rejected.keys().copied());
+    let accepted_incoming: Vec<RawEmail> = new_raw
+        .iter()
+        .filter(|email| !rejected.contains(&email.uid))
+        .cloned()
+        .chain(known_raw.iter().filter(|email| !crate::spam_guard::server_marks_spam(&email.security)).cloned())
+        .collect();
+    crate::contacts::ingest_potential(&accepted_incoming, &own_addresses);
     // Rejected content must not leak into the separate automatic task-check prompt either.
     recent_inbox.retain(|(_, mail)| !rejected.contains(&mail.uid));
     let mut classify_raw = Vec::new();
@@ -657,6 +713,22 @@ fn populate(
         Board::update(|b| b.sync_from_cards(&cards, &dismissed));
     }
     let board_tasks = Board::load().tasks;
+    let now_ts = Local::now().timestamp();
+    let detected_verifications: Vec<VerificationDto> = cards.iter().filter_map(crate::verification::extract).collect();
+    let verification_uids: std::collections::HashSet<u64> =
+        detected_verifications.iter().map(|item| item.uid).collect();
+    let verification_items: Vec<VerificationDto> = detected_verifications
+        .into_iter()
+        .filter(|item| {
+            item.expires_ts > now_ts
+                && item.expires_ts <= now_ts + crate::verification::LIFETIME_SECONDS + 5 * 60
+                && !dismissed.verifications.contains(&item.uid)
+        })
+        .collect();
+    // Verification mail remains in Inbox but never competes with genuinely important work on
+    // Overview, even after its short-lived code has expired.
+    urgent.retain(|card| !verification_uids.contains(&card.uid));
+    high.retain(|card| !verification_uids.contains(&card.uid));
     let important = important_unread(&urgent, &high);
     let meeting_items: Vec<EmailCard> =
         cards.iter().filter(|c| c.meeting_link.is_some() && !dismissed.meetings.contains(&c.uid)).cloned().collect();
@@ -714,6 +786,7 @@ fn populate(
             }
         })
         .collect();
+    let directory = crate::contacts::load();
 
     // Store all emails in shared state for command lookups.
     {
@@ -755,6 +828,7 @@ fn populate(
         all_emails: to_dto_vec(&all_emails),
         tasks: board_tasks,
         meeting_items: to_dto_vec(&meeting_items),
+        verification_items,
         important_emails: to_dto_vec(&important),
         all_emails_by_priority: to_dto_vec(&all_by_priority),
         sent_emails: to_dto_vec(&sent),
@@ -764,6 +838,9 @@ fn populate(
         deadlines: deadline_dtos,
         week_days,
         projects: project_dtos,
+        contacts: directory.contacts,
+        potential_contacts: directory.potential_contacts,
+        companies: directory.companies,
         calendar_year: cal_year,
         calendar_month: cal_month,
     };

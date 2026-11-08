@@ -94,8 +94,9 @@ const AI_RULES = [
   { match: /Client escalation/, answer: answer('urgent', 'A client refund is blocked; decision needed now.') },
   { match: /Budget review/, answer: answer('task', 'Frank asks for a Q4 budget review.', { task: SECOND_TASK }) },
   { match: /Team lunch/, answer: answer('information', 'Team lunch on Friday.') },
+  { match: /Login verification/, answer: answer('urgent', 'A short-lived login code.') },
 ];
 
 module.exports = {
-  seedInbox, seedSecondInbox, lateEmail, AI_RULES, SUBJECTS, SECOND, SECOND_TASK, TASK_TEXT, DEADLINE, MEETING_LINK,
+  eml, seedInbox, seedSecondInbox, lateEmail, AI_RULES, SUBJECTS, SECOND, SECOND_TASK, TASK_TEXT, DEADLINE, MEETING_LINK,
 };

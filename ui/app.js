@@ -10,6 +10,7 @@ let appState = null;
 let activePanel = 'overview';
 let fontScale = 1.0;
 let showOpenedAttention = false;
+let verificationExpiryTimer = null;
 
 // ── Tauri helpers ──────────────────────────────────────────────────────────
 async function cmd(name, args = {}) {
@@ -51,6 +52,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupCalendarNav();
   setupCalendarTaskDialog();
   setupNewProject();
+  setupContacts();
   setupKanban();
   setupSearch();
 
@@ -195,6 +197,7 @@ function renderPanel(panel) {
   if (panel === 'overview') { renderOverview(); return; }
   if (panel === 'calendar') { renderCalendar(); return; }
   if (panel === 'projects') { renderProjects(); return; }
+  if (panel === 'contacts') { renderContacts(); return; }
   if (panel === 'tasks')    { renderKanban(); return; }
   const meta = SPLIT_PANELS[panel];
   if (meta && appState) renderSplitPanel(panel, meta);
@@ -209,6 +212,8 @@ function renderOverview() {
   // Nothing gets sorted without the AI: offer to set it up (also when it fails, e.g. a wrong key).
   const aiKind = appState.briefing?.kind;
   document.getElementById('ov-setup-ai').classList.toggle('hidden', aiKind !== 'ai_missing' && aiKind !== 'ai_error');
+
+  renderVerificationCodes();
 
   // Urgent + High
   const urgent = CourrielCore.attentionEmails(appState, showOpenedAttention);
@@ -242,6 +247,54 @@ function renderOverview() {
   // Week strip
   renderWeekStrip();
   updateUnreadCount();
+}
+
+function renderVerificationCodes() {
+  const now = Math.floor(Date.now() / 1000);
+  const items = (appState.verification_items || []).filter(item => item.expires_ts > now);
+  const box = document.getElementById('ov-verification-box');
+  const list = document.getElementById('ov-verification-list');
+  box.classList.toggle('hidden', items.length === 0);
+  list.innerHTML = '';
+  clearTimeout(verificationExpiryTimer);
+  verificationExpiryTimer = null;
+  for (const item of items) {
+    const row = document.createElement('div');
+    row.className = 'verification-row';
+    const seconds = Math.max(1, item.expires_ts - now);
+    const minutes = Math.max(1, Math.ceil(seconds / 60));
+    row.innerHTML = `<button type="button" class="verification-open"><strong>${esc(item.service || item.from_email)}</strong>` +
+      `<span>${esc(item.from_email)}</span></button><code>${esc(item.code)}</code>` +
+      `<span class="verification-expiry">${esc(t('ov.codeExpires', { n: minutes }))}</span>` +
+      `<button type="button" class="verification-copy">${esc(t('ov.copyCode'))}</button>` +
+      `<button type="button" class="verification-dismiss" title="${esc(t('ov.dismissCode'))}">×</button>`;
+    row.querySelector('.verification-open').addEventListener('click', () => switchToEmail(item.uid));
+    row.querySelector('.verification-copy').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(item.code.replaceAll('-', ''));
+        showToast(t('ov.codeCopied'));
+      } catch (error) {
+        showToast(String(error));
+      }
+    });
+    row.querySelector('.verification-dismiss').addEventListener('click', async () => {
+      const previous = appState.verification_items;
+      appState.verification_items = previous.filter(found => found.uid !== item.uid);
+      renderVerificationCodes();
+      try {
+        await cmd('dismiss_item', { kind: 'verification', uid: item.uid });
+      } catch (error) {
+        appState.verification_items = previous;
+        renderVerificationCodes();
+        showToast(String(error));
+      }
+    });
+    list.appendChild(row);
+  }
+  if (items.length) {
+    const nextExpiry = Math.min(...items.map(item => item.expires_ts));
+    verificationExpiryTimer = setTimeout(renderVerificationCodes, Math.max(250, (nextExpiry - now) * 1000 + 100));
+  }
 }
 
 // Unread inbox emails, shown on the app icon and in the window title. Runs after every
@@ -1662,6 +1715,206 @@ function showProjectEmail(email) {
   setRead(email, true);
 }
 
+// ── Contacts and trusted companies ─────────────────────────────────────────
+let editingContact = null;
+let editingCompany = null;
+
+function directoryContacts() { return appState?.contacts || []; }
+function potentialContacts() { return appState?.potential_contacts || []; }
+function directoryCompanies() { return appState?.companies || []; }
+
+function applyDirectory(view) {
+  if (!appState) return;
+  appState.contacts = view.contacts || [];
+  appState.potential_contacts = view.potential_contacts || [];
+  appState.companies = view.companies || [];
+  renderContacts();
+}
+
+function setupContacts() {
+  document.getElementById('contacts-search').addEventListener('input', renderContacts);
+  document.getElementById('contacts-add').addEventListener('click', () => editContact(null));
+  document.getElementById('company-add').addEventListener('click', () => editCompany(null));
+  document.getElementById('contact-trusted').addEventListener('change', e => {
+    if (e.target.checked) document.getElementById('contact-blocked').checked = false;
+  });
+  document.getElementById('contact-blocked').addEventListener('change', e => {
+    if (e.target.checked) document.getElementById('contact-trusted').checked = false;
+  });
+  document.getElementById('company-trusted').addEventListener('change', e => {
+    if (e.target.checked) document.getElementById('company-blocked').checked = false;
+  });
+  document.getElementById('company-blocked').addEventListener('change', e => {
+    if (e.target.checked) document.getElementById('company-trusted').checked = false;
+  });
+  document.getElementById('contact-editor').addEventListener('submit', saveContactEditor);
+  document.getElementById('company-editor').addEventListener('submit', saveCompanyEditor);
+  document.getElementById('contact-delete').addEventListener('click', deleteContactEditor);
+  document.getElementById('company-delete').addEventListener('click', deleteCompanyEditor);
+}
+
+function renderContacts() {
+  if (!appState) return;
+  const query = document.getElementById('contacts-search').value.trim().toLowerCase();
+  const people = directoryContacts().filter(contact =>
+    !query || [contact.name, contact.address, contact.company].some(value => (value || '').toLowerCase().includes(query)));
+  const list = document.getElementById('contacts-list');
+  list.innerHTML = people.length ? '' : `<div class="contacts-empty">${esc(t('contacts.empty'))}</div>`;
+  for (const contact of people) {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = `contact-row${editingContact === contact.address ? ' active' : ''}`;
+    const badges = `${contact.trusted ? `<span class="contact-badge trusted">${esc(t('contacts.trusted'))}</span>` : ''}` +
+      `${contact.blocked ? `<span class="contact-badge blocked">${esc(t('contacts.blocked'))}</span>` : ''}`;
+    row.innerHTML = `<strong>${esc(contact.name || contact.address)}</strong><span>${esc(contact.address)}</span>` +
+      `<small>${esc(contact.company || '')}${contact.sent_count ? ` · ${esc(t('contacts.sent', { n: contact.sent_count }))}` : ''}</small>${badges}`;
+    row.addEventListener('click', () => editContact(contact));
+    list.appendChild(row);
+  }
+
+  const potentials = potentialContacts().filter(contact =>
+    !query || [contact.name, contact.address].some(value => (value || '').toLowerCase().includes(query)));
+  const potentialList = document.getElementById('potential-contacts-list');
+  potentialList.innerHTML = potentials.length ? '' : `<div class="contacts-empty">${esc(t('contacts.noPotential'))}</div>`;
+  for (const contact of potentials) {
+    const row = document.createElement('div');
+    row.className = 'potential-contact-row';
+    row.innerHTML = `<div><strong>${esc(contact.name || contact.address)}</strong><span>${esc(contact.address)}</span>` +
+      `<small>${esc(t('contacts.received', { n: contact.received_count }))}${contact.authenticated ? ` · ${esc(t('contacts.authenticated'))}` : ''}</small></div>` +
+      `<button type="button">${esc(t('contacts.promote'))}</button>`;
+    row.querySelector('button').addEventListener('click', async () => {
+      try {
+        applyDirectory(await cmd('save_contact', { contact: {
+          address: contact.address, name: contact.name || '', company: '', sent_count: 0,
+          last_sent: 0, trusted: false, blocked: false,
+        } }));
+      } catch (error) {
+        showToast(String(error));
+      }
+    });
+    potentialList.appendChild(row);
+  }
+
+  const companies = directoryCompanies().filter(company =>
+    !query || company.name.toLowerCase().includes(query) || company.domains.some(domain => domain.includes(query)));
+  const companyList = document.getElementById('companies-list');
+  companyList.innerHTML = '';
+  for (const company of companies) {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = `company-row${editingCompany === company.name ? ' active' : ''}`;
+    row.innerHTML = `<strong>${esc(company.name)}</strong><span>${esc(company.domains.join(', '))}</span>` +
+      `${company.trusted ? `<small>${esc(t('contacts.trusted'))}</small>` : ''}` +
+      `${company.blocked ? `<small class="blocked-text">${esc(t('contacts.blocked'))}</small>` : ''}`;
+    row.addEventListener('click', () => editCompany(company));
+    companyList.appendChild(row);
+  }
+  refreshContactCompanyOptions();
+}
+
+function refreshContactCompanyOptions() {
+  const select = document.getElementById('contact-company');
+  const value = select.value;
+  select.innerHTML = `<option value="">${esc(t('contacts.noCompany'))}</option>` +
+    directoryCompanies().map(company => `<option value="${esc(company.name)}">${esc(company.name)}</option>`).join('');
+  select.value = value;
+}
+
+function editContact(contact) {
+  editingContact = contact?.address || null;
+  const editor = document.getElementById('contact-editor');
+  editor.classList.remove('hidden');
+  document.getElementById('contact-name').value = contact?.name || '';
+  const address = document.getElementById('contact-address');
+  address.value = contact?.address || '';
+  address.disabled = Boolean(contact);
+  refreshContactCompanyOptions();
+  document.getElementById('contact-company').value = contact?.company || '';
+  document.getElementById('contact-trusted').checked = Boolean(contact?.trusted);
+  document.getElementById('contact-blocked').checked = Boolean(contact?.blocked);
+  document.getElementById('contact-history').textContent = contact?.last_sent
+    ? t('contacts.lastSent', { date: new Date(contact.last_sent * 1000).toLocaleDateString() }) : '';
+  document.getElementById('contact-delete').classList.toggle('hidden', !contact);
+  document.getElementById('contact-error').textContent = '';
+  renderContacts();
+  if (!contact) address.focus();
+}
+
+async function saveContactEditor(event) {
+  event.preventDefault();
+  const contact = {
+    address: document.getElementById('contact-address').value.trim(),
+    name: document.getElementById('contact-name').value.trim(),
+    company: document.getElementById('contact-company').value,
+    sent_count: 0,
+    last_sent: 0,
+    trusted: document.getElementById('contact-trusted').checked,
+    blocked: document.getElementById('contact-blocked').checked,
+  };
+  try {
+    const view = await cmd('save_contact', { contact });
+    editingContact = contact.address.toLowerCase();
+    applyDirectory(view);
+  } catch (error) {
+    document.getElementById('contact-error').textContent = String(error);
+  }
+}
+
+async function deleteContactEditor() {
+  if (!editingContact) return;
+  try {
+    applyDirectory(await cmd('delete_contact', { address: editingContact }));
+    editingContact = null;
+    document.getElementById('contact-editor').classList.add('hidden');
+  } catch (error) {
+    document.getElementById('contact-error').textContent = String(error);
+  }
+}
+
+function editCompany(company) {
+  editingCompany = company?.name || null;
+  const editor = document.getElementById('company-editor');
+  editor.classList.remove('hidden');
+  const name = document.getElementById('company-name');
+  name.value = company?.name || '';
+  name.disabled = Boolean(company);
+  document.getElementById('company-domains').value = company?.domains?.join(', ') || '';
+  document.getElementById('company-trusted').checked = Boolean(company?.trusted);
+  document.getElementById('company-blocked').checked = Boolean(company?.blocked);
+  document.getElementById('company-delete').classList.toggle('hidden', !company);
+  document.getElementById('company-error').textContent = '';
+  renderContacts();
+  if (!company) name.focus();
+}
+
+async function saveCompanyEditor(event) {
+  event.preventDefault();
+  const company = {
+    name: document.getElementById('company-name').value.trim(),
+    domains: document.getElementById('company-domains').value.split(',').map(value => value.trim()).filter(Boolean),
+    trusted: document.getElementById('company-trusted').checked,
+    blocked: document.getElementById('company-blocked').checked,
+  };
+  try {
+    const view = await cmd('save_company', { company });
+    editingCompany = company.name;
+    applyDirectory(view);
+  } catch (error) {
+    document.getElementById('company-error').textContent = String(error);
+  }
+}
+
+async function deleteCompanyEditor() {
+  if (!editingCompany) return;
+  try {
+    applyDirectory(await cmd('delete_company', { name: editingCompany }));
+    editingCompany = null;
+    document.getElementById('company-editor').classList.add('hidden');
+  } catch (error) {
+    document.getElementById('company-error').textContent = String(error);
+  }
+}
+
 // ── Composer (floating, rich text) ─────────────────────────────────────────
 let composeInReplyTo = null;   // Message-ID of the email being answered
 let composeDirty = false;      // user typed something since the composer opened
@@ -1703,6 +1956,7 @@ function setupCompose() {
   $c('compose-show-cc').addEventListener('click', () => showRecipientRow('cc'));
   $c('compose-show-bcc').addEventListener('click', () => showRecipientRow('bcc'));
   $c('compose-send').addEventListener('click', sendEmail);
+  setupContactAutocomplete();
 
   $c('composer').addEventListener('keydown', e => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendEmail(); }
@@ -1723,6 +1977,72 @@ function setupCompose() {
   setupComposeGifs();
   setupComposeAi();
   setupComposeResize();
+}
+
+function setupContactAutocomplete() {
+  const popup = $c('compose-contact-suggestions');
+  let active = 0;
+  let current = [];
+  let input = null;
+  const fragment = value => value.slice(Math.max(value.lastIndexOf(','), value.lastIndexOf(';')) + 1).trim().toLowerCase();
+  const hide = () => { popup.classList.add('hidden'); current = []; input = null; };
+  const choose = contact => {
+    if (!input) return;
+    const target = input;
+    const cut = Math.max(target.value.lastIndexOf(','), target.value.lastIndexOf(';'));
+    const before = cut >= 0 ? `${target.value.slice(0, cut + 1)} ` : '';
+    const formatted = contact.name ? `${contact.name} <${contact.address}>` : contact.address;
+    target.value = `${before}${formatted}, `;
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+    hide();
+    target.focus();
+  };
+  const draw = target => {
+    input = target;
+    const query = fragment(target.value);
+    if (!query) { hide(); return; }
+    current = directoryContacts()
+      .filter(contact => !contact.blocked)
+      .map(contact => {
+        const values = [contact.name, contact.address, contact.company].map(value => (value || '').toLowerCase());
+        const starts = values.some(value => value.startsWith(query));
+        const includes = values.some(value => value.includes(query));
+        return { contact, score: starts ? 2 : includes ? 1 : 0 };
+      })
+      .filter(item => item.score)
+      .sort((a, b) => b.score - a.score || b.contact.last_sent - a.contact.last_sent || b.contact.sent_count - a.contact.sent_count)
+      .slice(0, 8)
+      .map(item => item.contact);
+    if (!current.length) { hide(); return; }
+    active = 0;
+    const field = target.closest('.composer-field');
+    popup.style.top = `${field.offsetTop + field.offsetHeight}px`;
+    popup.innerHTML = current.map((contact, index) =>
+      `<button type="button" class="${index === active ? 'active' : ''}" data-index="${index}"><strong>${esc(contact.name || contact.address)}</strong><span>${esc(contact.address)}${contact.company ? ` · ${esc(contact.company)}` : ''}</span></button>`).join('');
+    popup.classList.remove('hidden');
+  };
+  for (const id of ['compose-to', 'compose-cc', 'compose-bcc']) {
+    const field = $c(id);
+    field.addEventListener('input', () => draw(field));
+    field.addEventListener('blur', () => setTimeout(hide, 150));
+    field.addEventListener('keydown', event => {
+      if (popup.classList.contains('hidden')) return;
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        active = (active + (event.key === 'ArrowDown' ? 1 : current.length - 1)) % current.length;
+        popup.querySelectorAll('button').forEach((button, index) => button.classList.toggle('active', index === active));
+      } else if (event.key === 'Enter' || event.key === 'Tab') {
+        event.preventDefault(); choose(current[active]);
+      } else if (event.key === 'Escape') {
+        hide();
+      }
+    });
+  }
+  popup.addEventListener('mousedown', event => event.preventDefault());
+  popup.addEventListener('click', event => {
+    const button = event.target.closest('button[data-index]');
+    if (button) choose(current[Number(button.dataset.index)]);
+  });
 }
 
 function showRecipientRow(kind) {
@@ -2200,6 +2520,10 @@ async function startComposeWindow(options) {
     document.documentElement.style.fontSize = `${fontScale * 14}px`;
     applyTheme(s.theme);
     if (s.language && s.language !== LANG) applyLanguage(s.language);
+  } catch (_) {}
+  try {
+    const directory = await invoke('get_directory');
+    appState = { contacts: directory.contacts || [], companies: directory.companies || [] };
   } catch (_) {}
   await loadComposeAccounts();
   fillCompose(options);

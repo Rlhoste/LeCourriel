@@ -97,6 +97,16 @@ pub struct WeekDayDto {
     pub dl3_uid: u64,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct VerificationDto {
+    pub uid: u64,
+    pub code: String,
+    pub service: String,
+    pub from_email: String,
+    pub subject: String,
+    pub expires_ts: i64,
+}
+
 /// What the briefing line says, as data: "live" (refreshed at hour:minute, `count` need
 /// attention), "cached", "classifying" (`count` new emails), "up_to_date",
 /// "ai_missing" (the AI is not set up: `count` emails wait to be sorted),
@@ -129,6 +139,7 @@ pub struct AppStateDto {
     pub all_emails: Vec<EmailCardDto>,
     pub tasks: Vec<crate::tasks::Task>,
     pub meeting_items: Vec<EmailCardDto>,
+    pub verification_items: Vec<VerificationDto>,
     pub important_emails: Vec<EmailCardDto>,
     pub all_emails_by_priority: Vec<EmailCardDto>,
     pub sent_emails: Vec<EmailCardDto>,
@@ -138,6 +149,9 @@ pub struct AppStateDto {
     pub deadlines: Vec<DeadlineDto>,
     pub week_days: Vec<WeekDayDto>,
     pub projects: Vec<ProjectDto>,
+    pub contacts: Vec<crate::contacts::Contact>,
+    pub potential_contacts: Vec<crate::contacts::PotentialContact>,
+    pub companies: Vec<crate::contacts::Company>,
     pub calendar_year: i32,
     pub calendar_month: u32,
 }

@@ -36,6 +36,7 @@ mod auto_setup;
 mod claude_code;
 mod cloud;
 mod config;
+mod contacts;
 mod dismissals;
 mod dto;
 mod gifs;
@@ -54,6 +55,7 @@ mod state;
 mod tasks;
 #[cfg(test)]
 mod tests;
+mod verification;
 
 use config::Config;
 use state::AppState;
@@ -332,6 +334,31 @@ async fn send_email(
 fn get_settings(shared: State<'_, SharedState>) -> dto::SettingsDto {
     let s = shared.lock().unwrap();
     settings::config_to_dto(&s.cfg)
+}
+
+#[tauri::command]
+fn save_contact(contact: contacts::Contact) -> Result<contacts::DirectoryView, String> {
+    contacts::save_contact(contact).map(Into::into)
+}
+
+#[tauri::command]
+fn get_directory() -> contacts::DirectoryView {
+    contacts::load().into()
+}
+
+#[tauri::command]
+fn delete_contact(address: String) -> Result<contacts::DirectoryView, String> {
+    contacts::delete_contact(&address).map(Into::into)
+}
+
+#[tauri::command]
+fn save_company(company: contacts::Company) -> Result<contacts::DirectoryView, String> {
+    contacts::save_company(company).map(Into::into)
+}
+
+#[tauri::command]
+fn delete_company(name: String) -> Result<contacts::DirectoryView, String> {
+    contacts::delete_company(&name).map(Into::into)
 }
 
 #[tauri::command]
@@ -1239,6 +1266,11 @@ fn main() {
             get_email,
             send_email,
             get_settings,
+            get_directory,
+            save_contact,
+            delete_contact,
+            save_company,
+            delete_company,
             save_settings,
             get_qr,
             save_project_description,

@@ -15,6 +15,38 @@ pub async fn fetch_folder(cfg: &ImapConfig, mailbox: &str) -> Result<Vec<RawEmai
     fetch_emails(&override_cfg).await
 }
 
+/// Fetch every message header needed for contact discovery, without downloading bodies or
+/// changing read state. Used once per account/folder, then incremental refresh handles new mail.
+pub async fn fetch_all_contact_headers(cfg: &ImapConfig, mailbox: &str) -> Result<Vec<RawEmail>> {
+    let mut session = connect(cfg).await?;
+    let selected = session.select(mailbox).await.context("IMAP SELECT contact scan folder failed")?;
+    let mut emails = Vec::new();
+    const BATCH: u32 = 500;
+    let fields = "(UID FLAGS BODY.PEEK[HEADER.FIELDS (FROM TO CC BCC MESSAGE-ID DATE AUTHENTICATION-RESULTS ARC-AUTHENTICATION-RESULTS X-SPAM-FLAG X-SPAM-STATUS X-SPAM-SCORE X-MS-EXCHANGE-ORGANIZATION-SCL LIST-ID LIST-UNSUBSCRIBE PRECEDENCE)])";
+    let mut start = 1;
+    while start <= selected.exists {
+        let end = start.saturating_add(BATCH - 1).min(selected.exists);
+        let mut stream =
+            session.fetch(format!("{start}:{end}"), fields).await.context("IMAP contact header scan failed")?;
+        while let Some(message) = stream.next().await {
+            match message {
+                Ok(fetch) => {
+                    if let Some(email) = parse_fetch(&fetch) {
+                        if !email.deleted {
+                            emails.push(email);
+                        }
+                    }
+                }
+                Err(error) => warn!("Skipping malformed contact header: {}", error),
+            }
+        }
+        drop(stream);
+        start = end.saturating_add(1);
+    }
+    session.logout().await.ok();
+    Ok(emails)
+}
+
 pub type ImapSession = async_imap::Session<tokio_native_tls::TlsStream<tokio::net::TcpStream>>;
 
 /// Open a TLS connection to the IMAP server and log in.

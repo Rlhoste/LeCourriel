@@ -26,6 +26,7 @@
     <button class="nav-btn" data-panel="meetings" data-i18n="nav.meetings">Meetings</button>
     <button class="nav-btn" data-panel="calendar" data-i18n="nav.calendar">Calendar</button>
     <button class="nav-btn" data-panel="projects" data-i18n="nav.projects">Projects</button>
+    <button class="nav-btn" data-panel="contacts" data-i18n="nav.contacts">Contacts</button>
 
     <div class="nav-sep"></div>
 
@@ -61,6 +62,11 @@
       </header>
 
       <div id="ov-grid">
+        <!-- Verification codes: hidden entirely when there is nothing active. -->
+        <div class="ov-box hidden" id="ov-verification-box">
+          <div class="ov-box-title" data-i18n="ov.verificationCodes">Verification codes</div>
+          <div class="ov-box-body" id="ov-verification-list"></div>
+        </div>
         <!-- Urgent + High -->
         <div class="ov-box" id="ov-urgent-box">
           <div class="ov-box-title ov-box-title-tools">
@@ -126,6 +132,61 @@
     <section id="panel-drafts"    class="panel split-panel"></section>
     <section id="panel-spam"      class="panel split-panel"></section>
     <section id="panel-trash"     class="panel split-panel"></section>
+
+    <!-- ── Contacts ────────────────────────────────────────────────────────── -->
+    <section id="panel-contacts" class="panel">
+      <header class="panel-header contacts-header">
+        <span data-i18n="nav.contacts">Contacts</span>
+        <input id="contacts-search" type="search" autocomplete="off" placeholder="Search people and companies…" data-i18n-placeholder="contacts.search" />
+        <button id="contacts-add" class="primary-btn" data-i18n="contacts.add">+ Add</button>
+      </header>
+      <div id="contacts-layout">
+        <div class="contacts-column">
+          <h2 data-i18n="contacts.people">People</h2>
+          <div id="contacts-list"></div>
+          <h2 class="potential-title" data-i18n="contacts.potential">Potential contacts</h2>
+          <p class="potential-hint" data-i18n="contacts.potentialHint">Received mail only. These senders are not trusted contacts.</p>
+          <div id="potential-contacts-list"></div>
+        </div>
+        <form id="contact-editor" class="contact-editor hidden">
+          <h2 data-i18n="contacts.people">People</h2>
+          <label for="contact-name" data-i18n="contacts.name">Name</label>
+          <input id="contact-name" type="text" maxlength="200" />
+          <label for="contact-address" data-i18n="contacts.email">Email</label>
+          <input id="contact-address" type="email" maxlength="320" required />
+          <label for="contact-company" data-i18n="contacts.company">Company</label>
+          <select id="contact-company"></select>
+          <label class="contact-check"><input id="contact-trusted" type="checkbox" /> <span data-i18n="contacts.trusted">Trusted when authenticated</span></label>
+          <label class="contact-check"><input id="contact-blocked" type="checkbox" /> <span data-i18n="contacts.blocked">Blocked</span></label>
+          <div id="contact-history"></div>
+          <div class="contact-actions">
+            <button id="contact-delete" type="button" class="danger-btn" data-i18n="contacts.delete">Delete</button>
+            <button type="submit" class="primary-btn" data-i18n="contacts.save">Save</button>
+          </div>
+          <div id="contact-error" class="contact-error"></div>
+        </form>
+        <div class="contacts-column companies-column">
+          <div class="contacts-company-heading">
+            <h2 data-i18n="contacts.companies">Companies</h2>
+            <button id="company-add" type="button" data-i18n="contacts.add">+ Add</button>
+          </div>
+          <div id="companies-list"></div>
+          <form id="company-editor" class="contact-editor hidden">
+            <label for="company-name" data-i18n="contacts.name">Name</label>
+            <input id="company-name" type="text" maxlength="200" required />
+            <label for="company-domains" data-i18n="contacts.domains">Domains (comma separated)</label>
+            <input id="company-domains" type="text" placeholder="example.org, mail.example.org" />
+            <label class="contact-check"><input id="company-trusted" type="checkbox" /> <span data-i18n="contacts.trusted">Trusted when authenticated</span></label>
+            <label class="contact-check"><input id="company-blocked" type="checkbox" /> <span data-i18n="contacts.blocked">Blocked</span></label>
+            <div class="contact-actions">
+              <button id="company-delete" type="button" class="danger-btn" data-i18n="contacts.delete">Delete</button>
+              <button type="submit" class="primary-btn" data-i18n="contacts.save">Save</button>
+            </div>
+            <div id="company-error" class="contact-error"></div>
+          </form>
+        </div>
+      </div>
+    </section>
 
     <!-- ── Calendar ────────────────────────────────────────────────────────── -->
     <section id="panel-calendar" class="panel">
@@ -241,6 +302,7 @@
       <label for="compose-bcc" data-i18n="cmp.bcc">Bcc</label>
       <input type="text" id="compose-bcc" autocomplete="off" />
     </div>
+    <div id="compose-contact-suggestions" class="contact-suggestions hidden"></div>
     <div class="composer-field">
       <input type="text" id="compose-subject" dir="auto" placeholder="Subject" data-i18n-placeholder="cmp.subject" />
     </div>

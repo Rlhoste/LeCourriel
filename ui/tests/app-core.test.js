@@ -142,6 +142,14 @@ test('deadline dismissal clears matching calendar labels', () => {
   assert.equal(state.week_days[0].dl2_subject, 'Keep');
 });
 
+test('verification dismissal removes only the short-lived overview item', () => {
+  const email = mail(1);
+  const state = { all_emails: [email], verification_items: [{ uid: 1, code: '847219' }], week_days: [] };
+  CourrielCore.removeEmailFromState(state, 1, 'verification');
+  assert.equal(state.verification_items.length, 0);
+  assert.equal(state.all_emails.length, 1);
+});
+
 test('automatic updates default to enabled on an empty installation', () => {
   assert.equal(autoUpdatesEnabled({ getItem: () => null }), true);
 });

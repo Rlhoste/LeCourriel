@@ -7,6 +7,11 @@ mod tests {
     use crate::models::*;
     use crate::settings::config_to_dto;
 
+    fn security_state_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        LOCK.lock().unwrap_or_else(|error| error.into_inner())
+    }
+
     // ── Config ────────────────────────────────────────────────────────────────
 
     #[test]
@@ -1616,10 +1621,10 @@ max_tokens = 10
 
     #[test]
     fn test_spam_guard_bursts_server_verdict_lists_and_ai_budget() {
+        let _security_state = security_state_lock();
         use crate::config::{AccountConfig, ImapConfig, SignatureConfig, SmtpConfig};
         use crate::models::{mail_id, MailSecurity, RawEmail};
         use crate::spam_guard::{self, Decision};
-        use std::collections::HashSet;
 
         let account = AccountConfig {
             name: "Work".into(),
@@ -1658,7 +1663,7 @@ max_tokens = 10
             security,
         };
         let accounts = [account];
-        let trusted = HashSet::new();
+        let trusted = crate::contacts::TrustSignals::default();
         let now = 1_800_000_000;
 
         // Initial synchronization establishes a baseline and never calls an old backlog a burst.
@@ -1707,7 +1712,10 @@ max_tokens = 10
         // A previous correspondent only receives burst trust when DMARC passes.
         spam_guard::reset();
         spam_guard::assess_batch(&accounts, &initial, &trusted, now);
-        let trusted_sender = HashSet::from(["colleague@company.example".to_string()]);
+        let trusted_sender = crate::contacts::TrustSignals {
+            trusted_senders: std::collections::HashSet::from(["colleague@company.example".to_string()]),
+            ..Default::default()
+        };
         let authenticated = MailSecurity {
             authentication_results: "mx.example; dmarc=pass header.from=company.example".into(),
             ..Default::default()
@@ -1717,6 +1725,63 @@ max_tokens = 10
         assert!(spam_guard::assess_batch(&accounts, &correspondence, &trusted_sender, now + 1)
             .values()
             .all(|decision| *decision == Decision::Allow));
+
+        // A forged known address gets no trust when the receiving server reports DMARC failure,
+        // even if a sender-added later Authentication-Results value claims a pass.
+        spam_guard::reset();
+        spam_guard::assess_batch(&accounts, &initial, &trusted_sender, now);
+        let forged_auth = MailSecurity {
+            authentication_results: "mx.example; dmarc=fail\nattacker.example; dmarc=pass".into(),
+            ..Default::default()
+        };
+        let forged_correspondence: Vec<_> =
+            (2..=7).map(|uid| raw(uid, "colleague@company.example".into(), forged_auth.clone())).collect();
+        let decisions = spam_guard::assess_batch(&accounts, &forged_correspondence, &trusted_sender, now + 1);
+        assert_eq!(decisions[&mail_id(0, 7)], Decision::Spam("sender burst limit"));
+
+        // List-ID alone is forgeable. Without DKIM/DMARC, a fake list gets no bulk exemption.
+        spam_guard::reset();
+        spam_guard::assess_batch(&accounts, &initial, &trusted, now);
+        let forged_list = MailSecurity { list_id: "announcements.company.example".into(), ..Default::default() };
+        let forged_list_mail: Vec<_> =
+            (2..=7).map(|uid| raw(uid, "list@company.example".into(), forged_list.clone())).collect();
+        let decisions = spam_guard::assess_batch(&accounts, &forged_list_mail, &trusted, now + 1);
+        assert_eq!(decisions[&mail_id(0, 7)], Decision::Spam("sender burst limit"));
+
+        // Explicit blocks apply even during baseline synchronization.
+        spam_guard::reset();
+        let blocked = crate::contacts::TrustSignals {
+            blocked_senders: std::collections::HashSet::from(["blocked@evil.example".to_string()]),
+            ..Default::default()
+        };
+        let blocked_mail = raw(1, "blocked@evil.example".into(), Default::default());
+        assert_eq!(
+            spam_guard::assess_batch(&accounts, &[blocked_mail], &blocked, now)[&mail_id(0, 1)],
+            Decision::Spam("sender or domain blocked by the user")
+        );
+
+        // Authentication cannot bypass hard server verdicts or the global emergency ceiling.
+        spam_guard::reset();
+        let trusted_marked = raw(
+            1,
+            "colleague@company.example".into(),
+            MailSecurity { spam_flag: "YES".into(), ..authenticated.clone() },
+        );
+        assert_eq!(
+            spam_guard::assess_batch(&accounts, &[trusted_marked], &trusted_sender, now)[&mail_id(0, 1)],
+            Decision::Spam("mail server marked it as spam")
+        );
+        spam_guard::reset();
+        spam_guard::assess_batch(
+            &accounts,
+            &[raw(1, "colleague@company.example".into(), authenticated.clone())],
+            &trusted_sender,
+            now,
+        );
+        let trusted_flood: Vec<_> =
+            (2..=27).map(|uid| raw(uid, "colleague@company.example".into(), authenticated.clone())).collect();
+        let decisions = spam_guard::assess_batch(&accounts, &trusted_flood, &trusted_sender, now + 1);
+        assert_eq!(decisions[&mail_id(0, 27)], Decision::Spam("global arrival limit"));
 
         // A receiving server's explicit spam verdict is honored even during baseline sync.
         spam_guard::reset();
@@ -1736,6 +1801,7 @@ max_tokens = 10
 
     #[test]
     fn test_adaptive_spam_learns_both_classes_locally() {
+        let _security_state = security_state_lock();
         use crate::adaptive_spam::{self, Label};
 
         adaptive_spam::reset();
@@ -1824,6 +1890,185 @@ max_tokens = 10
         assert!(!persisted.contains("lottery"));
         assert!(!persisted.contains("colleague@good.test"));
         adaptive_spam::reset();
+
+        // An attacker-controlled giant vocabulary in one manually trained message is bounded.
+        let huge_body = (0..10_000).map(|index| format!("token{index}")).collect::<Vec<_>>().join(" ");
+        adaptive_spam::train(&card(999, "<huge@example>", "Huge", &huge_body, "large@bad.test"), Label::Spam);
+        let state: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(crate::paths::file("adaptive-spam.json")).unwrap()).unwrap();
+        assert!(state["features"].as_object().unwrap().len() <= 750);
+        adaptive_spam::reset();
+    }
+
+    #[test]
+    fn test_spam_state_corruption_fails_safe_without_panicking() {
+        let _security_state = security_state_lock();
+        use crate::config::{AccountConfig, ImapConfig, SignatureConfig, SmtpConfig};
+        use crate::models::{mail_id, RawEmail};
+
+        crate::spam_guard::reset();
+        crate::adaptive_spam::reset();
+        crate::contacts::reset();
+        std::fs::write(crate::paths::file("spam-guard.json"), "{broken").unwrap();
+        std::fs::write(crate::paths::file("adaptive-spam.json"), "{broken").unwrap();
+        std::fs::write(crate::paths::file("contacts.json"), "{broken").unwrap();
+
+        let account = AccountConfig {
+            name: "Work".into(),
+            imap: ImapConfig {
+                host: "imap.example.org".into(),
+                port: 993,
+                username: "me@example.org".into(),
+                password: String::new(),
+                mailbox: "INBOX".into(),
+                fetch_count: 10,
+            },
+            smtp: SmtpConfig {
+                host: String::new(),
+                port: 465,
+                username: String::new(),
+                password: String::new(),
+                from_address: String::new(),
+            },
+            signature: SignatureConfig::default(),
+        };
+        let email = RawEmail {
+            uid: mail_id(0, 1),
+            from: "someone@example.org".into(),
+            subject: "Hello".into(),
+            ..RawEmail {
+                uid: 0,
+                subject: String::new(),
+                from: String::new(),
+                to: String::new(),
+                cc: String::new(),
+                reply_to: String::new(),
+                bcc: String::new(),
+                message_id: String::new(),
+                references: String::new(),
+                seen: false,
+                deleted: false,
+                date: None,
+                body_text: String::new(),
+                body_html: None,
+                security: Default::default(),
+            }
+        };
+        assert_eq!(
+            crate::spam_guard::assess_batch(
+                &[account],
+                std::slice::from_ref(&email),
+                &crate::contacts::TrustSignals::default(),
+                1_800_000_000,
+            )[&email.uid],
+            crate::spam_guard::Decision::Allow
+        );
+        assert!(crate::adaptive_spam::marked_in_batch(&[email]).is_empty());
+        assert!(crate::contacts::load().contacts.is_empty());
+        crate::spam_guard::reset();
+        crate::adaptive_spam::reset();
+        crate::contacts::reset();
+    }
+
+    #[test]
+    fn test_contacts_learn_sent_recipients_and_build_safe_trust() {
+        let _security_state = security_state_lock();
+        use crate::contacts::{self, Company, Contact};
+
+        contacts::reset();
+        let sent = RawEmail {
+            uid: 42,
+            subject: "Hello".into(),
+            from: "me@example.org".into(),
+            to: "Alice Example <Alice@Company.Example>, bob@other.example".into(),
+            cc: "Team <team@company.example>".into(),
+            reply_to: String::new(),
+            bcc: "private@example.net".into(),
+            message_id: "<sent-42@example.org>".into(),
+            references: String::new(),
+            seen: true,
+            deleted: false,
+            date: chrono::DateTime::from_timestamp(1_800_000_000, 0),
+            body_text: "Hello".into(),
+            body_html: None,
+            security: Default::default(),
+        };
+        let own_addresses = std::collections::HashSet::from(["me@example.org".into()]);
+        contacts::ingest_sent(std::slice::from_ref(&sent), &own_addresses);
+        contacts::ingest_sent(std::slice::from_ref(&sent), &own_addresses);
+        let directory = contacts::load();
+        assert_eq!(directory.contacts.len(), 4);
+        let alice = directory.contacts.iter().find(|contact| contact.address == "alice@company.example").unwrap();
+        assert_eq!(alice.name, "Alice Example");
+        assert_eq!(alice.sent_count, 1, "refreshing the same Sent message must not increment it again");
+
+        let mut incoming = sent.clone();
+        incoming.uid = 43;
+        incoming.message_id = "<incoming-43@example.org>".into();
+        incoming.from = "Potential Person <potential@example.net>".into();
+        incoming.security.authentication_results = "mx.example; dmarc=pass".into();
+        contacts::ingest_potential(std::slice::from_ref(&incoming), &own_addresses);
+        let directory = contacts::load();
+        assert_eq!(directory.potential_contacts.len(), 1);
+        assert!(directory.potential_contacts[0].authenticated);
+        assert!(directory.potential_contacts[0].likely_person);
+
+        let mut no_reply = incoming.clone();
+        no_reply.uid = 45;
+        no_reply.message_id = "<incoming-45@example.org>".into();
+        no_reply.from = "Do Not Reply <noreply@example.net>".into();
+        contacts::ingest_potential(std::slice::from_ref(&no_reply), &own_addresses);
+        assert_eq!(contacts::load().potential_contacts.len(), 1, "automated senders must be excluded");
+
+        let mut generic = incoming.clone();
+        generic.uid = 46;
+        generic.message_id = "<incoming-46@example.org>".into();
+        generic.from = "Example Support <support@example.net>".into();
+        contacts::ingest_potential(std::slice::from_ref(&generic), &own_addresses);
+        let directory = contacts::load();
+        assert_eq!(directory.potential_contacts.len(), 2);
+        assert_eq!(directory.potential_contacts[0].address, "potential@example.net", "named people come first");
+
+        // Sending to a potential contact confirms and promotes it automatically.
+        let mut reply = sent.clone();
+        reply.uid = 44;
+        reply.message_id = "<sent-44@example.org>".into();
+        reply.to = "Potential Person <potential@example.net>".into();
+        reply.cc.clear();
+        reply.bcc.clear();
+        contacts::ingest_sent(std::slice::from_ref(&reply), &own_addresses);
+        let directory = contacts::load();
+        assert!(!directory.potential_contacts.iter().any(|contact| contact.address == "potential@example.net"));
+        assert!(directory.contacts.iter().any(|contact| contact.address == "potential@example.net"));
+
+        let scan = contacts::scan_key("sent", "imap.example.org", "me@example.org", "Sent");
+        assert!(contacts::scan_needed(&scan));
+        contacts::complete_sent_scan(&scan, &[], &own_addresses).unwrap();
+        assert!(!contacts::scan_needed(&scan));
+
+        assert!(contacts::save_company(Company {
+            name: "Everyone using Gmail".into(),
+            domains: vec!["gmail.com".into()],
+            trusted: true,
+            blocked: false,
+        })
+        .is_err());
+        contacts::save_company(Company {
+            name: "Company".into(),
+            domains: vec!["Company.Example".into(), "invalid domain".into()],
+            trusted: true,
+            blocked: false,
+        })
+        .unwrap();
+        contacts::save_contact(Contact { address: "blocked@evil.example".into(), blocked: true, ..Default::default() })
+            .unwrap();
+        let directory = contacts::load();
+        assert_eq!(directory.companies[0].domains, vec!["company.example"]);
+        let trust = contacts::trust_signals(&directory);
+        assert!(trust.trusted_senders.contains("alice@company.example"));
+        assert!(trust.trusted_domains.contains("company.example"));
+        assert!(trust.blocked_senders.contains("blocked@evil.example"));
+        contacts::reset();
     }
 
     // ── Data directory ────────────────────────────────────────────────────────

@@ -12,6 +12,7 @@ const STATE_FILE: &str = "adaptive-spam.json";
 const MIN_DOCUMENTS_PER_CLASS: u32 = 3;
 const SPAM_THRESHOLD: f64 = 0.99;
 const MAX_FEATURES: usize = 50_000;
+const MAX_SAMPLES: usize = 50_000;
 const MAX_MESSAGE_FEATURES: usize = 750;
 const MAX_SCORED_FEATURES: usize = 150;
 
@@ -178,6 +179,11 @@ pub fn train(card: &EmailCard, label: Label) {
     }
     change_document_count(&mut model, label, true);
     change_features(&mut model, &message_features, label, true);
+    if !model.samples.contains_key(&key) && model.samples.len() >= MAX_SAMPLES {
+        if let Some(oldest) = model.samples.keys().next().cloned() {
+            model.samples.remove(&oldest);
+        }
+    }
     model.samples.insert(key, label);
     save(&model);
 }

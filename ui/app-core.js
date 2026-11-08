@@ -99,6 +99,7 @@
     };
     if (kind === 'meeting') drop('meeting_items');
     else if (kind === 'deadline') drop('deadlines');
+    else if (kind === 'verification') drop('verification_items');
     else {
       const skip = new Set(['week_days', 'projects', 'sent_emails', 'drafts_emails', 'trash_emails', 'spam_emails']);
       for (const [key, value] of Object.entries(state)) {

@@ -20,6 +20,8 @@ pub struct Dismissals {
     pub deadlines: BTreeSet<u64>,
     #[serde(default)]
     pub meetings: BTreeSet<u64>,
+    #[serde(default)]
+    pub verifications: BTreeSet<u64>,
     /// AI verdict per task uid: "done" or "obsolete".
     #[serde(default)]
     pub task_check: BTreeMap<u64, String>,
@@ -57,12 +59,13 @@ impl Dismissals {
         }
     }
 
-    /// Record a user dismissal. `kind` is "task", "deadline" or "meeting".
+    /// Record a user dismissal.
     pub fn dismiss(&mut self, kind: &str, uid: u64) -> Result<(), String> {
         match kind {
             "task" => self.tasks.insert(uid),
             "deadline" => self.deadlines.insert(uid),
             "meeting" => self.meetings.insert(uid),
+            "verification" => self.verifications.insert(uid),
             other => return Err(format!("Unknown item kind: {}", other)),
         };
         Ok(())

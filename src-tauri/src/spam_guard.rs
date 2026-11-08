@@ -7,7 +7,7 @@
 use crate::config::AccountConfig;
 use crate::models::{split_mail_id, MailSecurity, RawEmail};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
 
 const STATE_FILE: &str = "spam-guard.json";
@@ -86,17 +86,22 @@ fn address(value: &str) -> String {
     candidate.to_ascii_lowercase()
 }
 
-pub fn addresses(value: &str) -> Vec<String> {
-    value.split([',', ';']).map(address).filter(|entry| entry.contains('@')).collect()
-}
-
 fn domain(sender: &str) -> String {
     sender.rsplit_once('@').map(|(_, domain)| domain.trim_end_matches('.').to_string()).unwrap_or_default()
 }
 
-fn dmarc_passes(security: &MailSecurity) -> bool {
-    let auth = security.authentication_results.to_ascii_lowercase();
+pub fn dmarc_passes(security: &MailSecurity) -> bool {
+    // imap_client keeps the receiving server's first Authentication-Results header. Stop at a
+    // line break as defense in depth: a sender-supplied later result must not override it.
+    let auth = security.authentication_results.lines().next().unwrap_or_default().to_ascii_lowercase();
     auth.contains("dmarc=pass")
+}
+
+pub fn authenticated_trusted(email: &RawEmail, trust: &crate::contacts::TrustSignals) -> bool {
+    let sender = address(&email.from);
+    let sender_domain = domain(&sender);
+    dmarc_passes(&email.security)
+        && (trust.trusted_senders.contains(&sender) || trust.trusted_domains.contains(&sender_domain))
 }
 
 fn is_authenticated_bulk(security: &MailSecurity) -> bool {
@@ -128,7 +133,7 @@ pub fn server_marks_spam(security: &MailSecurity) -> bool {
 pub fn assess_batch(
     accounts: &[AccountConfig],
     emails: &[RawEmail],
-    trusted_correspondents: &HashSet<String>,
+    trust: &crate::contacts::TrustSignals,
     now: i64,
 ) -> HashMap<u64, Decision> {
     let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -162,14 +167,19 @@ pub fn assess_batch(
                 decisions.insert(email.uid, Decision::Spam("mail server marked it as spam"));
                 continue;
             }
+            let sender = address(&email.from);
+            let sender_domain = domain(&sender);
+            if trust.blocked_senders.contains(&sender) || trust.blocked_domains.contains(&sender_domain) {
+                state.blocked.entry(key.clone()).or_default().push(uid);
+                decisions.insert(email.uid, Decision::Spam("sender or domain blocked by the user"));
+                continue;
+            }
             if baseline || previous.is_some_and(|last| uid <= last) {
                 decisions.insert(email.uid, Decision::Allow);
                 continue;
             }
 
-            let sender = address(&email.from);
-            let sender_domain = domain(&sender);
-            let trusted = trusted_correspondents.contains(&sender) && dmarc_passes(&email.security);
+            let trusted = authenticated_trusted(email, trust);
             let bulk = is_authenticated_bulk(&email.security);
             let identity = if bulk {
                 format!("list:{}", email.security.list_id.trim().to_ascii_lowercase())
