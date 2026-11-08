@@ -204,6 +204,10 @@ STRINGS.ar = {
     'contacts.lastSent': 'آخر إرسال: {date}', 'contacts.noCompany': 'بلا شركة',
     'contacts.potential': 'جهات اتصال محتملة', 'contacts.potentialHint': 'بريد مستلم فقط. هؤلاء المرسلون غير موثوقين.',
     'contacts.noPotential': 'لا توجد جهات اتصال محتملة', 'contacts.received': 'تم استلام {n}', 'contacts.authenticated': 'موثّق', 'contacts.promote': 'إضافة',
+    'contacts.phones': 'أرقام الهاتف', 'contacts.phonesPlaceholder': 'رقم واحد في كل سطر', 'contacts.postalAddress': 'العنوان البريدي',
+    'contacts.title': 'المسمى الوظيفي', 'contacts.department': 'القسم', 'contacts.website': 'الموقع الإلكتروني', 'contacts.notes': 'ملاحظات',
+    'contacts.analyzeAi': 'تحليل بالذكاء الاصطناعي', 'contacts.analyzingAi': 'جارٍ تحليل التوقيعات…', 'contacts.analyzedAi': 'تم تحديث جهة الاتصال',
+    'contacts.employees': '{n} موظفين', 'contacts.noEmployees': 'لم يتم العثور على موظفين',
     'ov.verificationCodes': 'رموز التحقق', 'ov.codeExpires': 'تنتهي خلال {n} دقيقة', 'ov.copyCode': 'نسخ',
     'ov.dismissCode': 'إخفاء', 'ov.codeCopied': 'تم نسخ الرمز',
 };

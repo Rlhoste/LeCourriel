@@ -2007,11 +2007,17 @@ max_tokens = 10
         incoming.message_id = "<incoming-43@example.org>".into();
         incoming.from = "Potential Person <potential@example.net>".into();
         incoming.security.authentication_results = "mx.example; dmarc=pass".into();
+        incoming.body_text = "Hello,\n\n--\nPotential Person\nResearch Director\nDepartment: Applied Science\nTel: +33 6 12 34 56 78\nAddress: 12 rue des Fleurs, Paris\nWebsite: https://example.net".into();
         contacts::ingest_potential(std::slice::from_ref(&incoming), &own_addresses);
         let directory = contacts::load();
         assert_eq!(directory.potential_contacts.len(), 1);
         assert!(directory.potential_contacts[0].authenticated);
         assert!(directory.potential_contacts[0].likely_person);
+        assert_eq!(directory.potential_contacts[0].details.phone_numbers, vec!["+33 6 12 34 56 78"]);
+        assert_eq!(directory.potential_contacts[0].details.job_title, "Research Director");
+        assert_eq!(directory.potential_contacts[0].details.department, "Applied Science");
+        assert_eq!(directory.potential_contacts[0].details.postal_address, "12 rue des Fleurs, Paris");
+        assert_eq!(directory.potential_contacts[0].details.website, "https://example.net");
 
         let mut no_reply = incoming.clone();
         no_reply.uid = 45;
@@ -2039,7 +2045,21 @@ max_tokens = 10
         contacts::ingest_sent(std::slice::from_ref(&reply), &own_addresses);
         let directory = contacts::load();
         assert!(!directory.potential_contacts.iter().any(|contact| contact.address == "potential@example.net"));
-        assert!(directory.contacts.iter().any(|contact| contact.address == "potential@example.net"));
+        let promoted = directory.contacts.iter().find(|contact| contact.address == "potential@example.net").unwrap();
+        assert_eq!(promoted.details.phone_numbers, vec!["+33 6 12 34 56 78"]);
+
+        // A quoted participant's signature must never be attributed to the current sender.
+        let mut quoted = incoming.clone();
+        quoted.uid = 47;
+        quoted.message_id = "<incoming-47@example.org>".into();
+        quoted.from = "Alice Example <alice@company.example>".into();
+        quoted.body_text = "Bonjour,\n\nLe lundi Antoine a écrit :\n> Antoine VACAVANT\n> Professeur des universités\n> 8 rue Jean-Baptiste Fabre\n> www.o2game.com".into();
+        contacts::ingest_potential(std::slice::from_ref(&quoted), &own_addresses);
+        let directory = contacts::load();
+        let alice = directory.contacts.iter().find(|contact| contact.address == "alice@company.example").unwrap();
+        assert!(alice.details.job_title.is_empty());
+        assert!(alice.details.postal_address.is_empty());
+        assert!(alice.details.website.is_empty());
 
         let scan = contacts::scan_key("sent", "imap.example.org", "me@example.org", "Sent");
         assert!(contacts::scan_needed(&scan));

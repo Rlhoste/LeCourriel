@@ -188,6 +188,10 @@ STRINGS.zh = {
     'contacts.lastSent': '上次发送：{date}', 'contacts.noCompany': '无公司',
     'contacts.potential': '潜在联系人', 'contacts.potentialHint': '仅收到过邮件。这些发件人不是受信任联系人。',
     'contacts.noPotential': '没有潜在联系人', 'contacts.received': '已收到 {n} 封', 'contacts.authenticated': '已认证', 'contacts.promote': '添加',
+    'contacts.phones': '电话号码', 'contacts.phonesPlaceholder': '每行一个号码', 'contacts.postalAddress': '邮政地址',
+    'contacts.title': '职位', 'contacts.department': '部门', 'contacts.website': '网站', 'contacts.notes': '备注',
+    'contacts.analyzeAi': '使用 AI 分析', 'contacts.analyzingAi': '正在分析签名…', 'contacts.analyzedAi': '联系人已更新',
+    'contacts.employees': '{n} 名员工', 'contacts.noEmployees': '未找到员工',
     'ov.verificationCodes': '验证码', 'ov.codeExpires': '{n} 分钟后过期', 'ov.copyCode': '复制',
     'ov.dismissCode': '隐藏', 'ov.codeCopied': '验证码已复制',
 };

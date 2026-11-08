@@ -47,6 +47,43 @@ pub async fn fetch_all_contact_headers(cfg: &ImapConfig, mailbox: &str) -> Resul
     Ok(emails)
 }
 
+/// One-time bounded body scan for signature details. At most the first 64 KiB of message text is
+/// requested; attachments and the remainder of long threads are not downloaded.
+pub async fn fetch_all_signature_messages(cfg: &ImapConfig, mailbox: &str) -> Result<Vec<RawEmail>> {
+    let mut session = connect(cfg).await?;
+    let selected = session.select(mailbox).await.context("IMAP SELECT signature scan folder failed")?;
+    let mut emails = Vec::new();
+    const BATCH: u32 = 200;
+    let mut start = 1;
+    while start <= selected.exists {
+        let end = start.saturating_add(BATCH - 1).min(selected.exists);
+        let mut stream = session
+            .fetch(format!("{start}:{end}"), "(UID FLAGS BODY.PEEK[HEADER] BODY.PEEK[TEXT]<0.65536>)")
+            .await
+            .context("IMAP signature scan failed")?;
+        while let Some(message) = stream.next().await {
+            match message {
+                Ok(fetch) => {
+                    // The E2E server returns BODY[] for every FETCH; real servers return the
+                    // requested separate header/text sections.
+                    let parsed =
+                        if fetch.body().is_some() { parse_fetch(&fetch) } else { parse_header_and_text(&fetch) };
+                    if let Some(email) = parsed {
+                        if !email.deleted {
+                            emails.push(email);
+                        }
+                    }
+                }
+                Err(error) => warn!("Skipping malformed signature scan result: {}", error),
+            }
+        }
+        drop(stream);
+        start = end.saturating_add(1);
+    }
+    session.logout().await.ok();
+    Ok(emails)
+}
+
 pub type ImapSession = async_imap::Session<tokio_native_tls::TlsStream<tokio::net::TcpStream>>;
 
 /// Open a TLS connection to the IMAP server and log in.
@@ -309,6 +346,24 @@ pub async fn fetch_emails(cfg: &ImapConfig) -> Result<Vec<RawEmail>> {
 
 fn parse_fetch(fetch: &Fetch) -> Option<RawEmail> {
     let raw = fetch.body()?;
+    parse_fetch_bytes(fetch, raw)
+}
+
+fn parse_header_and_text(fetch: &Fetch) -> Option<RawEmail> {
+    let header = fetch.header()?;
+    let text = fetch.text().unwrap_or_default();
+    let mut raw = Vec::with_capacity(header.len() + text.len() + 4);
+    raw.extend_from_slice(header);
+    if header.ends_with(b"\r\n") && !header.ends_with(b"\r\n\r\n") {
+        raw.extend_from_slice(b"\r\n");
+    } else if !header.ends_with(b"\r\n\r\n") {
+        raw.extend_from_slice(b"\r\n\r\n");
+    }
+    raw.extend_from_slice(text);
+    parse_fetch_bytes(fetch, &raw)
+}
+
+fn parse_fetch_bytes(fetch: &Fetch, raw: &[u8]) -> Option<RawEmail> {
     let parsed = parse_mail(raw).ok()?;
 
     let uid = fetch.uid.unwrap_or(fetch.message);

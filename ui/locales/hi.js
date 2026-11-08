@@ -188,6 +188,10 @@ STRINGS.hi = {
     'contacts.lastSent': 'अंतिम बार भेजा: {date}', 'contacts.noCompany': 'कोई कंपनी नहीं',
     'contacts.potential': 'संभावित संपर्क', 'contacts.potentialHint': 'केवल प्राप्त मेल। ये प्रेषक विश्वसनीय संपर्क नहीं हैं।',
     'contacts.noPotential': 'कोई संभावित संपर्क नहीं', 'contacts.received': '{n} प्राप्त', 'contacts.authenticated': 'प्रमाणित', 'contacts.promote': 'जोड़ें',
+    'contacts.phones': 'फ़ोन नंबर', 'contacts.phonesPlaceholder': 'हर पंक्ति में एक नंबर', 'contacts.postalAddress': 'डाक पता',
+    'contacts.title': 'पद', 'contacts.department': 'विभाग', 'contacts.website': 'वेबसाइट', 'contacts.notes': 'नोट्स',
+    'contacts.analyzeAi': 'AI से विश्लेषण करें', 'contacts.analyzingAi': 'हस्ताक्षर विश्लेषित हो रहे हैं…', 'contacts.analyzedAi': 'संपर्क अपडेट हुआ',
+    'contacts.employees': '{n} कर्मचारी', 'contacts.noEmployees': 'कोई कर्मचारी नहीं मिला',
     'ov.verificationCodes': 'सत्यापन कोड', 'ov.codeExpires': '{n} मिनट में समाप्त', 'ov.copyCode': 'कॉपी करें',
     'ov.dismissCode': 'छिपाएँ', 'ov.codeCopied': 'कोड कॉपी हुआ',
 };

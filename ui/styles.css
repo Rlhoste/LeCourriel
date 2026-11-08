@@ -1247,6 +1247,13 @@ body.task-dragging, body.task-dragging * { cursor: grabbing !important; }
 #contact-editor.hidden + .pane-resizer { display: none; }
 #contacts-layout > .pane-resizer { margin-inline: -12px; }
 .contacts-column h2, .contact-editor h2 { font-size: 0.95rem; margin-bottom: 12px; }
+.contact-editor-heading { display: flex; align-items: center; justify-content: space-between; }
+.contact-editor-heading h2 { margin-bottom: 0; }
+.contact-editor-close {
+  border: 0; background: transparent; color: var(--text-dim); cursor: pointer;
+  font-size: 1.3rem; line-height: 1; padding: 2px 5px;
+}
+.contact-editor-close:hover { color: var(--text); }
 #contacts-list, #potential-contacts-list, #companies-list { display: flex; flex-direction: column; gap: 5px; }
 .potential-title { margin-top: 22px; margin-bottom: 4px !important; }
 .potential-hint { color: var(--text-faint); font-size: 0.75rem; line-height: 1.35; margin-bottom: 8px; }
@@ -1267,6 +1274,13 @@ body.task-dragging, body.task-dragging * { cursor: grabbing !important; }
   background: transparent; color: var(--text); text-align: left; cursor: pointer;
 }
 .contact-row:hover, .company-row:hover, .contact-row.active, .company-row.active { background: var(--bg3); border-color: var(--border); }
+.company-group { display: flex; flex-direction: column; }
+.company-row-heading { display: flex !important; width: 100%; align-items: center; justify-content: space-between; color: var(--text) !important; font-size: inherit !important; }
+.company-chevron { color: var(--text-dim) !important; flex-shrink: 0; }
+.company-members-dropdown {
+  display: flex; flex-direction: column; gap: 3px; margin: 2px 0 7px 12px;
+  padding: 5px 0 5px 8px; border-left: var(--border-w) solid var(--border);
+}
 .contact-row span, .company-row span { color: var(--text-dim); font-size: 0.82rem; overflow-wrap: anywhere; }
 .contact-row small, .company-row small { color: var(--text-faint); }
 .contact-badge { position: absolute; right: 8px; top: 8px; padding: 2px 6px; border-radius: var(--radius-pill); font-size: 0.68rem !important; }
@@ -1276,18 +1290,27 @@ body.task-dragging, body.task-dragging * { cursor: grabbing !important; }
 .contact-editor { display: flex; flex-direction: column; gap: 7px; }
 .contact-editor.hidden { display: none; }
 .contact-editor label { color: var(--text-dim); font-size: 0.8rem; margin-top: 4px; }
-.contact-editor input:not([type="checkbox"]), .contact-editor select {
+.contact-editor input:not([type="checkbox"]), .contact-editor select, .contact-editor textarea {
   width: 100%; padding: 8px 9px; background: var(--bg); color: var(--text);
   border: var(--border-w) solid var(--border); border-radius: var(--radius-sm);
 }
+.contact-editor textarea { resize: vertical; font: inherit; }
 .contact-editor input:disabled { opacity: 0.7; }
 .contact-check { display: flex; align-items: center; gap: 7px; cursor: pointer; }
 .contact-actions { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; }
 .contact-error { min-height: 18px; color: var(--urgent); font-size: 0.8rem; }
 #contact-history { color: var(--text-faint); font-size: 0.8rem; }
+.contact-ai-status { min-height: 18px; color: var(--text-dim); font-size: 0.78rem; }
 .contacts-company-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .contacts-company-heading h2 { margin: 0; }
 .companies-column #company-editor { margin-top: 14px; max-height: none; }
+.company-member-row {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%;
+  padding: 7px 8px; border: var(--border-w) solid transparent; border-radius: var(--radius-sm);
+  background: transparent; color: var(--text); text-align: start; cursor: pointer;
+}
+.company-member-row:hover { background: var(--bg3); border-color: var(--border); }
+.company-member-row span { color: var(--text-dim); font-size: 0.78rem; overflow-wrap: anywhere; }
 .danger-btn { color: var(--urgent); background: transparent; border: 1px solid var(--urgent); border-radius: var(--radius-sm); padding: 7px 11px; cursor: pointer; }
 
 @media (max-width: 1000px) {

@@ -189,6 +189,10 @@ STRINGS.ur = {
     'contacts.lastSent': 'آخری بار بھیجا: {date}', 'contacts.noCompany': 'کوئی کمپنی نہیں',
     'contacts.potential': 'ممکنہ رابطے', 'contacts.potentialHint': 'صرف موصولہ میل۔ یہ بھیجنے والے قابل اعتماد رابطے نہیں ہیں۔',
     'contacts.noPotential': 'کوئی ممکنہ رابطہ نہیں', 'contacts.received': '{n} موصول', 'contacts.authenticated': 'تصدیق شدہ', 'contacts.promote': 'شامل کریں',
+    'contacts.phones': 'فون نمبر', 'contacts.phonesPlaceholder': 'ہر سطر میں ایک نمبر', 'contacts.postalAddress': 'ڈاک کا پتہ',
+    'contacts.title': 'عہدہ', 'contacts.department': 'شعبہ', 'contacts.website': 'ویب سائٹ', 'contacts.notes': 'نوٹس',
+    'contacts.analyzeAi': 'AI سے تجزیہ کریں', 'contacts.analyzingAi': 'دستخطوں کا تجزیہ جاری ہے…', 'contacts.analyzedAi': 'رابطہ اپ ڈیٹ ہو گیا',
+    'contacts.employees': '{n} ملازمین', 'contacts.noEmployees': 'کوئی ملازم نہیں ملا',
     'ov.verificationCodes': 'تصدیقی کوڈ', 'ov.codeExpires': '{n} منٹ میں ختم', 'ov.copyCode': 'کاپی',
     'ov.dismissCode': 'چھپائیں', 'ov.codeCopied': 'کوڈ کاپی ہو گیا',
 };

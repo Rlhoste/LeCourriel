@@ -188,6 +188,10 @@ STRINGS.es = {
     'contacts.lastSent': 'Último envío: {date}', 'contacts.noCompany': 'Sin empresa',
     'contacts.potential': 'Contactos potenciales', 'contacts.potentialHint': 'Solo correo recibido. Estos remitentes no son contactos de confianza.',
     'contacts.noPotential': 'No hay contactos potenciales', 'contacts.received': '{n} recibidos', 'contacts.authenticated': 'autenticado', 'contacts.promote': 'Añadir',
+    'contacts.phones': 'Números de teléfono', 'contacts.phonesPlaceholder': 'Un número por línea', 'contacts.postalAddress': 'Dirección postal',
+    'contacts.title': 'Cargo', 'contacts.department': 'Departamento', 'contacts.website': 'Sitio web', 'contacts.notes': 'Notas',
+    'contacts.analyzeAi': 'Analizar con IA', 'contacts.analyzingAi': 'Analizando firmas…', 'contacts.analyzedAi': 'Contacto actualizado',
+    'contacts.employees': '{n} empleados', 'contacts.noEmployees': 'No se encontraron empleados',
     'ov.verificationCodes': 'Códigos de verificación', 'ov.codeExpires': 'caduca en {n} min', 'ov.copyCode': 'Copiar',
     'ov.dismissCode': 'Ocultar', 'ov.codeCopied': 'Código copiado',
 };

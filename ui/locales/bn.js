@@ -188,6 +188,10 @@ STRINGS.bn = {
     'contacts.lastSent': 'শেষ পাঠানো: {date}', 'contacts.noCompany': 'কোনো কোম্পানি নেই',
     'contacts.potential': 'সম্ভাব্য পরিচিতি', 'contacts.potentialHint': 'শুধু প্রাপ্ত মেইল। এই প্রেরকেরা বিশ্বস্ত পরিচিতি নন।',
     'contacts.noPotential': 'কোনো সম্ভাব্য পরিচিতি নেই', 'contacts.received': '{n}টি প্রাপ্ত', 'contacts.authenticated': 'যাচাইকৃত', 'contacts.promote': 'যোগ করুন',
+    'contacts.phones': 'ফোন নম্বর', 'contacts.phonesPlaceholder': 'প্রতি লাইনে একটি নম্বর', 'contacts.postalAddress': 'ডাক ঠিকানা',
+    'contacts.title': 'পদবি', 'contacts.department': 'বিভাগ', 'contacts.website': 'ওয়েবসাইট', 'contacts.notes': 'নোট',
+    'contacts.analyzeAi': 'AI দিয়ে বিশ্লেষণ', 'contacts.analyzingAi': 'স্বাক্ষর বিশ্লেষণ হচ্ছে…', 'contacts.analyzedAi': 'পরিচিতি আপডেট হয়েছে',
+    'contacts.employees': '{n} জন কর্মী', 'contacts.noEmployees': 'কোনো কর্মী পাওয়া যায়নি',
     'ov.verificationCodes': 'যাচাইকরণ কোড', 'ov.codeExpires': '{n} মিনিটে মেয়াদ শেষ', 'ov.copyCode': 'কপি',
     'ov.dismissCode': 'লুকান', 'ov.codeCopied': 'কোড কপি হয়েছে',
 };

@@ -352,6 +352,34 @@ fn delete_contact(address: String) -> Result<contacts::DirectoryView, String> {
 }
 
 #[tauri::command]
+async fn analyze_contact(address: String, shared: State<'_, SharedState>) -> Result<contacts::DirectoryView, String> {
+    let (ai, mut messages) = {
+        let state = shared.lock().unwrap();
+        let messages = state
+            .search_index
+            .iter()
+            .filter(|(folder, email)| {
+                *folder == crate::search::Folder::Inbox && email.from_email.eq_ignore_ascii_case(address.trim())
+            })
+            .map(|(_, email)| (email.date_ts, contacts::signature_evidence(&email.body_text)))
+            .filter(|(_, evidence)| !evidence.trim().is_empty())
+            .collect::<Vec<_>>();
+        (state.cfg.ai.clone(), messages)
+    };
+    messages.sort_by_key(|(date, _)| std::cmp::Reverse(*date));
+    let mut evidence = Vec::new();
+    for (_, sample) in messages {
+        if !evidence.contains(&sample) {
+            evidence.push(sample);
+        }
+        if evidence.len() == 5 {
+            break;
+        }
+    }
+    contacts::analyze_with_ai(&ai, &address, &evidence).await.map(Into::into)
+}
+
+#[tauri::command]
 fn save_company(company: contacts::Company) -> Result<contacts::DirectoryView, String> {
     contacts::save_company(company).map(Into::into)
 }
@@ -1268,6 +1296,7 @@ fn main() {
             get_settings,
             get_directory,
             save_contact,
+            analyze_contact,
             delete_contact,
             save_company,
             delete_company,

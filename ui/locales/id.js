@@ -188,6 +188,10 @@ STRINGS.id = {
     'contacts.lastSent': 'Terakhir dikirim: {date}', 'contacts.noCompany': 'Tanpa perusahaan',
     'contacts.potential': 'Kontak potensial', 'contacts.potentialHint': 'Hanya surel masuk. Pengirim ini bukan kontak tepercaya.',
     'contacts.noPotential': 'Tidak ada kontak potensial', 'contacts.received': '{n} diterima', 'contacts.authenticated': 'terautentikasi', 'contacts.promote': 'Tambahkan',
+    'contacts.phones': 'Nomor telepon', 'contacts.phonesPlaceholder': 'Satu nomor per baris', 'contacts.postalAddress': 'Alamat pos',
+    'contacts.title': 'Jabatan', 'contacts.department': 'Departemen', 'contacts.website': 'Situs web', 'contacts.notes': 'Catatan',
+    'contacts.analyzeAi': 'Analisis dengan AI', 'contacts.analyzingAi': 'Menganalisis tanda tangan…', 'contacts.analyzedAi': 'Kontak diperbarui',
+    'contacts.employees': '{n} karyawan', 'contacts.noEmployees': 'Tidak ada karyawan ditemukan',
     'ov.verificationCodes': 'Kode verifikasi', 'ov.codeExpires': 'kedaluwarsa dalam {n} mnt', 'ov.copyCode': 'Salin',
     'ov.dismissCode': 'Sembunyikan', 'ov.codeCopied': 'Kode disalin',
 };

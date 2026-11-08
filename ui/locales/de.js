@@ -188,6 +188,10 @@ STRINGS.de = {
     'contacts.lastSent': 'Zuletzt gesendet: {date}', 'contacts.noCompany': 'Keine Firma',
     'contacts.potential': 'Potenzielle Kontakte', 'contacts.potentialHint': 'Nur empfangene E-Mails. Diese Absender sind nicht vertrauenswürdig.',
     'contacts.noPotential': 'Keine potenziellen Kontakte', 'contacts.received': '{n} empfangen', 'contacts.authenticated': 'authentifiziert', 'contacts.promote': 'Hinzufügen',
+    'contacts.phones': 'Telefonnummern', 'contacts.phonesPlaceholder': 'Eine Nummer pro Zeile', 'contacts.postalAddress': 'Postanschrift',
+    'contacts.title': 'Berufsbezeichnung', 'contacts.department': 'Abteilung', 'contacts.website': 'Webseite', 'contacts.notes': 'Notizen',
+    'contacts.analyzeAi': 'Mit KI analysieren', 'contacts.analyzingAi': 'Signaturen werden analysiert…', 'contacts.analyzedAi': 'Kontakt aktualisiert',
+    'contacts.employees': '{n} Mitarbeiter', 'contacts.noEmployees': 'Keine Mitarbeiter gefunden',
     'ov.verificationCodes': 'Bestätigungscodes', 'ov.codeExpires': 'läuft in {n} Min. ab', 'ov.copyCode': 'Kopieren',
     'ov.dismissCode': 'Ausblenden', 'ov.codeCopied': 'Code kopiert',
 };

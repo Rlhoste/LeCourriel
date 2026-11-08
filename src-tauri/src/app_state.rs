@@ -10,7 +10,9 @@ use crate::config::{Config, ImapConfig};
 use crate::dismissals::Dismissals;
 use crate::dto::*;
 use crate::i18n;
-use crate::imap_client::{connect, fetch_all_contact_headers, fetch_emails, fetch_folder};
+use crate::imap_client::{
+    connect, fetch_all_contact_headers, fetch_all_signature_messages, fetch_emails, fetch_folder,
+};
 use crate::models::{EmailCard, Priority, RawEmail};
 use crate::state::AppState;
 use crate::tasks::{Board, Status};
@@ -234,6 +236,23 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
                     }
                 }
                 Err(error) => warn!("Potential contact scan[{}]: {:#}", account.name, error),
+            }
+        }
+        // Older installations already completed the header scan. This independently versioned
+        // pass reads bounded message text once so signatures can enrich those cached contacts.
+        let details_scan =
+            crate::contacts::scan_key("details-v5", &account.imap.host, &account.imap.username, &account.imap.mailbox);
+        if crate::contacts::scan_needed(&details_scan) {
+            match fetch_all_signature_messages(&account.imap, &account.imap.mailbox).await {
+                Ok(mut messages) => {
+                    messages.retain(|email| !crate::spam_guard::server_marks_spam(&email.security));
+                    if let Err(error) =
+                        crate::contacts::complete_potential_scan(&details_scan, &messages, &own_addresses)
+                    {
+                        warn!("Could not save historical contact-detail scan: {}", error);
+                    }
+                }
+                Err(error) => warn!("Contact detail scan[{}]: {:#}", account.name, error),
             }
         }
     }

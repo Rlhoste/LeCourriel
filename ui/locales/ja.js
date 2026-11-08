@@ -188,6 +188,10 @@ STRINGS.ja = {
     'contacts.lastSent': '最終送信: {date}', 'contacts.noCompany': '会社なし',
     'contacts.potential': '連絡先候補', 'contacts.potentialHint': '受信メールのみ。これらの送信者は信頼済みではありません。',
     'contacts.noPotential': '連絡先候補はありません', 'contacts.received': '{n}件受信', 'contacts.authenticated': '認証済み', 'contacts.promote': '追加',
+    'contacts.phones': '電話番号', 'contacts.phonesPlaceholder': '1行に1つの番号', 'contacts.postalAddress': '住所',
+    'contacts.title': '役職', 'contacts.department': '部署', 'contacts.website': 'ウェブサイト', 'contacts.notes': 'メモ',
+    'contacts.analyzeAi': 'AIで分析', 'contacts.analyzingAi': '署名を分析中…', 'contacts.analyzedAi': '連絡先を更新しました',
+    'contacts.employees': '{n}人の従業員', 'contacts.noEmployees': '従業員が見つかりません',
     'ov.verificationCodes': '認証コード', 'ov.codeExpires': 'あと{n}分で期限切れ', 'ov.copyCode': 'コピー',
     'ov.dismissCode': '非表示', 'ov.codeCopied': 'コードをコピーしました',
 };

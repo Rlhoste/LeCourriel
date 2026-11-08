@@ -1833,10 +1833,20 @@ function showProjectEmail(email) {
 // ── Contacts and trusted companies ─────────────────────────────────────────
 let editingContact = null;
 let editingCompany = null;
+let expandedCompany = null;
 
 function directoryContacts() { return appState?.contacts || []; }
 function potentialContacts() { return appState?.potential_contacts || []; }
 function directoryCompanies() { return appState?.companies || []; }
+
+function companyMembers(company) {
+  if (!company) return [];
+  const domains = (company.domains || []).map(domain => domain.toLowerCase());
+  return directoryContacts().filter(contact => {
+    const domain = contact.address?.split('@').pop()?.toLowerCase() || '';
+    return contact.company?.toLowerCase() === company.name.toLowerCase() || domains.includes(domain);
+  }).sort((a, b) => (a.name || a.address).localeCompare(b.name || b.address));
+}
 
 function applyDirectory(view) {
   if (!appState) return;
@@ -1865,6 +1875,8 @@ function setupContacts() {
   document.getElementById('contact-editor').addEventListener('submit', saveContactEditor);
   document.getElementById('company-editor').addEventListener('submit', saveCompanyEditor);
   document.getElementById('contact-delete').addEventListener('click', deleteContactEditor);
+  document.getElementById('contact-editor-close').addEventListener('click', closeContactEditor);
+  document.getElementById('contact-analyze-ai').addEventListener('click', analyzeContactWithAi);
   document.getElementById('company-delete').addEventListener('click', deleteCompanyEditor);
 }
 
@@ -1881,8 +1893,9 @@ function renderContacts() {
     row.className = `contact-row${editingContact === contact.address ? ' active' : ''}`;
     const badges = `${contact.trusted ? `<span class="contact-badge trusted">${esc(t('contacts.trusted'))}</span>` : ''}` +
       `${contact.blocked ? `<span class="contact-badge blocked">${esc(t('contacts.blocked'))}</span>` : ''}`;
+    const role = [contact.job_title, contact.company].filter(Boolean).join(' · ');
     row.innerHTML = `<strong>${esc(contact.name || contact.address)}</strong><span>${esc(contact.address)}</span>` +
-      `<small>${esc(contact.company || '')}${contact.sent_count ? ` · ${esc(t('contacts.sent', { n: contact.sent_count }))}` : ''}</small>${badges}`;
+      `<small>${esc(role)}${contact.sent_count ? ` · ${esc(t('contacts.sent', { n: contact.sent_count }))}` : ''}</small>${badges}`;
     row.addEventListener('click', () => editContact(contact));
     list.appendChild(row);
   }
@@ -1894,7 +1907,9 @@ function renderContacts() {
   for (const contact of potentials) {
     const row = document.createElement('div');
     row.className = 'potential-contact-row';
+    const extracted = [contact.job_title, contact.phone_numbers?.[0]].filter(Boolean).join(' · ');
     row.innerHTML = `<div><strong>${esc(contact.name || contact.address)}</strong><span>${esc(contact.address)}</span>` +
+      `${extracted ? `<small>${esc(extracted)}</small>` : ''}` +
       `<small>${esc(t('contacts.received', { n: contact.received_count }))}${contact.authenticated ? ` · ${esc(t('contacts.authenticated'))}` : ''}</small></div>` +
       `<button type="button">${esc(t('contacts.promote'))}</button>`;
     row.querySelector('button').addEventListener('click', async () => {
@@ -1902,6 +1917,8 @@ function renderContacts() {
         applyDirectory(await cmd('save_contact', { contact: {
           address: contact.address, name: contact.name || '', company: '', sent_count: 0,
           last_sent: 0, trusted: false, blocked: false,
+          phone_numbers: contact.phone_numbers || [], postal_address: contact.postal_address || '',
+          job_title: contact.job_title || '', department: contact.department || '', website: contact.website || '', notes: '',
         } }));
       } catch (error) {
         showToast(String(error));
@@ -1915,23 +1932,58 @@ function renderContacts() {
   const companyList = document.getElementById('companies-list');
   companyList.innerHTML = '';
   for (const company of companies) {
+    const group = document.createElement('div');
+    group.className = 'company-group';
     const row = document.createElement('button');
     row.type = 'button';
     row.className = `company-row${editingCompany === company.name ? ' active' : ''}`;
-    row.innerHTML = `<strong>${esc(company.name)}</strong><span>${esc(company.domains.join(', '))}</span>` +
+    const memberCount = companyMembers(company).length;
+    row.innerHTML = `<span class="company-row-heading"><strong>${esc(company.name)}</strong>` +
+      `<span class="company-chevron">${expandedCompany === company.name ? '▾' : '▸'}</span></span>` +
+      `<span>${esc(company.domains.join(', '))}</span>` +
+      `<small>${esc(t('contacts.employees', { n: memberCount }))}</small>` +
       `${company.trusted ? `<small>${esc(t('contacts.trusted'))}</small>` : ''}` +
       `${company.blocked ? `<small class="blocked-text">${esc(t('contacts.blocked'))}</small>` : ''}`;
-    row.addEventListener('click', () => editCompany(company));
-    companyList.appendChild(row);
+    row.addEventListener('click', () => {
+      expandedCompany = expandedCompany === company.name ? null : company.name;
+      editCompany(company);
+    });
+    group.appendChild(row);
+    if (expandedCompany === company.name) {
+      const members = document.createElement('div');
+      members.className = 'company-members-dropdown';
+      const people = companyMembers(company);
+      if (!people.length) members.innerHTML = `<div class="contacts-empty">${esc(t('contacts.noEmployees'))}</div>`;
+      for (const contact of people) {
+        const member = document.createElement('button');
+        member.type = 'button';
+        member.className = 'company-member-row';
+        member.innerHTML = `<strong>${esc(contact.name || contact.address)}</strong><span>${esc(contact.address)}</span>`;
+        member.addEventListener('click', () => editContact(contact));
+        members.appendChild(member);
+      }
+      group.appendChild(members);
+    }
+    companyList.appendChild(group);
   }
   refreshContactCompanyOptions();
 }
 
-function refreshContactCompanyOptions() {
+function closeContactEditor() {
+  editingContact = null;
+  document.getElementById('contact-editor').classList.add('hidden');
+  renderContacts();
+}
+
+function refreshContactCompanyOptions(extraCompany = '') {
   const select = document.getElementById('contact-company');
   const value = select.value;
+  const companies = directoryCompanies().map(company => company.name);
+  if (extraCompany && !companies.some(company => company.toLowerCase() === extraCompany.toLowerCase())) {
+    companies.push(extraCompany);
+  }
   select.innerHTML = `<option value="">${esc(t('contacts.noCompany'))}</option>` +
-    directoryCompanies().map(company => `<option value="${esc(company.name)}">${esc(company.name)}</option>`).join('');
+    companies.map(company => `<option value="${esc(company)}">${esc(company)}</option>`).join('');
   select.value = value;
 }
 
@@ -1943,16 +1995,43 @@ function editContact(contact) {
   const address = document.getElementById('contact-address');
   address.value = contact?.address || '';
   address.disabled = Boolean(contact);
-  refreshContactCompanyOptions();
+  refreshContactCompanyOptions(contact?.company || '');
   document.getElementById('contact-company').value = contact?.company || '';
+  document.getElementById('contact-title').value = contact?.job_title || '';
+  document.getElementById('contact-department').value = contact?.department || '';
+  document.getElementById('contact-phones').value = (contact?.phone_numbers || []).join('\n');
+  document.getElementById('contact-postal-address').value = contact?.postal_address || '';
+  document.getElementById('contact-website').value = contact?.website || '';
+  document.getElementById('contact-notes').value = contact?.notes || '';
   document.getElementById('contact-trusted').checked = Boolean(contact?.trusted);
   document.getElementById('contact-blocked').checked = Boolean(contact?.blocked);
   document.getElementById('contact-history').textContent = contact?.last_sent
     ? t('contacts.lastSent', { date: new Date(contact.last_sent * 1000).toLocaleDateString() }) : '';
   document.getElementById('contact-delete').classList.toggle('hidden', !contact);
+  document.getElementById('contact-analyze-ai').classList.toggle('hidden', !contact);
+  document.getElementById('contact-ai-status').textContent = '';
   document.getElementById('contact-error').textContent = '';
   renderContacts();
   if (!contact) address.focus();
+}
+
+async function analyzeContactWithAi() {
+  if (!editingContact) return;
+  const button = document.getElementById('contact-analyze-ai');
+  const status = document.getElementById('contact-ai-status');
+  button.disabled = true;
+  status.textContent = t('contacts.analyzingAi');
+  try {
+    const view = await cmd('analyze_contact', { address: editingContact });
+    applyDirectory(view);
+    const updated = (view.contacts || []).find(contact => contact.address === editingContact);
+    if (updated) editContact(updated);
+    status.textContent = t('contacts.analyzedAi');
+  } catch (error) {
+    status.textContent = String(error);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 async function saveContactEditor(event) {
@@ -1961,6 +2040,12 @@ async function saveContactEditor(event) {
     address: document.getElementById('contact-address').value.trim(),
     name: document.getElementById('contact-name').value.trim(),
     company: document.getElementById('contact-company').value,
+    job_title: document.getElementById('contact-title').value.trim(),
+    department: document.getElementById('contact-department').value.trim(),
+    phone_numbers: document.getElementById('contact-phones').value.split(/[\n,;]/).map(value => value.trim()).filter(Boolean),
+    postal_address: document.getElementById('contact-postal-address').value.trim(),
+    website: document.getElementById('contact-website').value.trim(),
+    notes: document.getElementById('contact-notes').value.trim(),
     sent_count: 0,
     last_sent: 0,
     trusted: document.getElementById('contact-trusted').checked,

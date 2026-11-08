@@ -198,6 +198,10 @@ STRINGS.ru = {
     'contacts.lastSent': 'Последняя отправка: {date}', 'contacts.noCompany': 'Без компании',
     'contacts.potential': 'Возможные контакты', 'contacts.potentialHint': 'Только входящие письма. Эти отправители не являются доверенными.',
     'contacts.noPotential': 'Нет возможных контактов', 'contacts.received': 'Получено: {n}', 'contacts.authenticated': 'проверен', 'contacts.promote': 'Добавить',
+    'contacts.phones': 'Телефоны', 'contacts.phonesPlaceholder': 'Один номер в строке', 'contacts.postalAddress': 'Почтовый адрес',
+    'contacts.title': 'Должность', 'contacts.department': 'Отдел', 'contacts.website': 'Веб-сайт', 'contacts.notes': 'Заметки',
+    'contacts.analyzeAi': 'Анализировать с ИИ', 'contacts.analyzingAi': 'Анализ подписей…', 'contacts.analyzedAi': 'Контакт обновлён',
+    'contacts.employees': 'Сотрудников: {n}', 'contacts.noEmployees': 'Сотрудники не найдены',
     'ov.verificationCodes': 'Коды подтверждения', 'ov.codeExpires': 'истекает через {n} мин', 'ov.copyCode': 'Копировать',
     'ov.dismissCode': 'Скрыть', 'ov.codeCopied': 'Код скопирован',
 };

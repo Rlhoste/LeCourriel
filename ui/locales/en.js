@@ -197,6 +197,10 @@ STRINGS.en = {
     'contacts.lastSent': 'Last sent: {date}', 'contacts.noCompany': 'No company',
     'contacts.potential': 'Potential contacts', 'contacts.potentialHint': 'Received mail only. These senders are not trusted contacts.',
     'contacts.noPotential': 'No potential contacts', 'contacts.received': '{n} received', 'contacts.authenticated': 'authenticated', 'contacts.promote': 'Add',
+    'contacts.phones': 'Phone numbers', 'contacts.phonesPlaceholder': 'One number per line', 'contacts.postalAddress': 'Postal address',
+    'contacts.title': 'Job title', 'contacts.department': 'Department', 'contacts.website': 'Website', 'contacts.notes': 'Notes',
+    'contacts.analyzeAi': 'Analyze with AI', 'contacts.analyzingAi': 'Analyzing signatures…', 'contacts.analyzedAi': 'Contact updated',
+    'contacts.employees': '{n} employees', 'contacts.noEmployees': 'No employees found',
     'ov.verificationCodes': 'Verification codes', 'ov.codeExpires': 'expires in {n} min', 'ov.copyCode': 'Copy',
     'ov.dismissCode': 'Dismiss', 'ov.codeCopied': 'Code copied',
 };

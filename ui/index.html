@@ -153,16 +153,33 @@
         <div class="pane-resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize contacts"
              data-resize-key="contacts-people" data-target="#contacts-people" data-default="300" data-min="220" data-max="520" data-reserve="500"></div>
         <form id="contact-editor" class="contact-editor hidden">
-          <h2 data-i18n="contacts.people">People</h2>
+          <div class="contact-editor-heading">
+            <h2 data-i18n="contacts.people">People</h2>
+            <button id="contact-editor-close" type="button" class="contact-editor-close" aria-label="Close" title="Close">×</button>
+          </div>
           <label for="contact-name" data-i18n="contacts.name">Name</label>
           <input id="contact-name" type="text" maxlength="200" />
           <label for="contact-address" data-i18n="contacts.email">Email</label>
           <input id="contact-address" type="email" maxlength="320" required />
           <label for="contact-company" data-i18n="contacts.company">Company</label>
           <select id="contact-company"></select>
+          <label for="contact-title" data-i18n="contacts.title">Job title</label>
+          <input id="contact-title" type="text" maxlength="160" />
+          <label for="contact-department" data-i18n="contacts.department">Department</label>
+          <input id="contact-department" type="text" maxlength="160" />
+          <label for="contact-phones" data-i18n="contacts.phones">Phone numbers</label>
+          <textarea id="contact-phones" rows="2" placeholder="One number per line" data-i18n-placeholder="contacts.phonesPlaceholder"></textarea>
+          <label for="contact-postal-address" data-i18n="contacts.postalAddress">Postal address</label>
+          <textarea id="contact-postal-address" rows="3" maxlength="300"></textarea>
+          <label for="contact-website" data-i18n="contacts.website">Website</label>
+          <input id="contact-website" type="url" maxlength="250" />
+          <label for="contact-notes" data-i18n="contacts.notes">Notes</label>
+          <textarea id="contact-notes" rows="3" maxlength="1000"></textarea>
           <label class="contact-check"><input id="contact-trusted" type="checkbox" /> <span data-i18n="contacts.trusted">Trusted when authenticated</span></label>
           <label class="contact-check"><input id="contact-blocked" type="checkbox" /> <span data-i18n="contacts.blocked">Blocked</span></label>
           <div id="contact-history"></div>
+          <button id="contact-analyze-ai" type="button" class="secondary-btn" data-i18n="contacts.analyzeAi">Analyze with AI</button>
+          <div id="contact-ai-status" class="contact-ai-status"></div>
           <div class="contact-actions">
             <button id="contact-delete" type="button" class="danger-btn" data-i18n="contacts.delete">Delete</button>
             <button type="submit" class="primary-btn" data-i18n="contacts.save">Save</button>
