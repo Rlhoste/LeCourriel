@@ -293,6 +293,26 @@ fn parse_fetch(fetch: &Fetch) -> Option<RawEmail> {
     let bcc = header("Bcc");
     let message_id = header("Message-ID");
     let references = format!("{} {}", header("In-Reply-To"), header("References")).trim().to_string();
+    // Receiving servers prepend their Authentication-Results. Use only the first one rather
+    // than accepting a later header that the sender may have forged.
+    let authentication_results = {
+        let direct = header("Authentication-Results");
+        if direct.is_empty() {
+            header("ARC-Authentication-Results")
+        } else {
+            direct
+        }
+    };
+    let security = crate::models::MailSecurity {
+        authentication_results,
+        spam_flag: header("X-Spam-Flag"),
+        spam_status: header("X-Spam-Status"),
+        spam_score: header("X-Spam-Score"),
+        microsoft_scl: header("X-MS-Exchange-Organization-SCL"),
+        list_id: header("List-ID"),
+        list_unsubscribe: header("List-Unsubscribe"),
+        precedence: header("Precedence"),
+    };
 
     let date_str = parsed.headers.get_first_value("Date").unwrap_or_default();
     let date: Option<DateTime<Utc>> =
@@ -317,6 +337,7 @@ fn parse_fetch(fetch: &Fetch) -> Option<RawEmail> {
         date,
         body_text,
         body_html,
+        security,
     })
 }
 

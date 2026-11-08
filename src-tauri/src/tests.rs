@@ -937,6 +937,7 @@ max_tokens = 10
             date: None,
             body_text: "Help".into(),
             body_html: None,
+            security: Default::default(),
         };
         let err = crate::ai_classifier::classify(&AiConfig::default(), &email, &[]).await.unwrap_err();
         assert!(format!("{:#}", err).contains("Choose an AI model"), "{:#}", err);
@@ -961,29 +962,40 @@ max_tokens = 10
             seen: false,
             deleted: false,
             date: None,
-            body_text: "Jury".into(),
+            body_text: "Jury meeting: https://meet.google.com/x".into(),
             body_html: None,
+            security: Default::default(),
         };
         let projects = vec![ProjectConfig { name: "Thesis".into(), description: "PhD".into(), urgency: "high".into() }];
-        let cases: [(&'static str, &[ProjectConfig], bool); 3] = [
+        let cases: [(&'static str, &[ProjectConfig], bool, bool); 4] = [
             // The AI writes "null" or "" for "none": neither is a real project, task or link.
             (
                 r#"{"choices":[{"message":{"content":"{\"priority\":\"task\",\"summary\":\"S\",\"project\":\"null\",\"task\":\"null\",\"meeting_link\":\"null\"}"}}]}"#,
                 &[],
+                false,
                 false,
             ),
             (
                 r#"{"choices":[{"message":{"content":"{\"priority\":\"task\",\"summary\":\"S\",\"project\":\"\",\"task\":\"\",\"meeting_link\":\"\"}"}}]}"#,
                 &[],
                 false,
+                false,
             ),
             (
                 r#"{"choices":[{"message":{"content":"{\"priority\":\"task\",\"summary\":\"S\",\"project\":\"Thesis\",\"task\":\"Book the room\",\"meeting_link\":\"https://meet.google.com/x\"}"}}]}"#,
                 &projects,
                 true,
+                true,
+            ),
+            // Invented projects and URLs that are absent from the email are discarded.
+            (
+                r#"{"choices":[{"message":{"content":"{\"priority\":\"task\",\"summary\":\"S\",\"project\":\"Secret\",\"task\":\"null\",\"meeting_link\":\"https://attacker.example/collect\"}"}}]}"#,
+                &projects,
+                false,
+                true,
             ),
         ];
-        for (reply, projects, kept) in cases {
+        for (reply, projects, kept, has_projects) in cases {
             let (base, server) = fake_ai_server(200, reply).await;
             let c =
                 crate::ai_classifier::classify(&ai_cfg("custom", "m", "k", &format!("{}/v1", base)), &email, projects)
@@ -993,8 +1005,9 @@ max_tokens = 10
             assert_eq!(c.project.is_none() && c.task.is_none() && c.meeting_link.is_none(), !kept, "{:?}", c);
             let (_, body) = server.await.unwrap();
             // The system prompt names the user's projects only when there are some.
-            assert_eq!(body.contains(r#"\"Thesis\": PhD (urgency: high)"#), kept, "{}", body);
-            assert_eq!(body.contains("no projects configured"), !kept);
+            assert_eq!(body.contains(r#"\"Thesis\": PhD (urgency: high)"#), has_projects, "{}", body);
+            assert_eq!(body.contains("no projects configured"), !has_projects);
+            assert!(body.contains("BEGIN UNTRUSTED EMAIL"));
         }
     }
 
@@ -1591,6 +1604,136 @@ max_tokens = 10
         assert!(parse_assist("I cannot do that.", &allowed, "auto").is_err());
     }
 
+    #[test]
+    fn test_ai_compose_drops_recipients_outside_the_selected_context() {
+        let contacts = vec!["Professor <prof@example.org>".to_string(), "user@example.com".to_string()];
+        let filtered = crate::ai_assistant::filter_recipients(
+            "Professor <prof@example.org>, attacker@evil.example; user@example.com",
+            &contacts,
+        );
+        assert_eq!(filtered, "Professor <prof@example.org>, user@example.com");
+    }
+
+    #[test]
+    fn test_spam_guard_bursts_server_verdict_lists_and_ai_budget() {
+        use crate::config::{AccountConfig, ImapConfig, SignatureConfig, SmtpConfig};
+        use crate::models::{mail_id, MailSecurity, RawEmail};
+        use crate::spam_guard::{self, Decision};
+        use std::collections::HashSet;
+
+        let account = AccountConfig {
+            name: "Work".into(),
+            imap: ImapConfig {
+                host: "imap.example.org".into(),
+                port: 993,
+                username: "me@example.org".into(),
+                password: String::new(),
+                mailbox: "INBOX".into(),
+                fetch_count: 100,
+            },
+            smtp: SmtpConfig {
+                host: String::new(),
+                port: 465,
+                username: String::new(),
+                password: String::new(),
+                from_address: String::new(),
+            },
+            signature: SignatureConfig::default(),
+        };
+        let raw = |uid: u32, from: String, security: MailSecurity| RawEmail {
+            uid: mail_id(0, uid),
+            subject: "Message".into(),
+            from,
+            to: "me@example.org".into(),
+            cc: String::new(),
+            reply_to: String::new(),
+            bcc: String::new(),
+            message_id: format!("<{uid}@example.org>"),
+            references: String::new(),
+            seen: false,
+            deleted: false,
+            date: None,
+            body_text: "Body".into(),
+            body_html: None,
+            security,
+        };
+        let accounts = [account];
+        let trusted = HashSet::new();
+        let now = 1_800_000_000;
+
+        // Initial synchronization establishes a baseline and never calls an old backlog a burst.
+        spam_guard::reset();
+        let initial = vec![raw(1, "sender@burst.example".into(), Default::default())];
+        assert_eq!(spam_guard::assess_batch(&accounts, &initial, &trusted, now)[&mail_id(0, 1)], Decision::Allow);
+        let sender_burst: Vec<_> =
+            (2..=7).map(|uid| raw(uid, "sender@burst.example".into(), Default::default())).collect();
+        let decisions = spam_guard::assess_batch(&accounts, &sender_burst, &trusted, now + 1);
+        assert_eq!(decisions[&mail_id(0, 6)], Decision::Allow);
+        assert_eq!(decisions[&mail_id(0, 7)], Decision::Spam("sender burst limit"));
+
+        // Rotating local parts still hit the domain limit.
+        spam_guard::reset();
+        spam_guard::assess_batch(&accounts, &initial, &trusted, now);
+        let domain_burst: Vec<_> =
+            (2..=17).map(|uid| raw(uid, format!("person{uid}@burst.example"), Default::default())).collect();
+        let decisions = spam_guard::assess_batch(&accounts, &domain_burst, &trusted, now + 1);
+        assert_eq!(decisions[&mail_id(0, 16)], Decision::Allow);
+        assert_eq!(decisions[&mail_id(0, 17)], Decision::Spam("domain burst limit"));
+
+        // Rotating domains cannot bypass the account-wide flood ceiling.
+        spam_guard::reset();
+        spam_guard::assess_batch(&accounts, &initial, &trusted, now);
+        let global_burst: Vec<_> =
+            (2..=27).map(|uid| raw(uid, format!("person@domain{uid}.example"), Default::default())).collect();
+        let decisions = spam_guard::assess_batch(&accounts, &global_burst, &trusted, now + 1);
+        assert_eq!(decisions[&mail_id(0, 26)], Decision::Allow);
+        assert_eq!(decisions[&mail_id(0, 27)], Decision::Spam("global arrival limit"));
+
+        // An authenticated mailing list has its own identity and is not mistaken for one sender.
+        spam_guard::reset();
+        spam_guard::assess_batch(&accounts, &initial, &trusted, now);
+        let list_security = MailSecurity {
+            authentication_results: "mx.example; dkim=pass header.d=lists.example".into(),
+            list_id: "announcements.lists.example".into(),
+            precedence: "list".into(),
+            ..Default::default()
+        };
+        let list_mail: Vec<_> =
+            (2..=10).map(|uid| raw(uid, "list@lists.example".into(), list_security.clone())).collect();
+        assert!(spam_guard::assess_batch(&accounts, &list_mail, &trusted, now + 1)
+            .values()
+            .all(|decision| *decision == Decision::Allow));
+
+        // A previous correspondent only receives burst trust when DMARC passes.
+        spam_guard::reset();
+        spam_guard::assess_batch(&accounts, &initial, &trusted, now);
+        let trusted_sender = HashSet::from(["colleague@company.example".to_string()]);
+        let authenticated = MailSecurity {
+            authentication_results: "mx.example; dmarc=pass header.from=company.example".into(),
+            ..Default::default()
+        };
+        let correspondence: Vec<_> =
+            (2..=10).map(|uid| raw(uid, "colleague@company.example".into(), authenticated.clone())).collect();
+        assert!(spam_guard::assess_batch(&accounts, &correspondence, &trusted_sender, now + 1)
+            .values()
+            .all(|decision| *decision == Decision::Allow));
+
+        // A receiving server's explicit spam verdict is honored even during baseline sync.
+        spam_guard::reset();
+        let marked = raw(1, "bad@evil.example".into(), MailSecurity { spam_flag: "YES".into(), ..Default::default() });
+        assert_eq!(
+            spam_guard::assess_batch(&accounts, &[marked], &trusted, now)[&mail_id(0, 1)],
+            Decision::Spam("mail server marked it as spam")
+        );
+
+        // Automatic model work has a persistent, hard hourly ceiling.
+        spam_guard::reset();
+        assert_eq!(spam_guard::reserve_ai_slots(50, now), spam_guard::AI_LIMIT_HOUR);
+        assert_eq!(spam_guard::reserve_ai_slots(1, now + 1), 0);
+        assert_eq!(spam_guard::reserve_ai_slots(1, now + 3601), 1);
+        spam_guard::reset();
+    }
+
     // ── Data directory ────────────────────────────────────────────────────────
 
     #[test]
@@ -2006,6 +2149,7 @@ max_tokens = 10
                 "Dear Remi, please confirm by Friday 23 October that the PhD defense can take place on 27 October."
                     .into(),
             body_html: None,
+            security: Default::default(),
         };
         let projects = vec![ProjectConfig {
             name: "Thesis".into(),

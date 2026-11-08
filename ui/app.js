@@ -485,6 +485,9 @@ function renderSplitPanel(panelId, meta) {
   }
 }
 
+const remoteContentAllowed = new Set();
+const emailContentKey = email => `${panelForEmail(email)}:${email.uid}`;
+
 function showEmail(section, email) {
   const placeholder = section.querySelector('.rp-placeholder');
   const content = section.querySelector('.rp-content');
@@ -495,11 +498,14 @@ function showEmail(section, email) {
   section.querySelector('.rp-meta').innerHTML = metaHtml(email);
 
   const iframe = section.querySelector('.rp-iframe');
-  setIframeContent(iframe, email);
+  setIframeContent(iframe, email, remoteContentAllowed.has(emailContentKey(email)));
 
   renderActions(section.querySelector('.rp-actions'), email, () => {
     content.classList.add('hidden');
     placeholder.style.display = '';
+  }, () => {
+    remoteContentAllowed.add(emailContentKey(email));
+    setIframeContent(iframe, email, true);
   });
   setRead(email, true);
 }
@@ -528,12 +534,14 @@ function setRead(email, read) {
 // ── Reading-pane actions ───────────────────────────────────────────────────
 // Reply · Forward · Spam · Delete · Project ▾ · ⋯ (Mark as unread, Save as…, Print)
 // Spam, Delete, Project and Mark as unread only apply to inbox emails; Not spam to the Spam folder.
-function renderActions(bar, email, onGone) {
+function renderActions(bar, email, onGone, onLoadRemote = null) {
   const folder = panelForEmail(email);
   const inInbox = folder === 'inbox';
   bar.innerHTML = `
     <button class="rp-btn" data-act="reply">${t('rp.reply')}</button>
     <button class="rp-btn" data-act="forward">${t('rp.forward')}</button>
+    ${onLoadRemote && hasRemoteContent(email.body_html) && !remoteContentAllowed.has(emailContentKey(email))
+      ? `<button class="rp-btn" data-act="loadRemote">${t('rp.loadRemote')}</button>` : ''}
     ${folder === 'spam' ? `<button class="rp-btn" data-act="notSpam">${t('rp.notSpam')}</button>` : ''}
     ${inInbox ? `
       <button class="rp-btn danger" data-act="spam">${t('rp.spam')}</button>
@@ -597,8 +605,12 @@ function renderActions(bar, email, onGone) {
     unread: () => { setRead(email, false); flash(t('rp.markedUnread')); },
     save: () => saveEmail(email).then(msg => msg && flash(msg)).catch(e => flash(String(e), true)),
     print: () => printEmail(email),
+    loadRemote: () => {
+      onLoadRemote?.();
+      bar.querySelector('[data-act="loadRemote"]')?.remove();
+    },
   };
-  async function moveAway(command, doneMsg) {
+  async function moveAway(command) {
     try {
       await cmd(command, { uid: email.uid });
       removeFromState(email.uid, null);
@@ -658,7 +670,7 @@ function printEmail(email) {
     .rp-meta-label{font-weight:600;display:inline-block;min-width:70px}
     .rp-person{margin-right:8px}.rp-person-mail{color:#666}</style>`;
   const body = email.body_html
-    ? email.body_html
+    ? protectEmailHtml(email.body_html, remoteContentAllowed.has(emailContentKey(email)), true)
     : `<div style="white-space:pre-wrap">${esc(email.body_text)}</div>`;
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">${style}</head><body>${header}${body}</body></html>`;
 
@@ -724,9 +736,9 @@ function personChip(addr) {
     : `<span class="rp-person">${esc(mail)}</span>`;
 }
 
-function setIframeContent(iframe, email) {
+function setIframeContent(iframe, email, allowRemote = false) {
   const html = email.body_html
-    ? wrapHtml(email.body_html)
+    ? protectEmailHtml(wrapHtml(email.body_html), allowRemote)
     : `<html><body style="font-family:system-ui,sans-serif;font-size:14px;padding:16px;white-space:pre-wrap;color:#111">${esc(email.body_text)}</body></html>`;
   // The backend has already decoded MIME charsets into a Unicode string. Declare
   // UTF-8 explicitly so stale charset meta tags in the original mail cannot turn
@@ -735,6 +747,47 @@ function setIframeContent(iframe, email) {
   const url = URL.createObjectURL(blob);
   iframe.src = url;
   iframe.onload = () => URL.revokeObjectURL(url);
+}
+
+function hasRemoteContent(html) {
+  return /(?:\bsrc\s*=|\bsrcset\s*=|\bposter\s*=|\bbackground\s*=|url\s*\()[^>]*(?:https?:)?\/\//i.test(html || '') ||
+    /<link\b[^>]*href\s*=\s*["']?(?:https?:)?\/\//i.test(html || '');
+}
+
+// Email HTML is hostile input. The iframe sandbox blocks scripts, while this pass also
+// prevents network tracking until the user explicitly loads remote content.
+function protectEmailHtml(html, allowRemote = false, fragment = false) {
+  const doc = new DOMParser().parseFromString(html || '', 'text/html');
+  doc.querySelectorAll('script, iframe, frame, frameset, object, embed, applet, form, input, button, textarea, select, base')
+    .forEach(el => el.remove());
+  doc.querySelectorAll('meta[http-equiv]').forEach(el => el.remove());
+  doc.querySelectorAll('*').forEach(el => {
+    for (const attr of Array.from(el.attributes)) {
+      const name = attr.name.toLowerCase();
+      const compact = attr.value.replace(/[\s\u0000-\u001f]/g, '').toLowerCase();
+      if (name.startsWith('on') || name === 'srcdoc' || name === 'formaction' ||
+          (['href', 'src', 'action', 'xlink:href', 'background'].includes(name) &&
+           (compact.startsWith('javascript:') || compact.startsWith('vbscript:') || compact.startsWith('data:text')))) {
+        el.removeAttribute(attr.name);
+        continue;
+      }
+      if (!allowRemote && ['src', 'srcset', 'poster', 'background'].includes(name) && /(?:https?:)?\/\//i.test(compact)) {
+        el.removeAttribute(attr.name);
+      }
+      if (!allowRemote && name === 'style') {
+        el.setAttribute(attr.name, attr.value.replace(/url\(\s*(['"]?)(?:https?:)?\/\/[^)]*\)/gi, 'none'));
+      }
+    }
+  });
+  if (!allowRemote) {
+    doc.querySelectorAll('link').forEach(el => el.remove());
+    doc.querySelectorAll('style').forEach(el => {
+      el.textContent = el.textContent
+        .replace(/@import[^;]+;/gi, '')
+        .replace(/url\(\s*(['"]?)(?:https?:)?\/\/[^)]*\)/gi, 'none');
+    });
+  }
+  return fragment ? doc.body.innerHTML : `<!DOCTYPE html>${doc.documentElement.outerHTML}`;
 }
 
 function wrapHtml(raw) {
@@ -1010,7 +1063,7 @@ async function showAiResult(r) {
     closeSearch();
     openCompose({
       to: c.to, cc: c.cc, subject: c.subject,
-      html: sanitizeHtml(c.body_html || '') || '<div><br></div>', inReplyTo,
+      html: sanitizeHtml(c.body_html || '') || '<div><br></div>', inReplyTo, aiGenerated: true,
     });
     showToast(t('search.composeOpened'));
     return;
@@ -1588,11 +1641,14 @@ function showProjectEmail(email) {
   const header = document.getElementById('proj-rp-header');
   header.innerHTML = `<div class="rp-header"><div class="rp-subject">${esc(email.subject)}</div><div class="rp-meta">${metaHtml(email)}</div><div class="rp-actions"></div></div>`;
   const iframe = document.getElementById('proj-rp-iframe');
-  setIframeContent(iframe, email);
+  setIframeContent(iframe, email, remoteContentAllowed.has(emailContentKey(email)));
   renderActions(header.querySelector('.rp-actions'), email, () => {
     pane.classList.add('hidden');
     const p = appState.projects.find(p => p.name === activeProject);
     if (p) showProject(p);
+  }, () => {
+    remoteContentAllowed.add(emailContentKey(email));
+    setIframeContent(iframe, email, true);
   });
   setRead(email, true);
 }
@@ -1603,6 +1659,7 @@ let composeDirty = false;      // user typed something since the composer opened
 let composeRange = null;       // last selection inside the body (toolbar widgets steal focus)
 let composeOriginal = null;    // email being replied to / forwarded
 let composeMode = 'new';
+let composeAiRecipients = false; // AI chose the recipients; require an explicit review before sending
 
 const COMPOSE_COLORS = ['#000000', '#444444', '#888888', '#cccccc', '#c62828', '#ef6c00',
   '#f9a825', '#2e7d32', '#00838f', '#1565c0', '#6a1b9a', '#ad1457'];
@@ -2150,7 +2207,8 @@ async function startComposeWindow(options) {
 let composeClosing = false;   // the composer window is closing on purpose (sent or discarded)
 
 function fillCompose({ mode = 'new', email = null, to: presetTo = '', subject: presetSubject = '',
-                       cc: presetCc = '', html: presetHtml = '', inReplyTo: presetInReplyTo = null } = {}) {
+                       cc: presetCc = '', html: presetHtml = '', inReplyTo: presetInReplyTo = null,
+                       aiGenerated = false } = {}) {
   let to = presetTo, subject = presetSubject, html = presetHtml || '<div><br></div>';
   composeInReplyTo = presetInReplyTo;
 
@@ -2191,6 +2249,7 @@ function fillCompose({ mode = 'new', email = null, to: presetTo = '', subject: p
 
   composeOriginal = email;
   composeMode = email ? mode : 'new';
+  composeAiRecipients = Boolean(aiGenerated);
   // Auto answer needs an email to answer.
   $c('tb-ai-auto').disabled = composeMode !== 'reply';
   $c('tb-ai-auto').title = composeMode === 'reply' ? t('ai.autoTitle') : t('ai.autoDisabled');
@@ -2270,6 +2329,12 @@ async function sendEmail() {
   const subject = $c('compose-subject').value.trim();
   const html = $c('compose-body').innerHTML;
   if (!to && !cc && !bcc) { setComposeStatus(t('cmp.needRecipient'), true); $c('compose-to').focus(); return; }
+  if (composeAiRecipients) {
+    const recipients = [to, cc, bcc].filter(Boolean).join(', ');
+    const approved = await askInApp(t('cmp.aiRecipientConfirm', { recipients }), t('cmp.reviewSend'));
+    if (!approved) return;
+    composeAiRecipients = false;
+  }
 
   const btn = $c('compose-send');
   btn.disabled = true;

@@ -50,6 +50,20 @@ pub fn split_mail_id(id: u64) -> (usize, u32) {
 }
 
 /// Raw email as fetched from IMAP before AI processing.
+#[derive(Debug, Clone, Default)]
+pub struct MailSecurity {
+    /// Authentication-Results / ARC-Authentication-Results added by receiving servers.
+    pub authentication_results: String,
+    pub spam_flag: String,
+    pub spam_status: String,
+    pub spam_score: String,
+    pub microsoft_scl: String,
+    /// Mailing-list and bulk-mail metadata used to avoid treating a legitimate list as one sender.
+    pub list_id: String,
+    pub list_unsubscribe: String,
+    pub precedence: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct RawEmail {
     pub uid: u64,
@@ -69,6 +83,7 @@ pub struct RawEmail {
     pub date: Option<DateTime<Utc>>,
     pub body_text: String,
     pub body_html: Option<String>,
+    pub security: MailSecurity,
 }
 
 /// Processed email card ready for display.

@@ -48,6 +48,7 @@ mod secrets;
 mod settings;
 mod signature;
 mod smtp_sender;
+mod spam_guard;
 mod state;
 mod tasks;
 #[cfg(test)]
@@ -620,22 +621,9 @@ async fn ai_assist(
                 picked.push(e);
             }
         }
-        // Few keyword matches (natural-language request): add the most recent emails.
-        if picked.len() < 8 {
-            let mut recent: Vec<&(search::Folder, models::EmailCard)> = index
-                .iter()
-                .filter(|(f, _)| matches!(f, search::Folder::Inbox | search::Folder::Sent | search::Folder::Server))
-                .collect();
-            recent.sort_by(|a, b| b.1.date_ts.cmp(&a.1.date_ts));
-            for e in recent {
-                if picked.len() >= 25 {
-                    break;
-                }
-                if !picked.iter().any(|p| p.0 == e.0 && p.1.uid == e.1.uid) {
-                    picked.push(e);
-                }
-            }
-        }
+        // Do not add unrelated recent mail merely to fill the context. A malicious email must
+        // not gain access to other messages just because it happens to be recent.
+        picked.truncate(12);
     }
     let candidates: Vec<ai_assistant::Candidate> = picked
         .iter()
@@ -653,7 +641,11 @@ async fn ai_assist(
             body: c.body_text.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(700).collect(),
         })
         .collect();
-    let contacts = search::contacts(&index, 60);
+    // Only expose contacts already present in the selected/matched context, rather than the
+    // user's whole address book.
+    let contact_index: Vec<(search::Folder, models::EmailCard)> =
+        picked.iter().map(|(folder, card)| (*folder, card.clone())).collect();
+    let contacts = search::contacts(&contact_index, 24);
     let today = chrono::Local::now().format("%Y-%m-%d (%A)").to_string();
     ai_assistant::assist(&cfg, &query, &mode, &candidates, &contacts, &today).await.map_err(|e| format!("{:#}", e))
 }

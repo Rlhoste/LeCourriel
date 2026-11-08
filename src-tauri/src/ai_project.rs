@@ -63,14 +63,17 @@ pub fn user_content(request: &str, me: &str, emails: &[EmailCard]) -> String {
     if emails.is_empty() {
         out.push_str("(none found)\n");
     }
-    for c in emails {
+    for (index, c) in emails.iter().enumerate() {
         let from = if c.from_email.is_empty() || c.from_name == c.from_email {
             c.from_name.clone()
         } else {
             format!("{} <{}>", c.from_name, c.from_email)
         };
         let body: String = c.body_text.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(400).collect();
-        out.push_str(&format!("---\nFrom: {}\nTo: {}\nSubject: {}\n{}\n", from, c.to, c.subject, body));
+        out.push_str(&format!(
+            "BEGIN UNTRUSTED EMAIL {}\nFrom: {}\nTo: {}\nSubject: {}\n{}\nEND UNTRUSTED EMAIL {}\n",
+            index, from, c.to, c.subject, body, index
+        ));
     }
     out
 }
@@ -148,20 +151,22 @@ Rules:
 /// The user message: the project, then one short line per email with its id.
 pub fn match_content(name: &str, description: &str, emails: &[EmailCard]) -> String {
     let mut out = format!("PROJECT: {}\nDESCRIPTION: {}\n\nEMAILS:\n", name, description);
-    for c in emails {
+    for (index, c) in emails.iter().enumerate() {
         let gist = if crate::ai_classifier::is_real_summary(&c.summary) {
             c.summary.clone()
         } else {
             c.body_text.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(200).collect()
         };
         out.push_str(&format!(
-            "[{}] From: {} <{}> | Subject: {} | project now: {} | {}\n",
+            "BEGIN UNTRUSTED EMAIL {}\n[{}] From: {} <{}> | Subject: {} | project now: {} | {}\nEND UNTRUSTED EMAIL {}\n",
+            index,
             c.uid,
             c.from_name,
             c.from_email,
             c.subject,
             c.project.as_deref().unwrap_or("none"),
-            gist
+            gist,
+            index
         ));
     }
     out

@@ -200,7 +200,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     // Evidence for the task check, captured before the raw emails are consumed.
     let inbox_dates: std::collections::HashMap<u64, chrono::DateTime<Utc>> =
         raw_emails.iter().filter_map(|r| r.date.map(|d| (r.uid, d))).collect();
-    let recent_inbox: Vec<(chrono::DateTime<Utc>, RecentMail)> =
+    let mut recent_inbox: Vec<(chrono::DateTime<Utc>, RecentMail)> =
         raw_emails.iter().filter_map(|r| r.date.map(|d| (d, to_recent_mail("inbox", r)))).collect();
     let recent_sent: Vec<(chrono::DateTime<Utc>, RecentMail)> =
         sent_raw.iter().filter_map(|r| r.date.map(|d| (d, to_recent_mail("sent", r)))).collect();
@@ -225,6 +225,64 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     // Split inbox into already-known (reuse cache) and new (need AI).
     let (known_raw, new_raw): (Vec<_>, Vec<_>) = raw_emails.into_iter().partition(|r| cached_uids.contains(&r.uid));
 
+    // People the user has written to are a weak trust signal only when the incoming mail also
+    // passes DKIM/DMARC. It raises the burst threshold; it never bypasses the global AI budget.
+    let trusted_correspondents: std::collections::HashSet<String> =
+        sent_raw.iter().flat_map(|mail| crate::spam_guard::addresses(&format!("{},{}", mail.to, mail.cc))).collect();
+    let guard = crate::spam_guard::assess_batch(
+        &cfg.accounts,
+        &new_raw,
+        &trusted_correspondents,
+        chrono::Utc::now().timestamp(),
+    );
+    let guard_rejected: std::collections::HashSet<u64> = guard
+        .iter()
+        .filter_map(|(uid, decision)| matches!(decision, crate::spam_guard::Decision::Spam(_)).then_some(*uid))
+        .collect();
+    // Rejected content must not leak into the separate automatic task-check prompt either.
+    recent_inbox.retain(|(_, mail)| !guard_rejected.contains(&mail.uid));
+    let mut classify_raw = Vec::new();
+    let mut guarded_raw = Vec::new();
+    let mut ensured_spam = std::collections::HashSet::new();
+    for raw in new_raw {
+        let Some(crate::spam_guard::Decision::Spam(reason)) = guard.get(&raw.uid) else {
+            classify_raw.push(raw);
+            continue;
+        };
+        let (account_index, imap_uid) = crate::models::split_mail_id(raw.uid);
+        let Some((account, folders)) = mailboxes.get(account_index) else {
+            guarded_raw.push(raw);
+            continue;
+        };
+        let folder = folders.spam.clone().unwrap_or_else(|| "Junk".into());
+        let folder_ready = if folders.spam.is_some() || ensured_spam.contains(&account_index) {
+            Ok(())
+        } else {
+            let result = crate::imap_client::ensure_folder(&account.imap, &folder).await;
+            if result.is_ok() {
+                ensured_spam.insert(account_index);
+            }
+            result
+        };
+        let moved = match folder_ready {
+            Ok(()) => crate::imap_client::move_message(&account.imap, imap_uid, &folder).await,
+            Err(e) => Err(e),
+        };
+        match moved {
+            Ok(()) => {
+                info!("Spam guard moved uid={} to {} ({})", raw.uid, folder, reason);
+                crate::spam_guard::mark_moved(account, imap_uid);
+            }
+            Err(e) => {
+                // Fail closed for token use: show it unsorted, retry the move next refresh,
+                // but never let a move failure send attacker-controlled content to the AI.
+                warn!("Spam guard could not move uid={} ({}): {:#}", raw.uid, reason, e);
+                guarded_raw.push(raw);
+            }
+        }
+    }
+    let new_raw = classify_raw;
+
     // Merge known emails from cache, updating body/date in case they changed.
     for raw in &known_raw {
         if let Some(c) = cached_cards.iter_mut().find(|c| c.uid == raw.uid) {
@@ -244,7 +302,8 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     }
 
     // Emit immediately with cached data + raw new emails (unclassified) so UI isn't blank.
-    let new_raw_cards: Vec<EmailCard> = new_raw.iter().map(|r| raw_to_card(r.clone())).collect();
+    let new_raw_cards: Vec<EmailCard> =
+        new_raw.iter().chain(guarded_raw.iter()).map(|r| raw_to_card(r.clone())).collect();
     let sent_cards_pre: Vec<EmailCard> = sent_raw.iter().map(|r| raw_to_card(r.clone())).collect();
     let drafts_cards_pre: Vec<EmailCard> = drafts_raw.iter().map(|r| raw_to_card(r.clone())).collect();
     let trash_cards_pre: Vec<EmailCard> = trash_raw.iter().map(|r| raw_to_card(r.clone())).collect();
@@ -282,7 +341,7 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
     let mut first_ai_error: Option<String> = None;
     // Why a Claude subscription sorted nothing, or stopped early (shown in the briefing line).
     let mut ai_notice: Option<Briefing> = None;
-    let new_cards: Vec<EmailCard> = if new_raw.is_empty() {
+    let mut new_cards: Vec<EmailCard> = if new_raw.is_empty() {
         vec![]
     } else {
         let projects = cfg.projects.clone();
@@ -301,15 +360,35 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
         // the rest stay unsorted until the next refresh instead of each failing in turn.
         let claude_code = cfg.ai.uses_claude_code();
         let not_paid = claude_code && !crate::claude_code::status().await.paid;
+        let requested = jobs.iter().filter(|(reused, _, _, _)| reused.is_none()).count();
+        let mut slots = if !not_paid && ai_ready.is_ok() {
+            crate::spam_guard::reserve_ai_slots(requested, chrono::Utc::now().timestamp())
+        } else {
+            0
+        };
+        let jobs: Vec<_> = jobs
+            .into_iter()
+            .map(|(reused, ai_cfg, email, projects)| {
+                let may_call_ai = if reused.is_some() {
+                    true
+                } else if slots > 0 {
+                    slots -= 1;
+                    true
+                } else {
+                    false
+                };
+                (reused, ai_cfg, email, projects, may_call_ai)
+            })
+            .collect();
         let stop_reason: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
         let results: Vec<anyhow::Result<(bool, crate::ai_classifier::ClassifiedEmail)>> = futures::stream::iter(jobs)
-            .map(|(reused, ai_cfg, email, projects)| {
+            .map(|(reused, ai_cfg, email, projects, may_call_ai)| {
                 let stop_reason = stop_reason.clone();
                 async move {
                     if let Some(c) = reused {
                         return anyhow::Ok((false, c));
                     }
-                    if not_paid || stop_reason.lock().unwrap_or_else(|e| e.into_inner()).is_some() {
+                    if !may_call_ai || not_paid || stop_reason.lock().unwrap_or_else(|e| e.into_inner()).is_some() {
                         return anyhow::Ok((false, crate::ai_classifier::unclassified()));
                     }
                     let result = crate::ai_classifier::classify(&ai_cfg, &email, &projects).await;
@@ -388,6 +467,9 @@ async fn do_refresh(cfg: &Config, app: &AppHandle, state: &Arc<Mutex<AppState>>)
         let arrived: Vec<EmailCard> = new_cards.iter().filter(|c| !seen_uids.contains(&c.uid)).cloned().collect();
         notify_new_mail(app, &arrived);
     }
+    // Guarded messages whose server move failed remain visible but unclassified. They are
+    // remembered by spam_guard and retried without AI on the next refresh.
+    new_cards.extend(guarded_raw.into_iter().map(raw_to_card));
 
     // Merge: cached + newly classified. Remove UIDs no longer in inbox.
     let all_uids: std::collections::HashSet<u64> =
@@ -1016,6 +1098,7 @@ async fn guess_folder_names(cfg: &ImapConfig) -> SpecialFolders {
 
 fn to_recent_mail(folder: &'static str, raw: &crate::models::RawEmail) -> RecentMail {
     RecentMail {
+        uid: raw.uid,
         folder,
         from: raw.from.clone(),
         to: raw.to.clone(),
@@ -1074,6 +1157,13 @@ async fn check_open_tasks(
     recent.truncate(40);
     let recent: Vec<RecentMail> = recent.into_iter().map(|(_, m)| m).collect();
     if recent.is_empty() {
+        return Ok(());
+    }
+
+    // This is also an automatic model call and therefore shares the same hard budget as
+    // classification. User-triggered writing/search actions are not charged to this attack guard.
+    if crate::spam_guard::reserve_ai_slots(1, chrono::Utc::now().timestamp()) == 0 {
+        info!("Skipping automatic task check: hourly AI budget reached");
         return Ok(());
     }
 
