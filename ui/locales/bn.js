@@ -123,6 +123,8 @@ STRINGS.bn = {
     "set.updateDownloading": "আপডেট ডাউনলোড ও ইনস্টল করা হচ্ছে…", "set.updateRestarting": "আপডেট ইনস্টল হয়েছে। Courriel পুনরায় চালু হচ্ছে…",
     'theme.midnight': 'মিডনাইট', 'theme.premium': 'প্রিমিয়াম', 'theme.modern': 'আধুনিক',
     'theme.brutalist': 'ব্রুটালিস্ট', 'theme.aero': 'Frutiger Aero', 'theme.terminal': 'টার্মিনাল',
+    'theme.mozilla-blue': 'Mozilla নীল', 'theme.redmond97': 'Redmond 97',
+    'theme.webmail': 'ক্লাসিক ওয়েবমেইল', 'theme.office-blue': 'Office নীল',
 
     'greet.morning': 'সুপ্রভাত, {name}।', 'greet.afternoon': 'শুভ অপরাহ্ন, {name}।', 'greet.evening': 'শুভ সন্ধ্যা, {name}।',
     'greet.morning.noname': 'সুপ্রভাত।', 'greet.afternoon.noname': 'শুভ অপরাহ্ন।', 'greet.evening.noname': 'শুভ সন্ধ্যা।',

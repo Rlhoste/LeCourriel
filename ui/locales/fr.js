@@ -123,6 +123,8 @@ STRINGS.fr = {
     "set.updateDownloading": "Téléchargement et installation de la mise à jour…", "set.updateRestarting": "Mise à jour installée. Redémarrage de Courriel…",
     'theme.midnight': 'Minuit', 'theme.premium': 'Premium', 'theme.modern': 'Moderne',
     'theme.brutalist': 'Brutaliste', 'theme.aero': 'Frutiger Aero', 'theme.terminal': 'Terminal',
+    'theme.mozilla-blue': 'Bleu Mozilla', 'theme.redmond97': 'Redmond 97',
+    'theme.webmail': 'Webmail classique', 'theme.office-blue': 'Bleu Office',
 
     'greet.morning': 'Bonjour, {name}.', 'greet.afternoon': 'Bonjour, {name}.', 'greet.evening': 'Bonsoir, {name}.',
     'greet.morning.noname': 'Bonjour.', 'greet.afternoon.noname': 'Bonjour.', 'greet.evening.noname': 'Bonsoir.',

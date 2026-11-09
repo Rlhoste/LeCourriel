@@ -37,6 +37,13 @@ module.exports = [
     },
   },
   {
+    files: ['site/**/*.js'],
+    languageOptions: {
+      sourceType: 'script',
+      globals: { ...globals.browser },
+    },
+  },
+  {
     files: ['ui/**/*.js'],
     ignores: ['ui/i18n.js'],
     languageOptions: { globals: { ...i18n, CourrielCore: 'readonly' } },

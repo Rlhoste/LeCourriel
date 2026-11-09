@@ -123,6 +123,8 @@ STRINGS.pt = {
     "set.updateDownloading": "Baixando e instalando a atualização…", "set.updateRestarting": "Atualização instalada. Reiniciando o Courriel…",
     'theme.midnight': 'Meia-noite', 'theme.premium': 'Premium', 'theme.modern': 'Moderno',
     'theme.brutalist': 'Brutalista', 'theme.aero': 'Frutiger Aero', 'theme.terminal': 'Terminal',
+    'theme.mozilla-blue': 'Azul Mozilla', 'theme.redmond97': 'Redmond 97',
+    'theme.webmail': 'Webmail clássico', 'theme.office-blue': 'Azul Office',
 
     'greet.morning': 'Bom dia, {name}.', 'greet.afternoon': 'Boa tarde, {name}.', 'greet.evening': 'Boa noite, {name}.',
     'greet.morning.noname': 'Bom dia.', 'greet.afternoon.noname': 'Boa tarde.', 'greet.evening.noname': 'Boa noite.',

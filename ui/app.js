@@ -2908,6 +2908,10 @@ const THEMES = [
   { id: 'brutalist', name: 'Brutalist' },
   { id: 'aero',      name: 'Frutiger Aero' },
   { id: 'terminal',  name: 'Terminal' },
+  { id: 'mozilla-blue', name: 'Mozilla Blue' },
+  { id: 'redmond97',    name: 'Redmond 97' },
+  { id: 'webmail',      name: 'Classic Webmail' },
+  { id: 'office-blue',  name: 'Office Blue' },
 ];
 let savedTheme = 'brutalist';      // last saved; restored if Settings closes without saving
 let savedFontScale = 1.0;

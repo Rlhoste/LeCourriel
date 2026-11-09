@@ -123,6 +123,8 @@ STRINGS.ur = {
     "set.updateDownloading": "اپ ڈیٹ ڈاؤن لوڈ اور انسٹال ہو رہی ہے…", "set.updateRestarting": "اپ ڈیٹ انسٹال ہو گئی۔ Courriel دوبارہ شروع ہو رہا ہے…",
     'theme.midnight': 'آدھی رات', 'theme.premium': 'پریمیم', 'theme.modern': 'جدید',
     'theme.brutalist': 'بروٹلسٹ', 'theme.aero': 'Frutiger Aero', 'theme.terminal': 'ٹرمینل',
+    'theme.mozilla-blue': 'Mozilla نیلا', 'theme.redmond97': 'Redmond 97',
+    'theme.webmail': 'کلاسک ویب میل', 'theme.office-blue': 'Office نیلا',
 
     'greet.morning': 'صبح بخیر، {name}۔', 'greet.afternoon': 'سہ پہر بخیر، {name}۔', 'greet.evening': 'شام بخیر، {name}۔',
     'greet.morning.noname': 'صبح بخیر۔', 'greet.afternoon.noname': 'سہ پہر بخیر۔', 'greet.evening.noname': 'شام بخیر۔',

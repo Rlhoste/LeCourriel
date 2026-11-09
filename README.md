@@ -113,6 +113,10 @@ you like.
 - **Brutalist**: thick black borders, loud yellow, monospace, hard shadows.
 - **Frutiger Aero**: glossy bubbles and sky gradients, 2008 nostalgia included.
 - **Terminal**: green on black, for those who never left the shell.
+- **Mozilla Blue**: deep navy navigation and vivid blue actions, inspired by modern desktop mail.
+- **Redmond 97**: silver panels, navy title bars and raised controls from the classic Windows era.
+- **Classic Webmail**: compact white surfaces, warm greys and a familiar red compose button.
+- **Office Blue**: restrained Microsoft blue, Segoe typography and crisp productivity-app panels.
 
 Switch in **Settings → General** with a live preview, adjust the text size, and pick one of
 13 languages, including right-to-left Arabic and Urdu.

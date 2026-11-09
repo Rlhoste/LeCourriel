@@ -131,6 +131,8 @@ STRINGS.en = {
     "set.updateDownloading": "Downloading and installing the update…", "set.updateRestarting": "Update installed. Restarting Courriel…",
     'theme.midnight': 'Midnight', 'theme.premium': 'Premium', 'theme.modern': 'Modern',
     'theme.brutalist': 'Brutalist', 'theme.aero': 'Frutiger Aero', 'theme.terminal': 'Terminal',
+    'theme.mozilla-blue': 'Mozilla Blue', 'theme.redmond97': 'Redmond 97',
+    'theme.webmail': 'Classic Webmail', 'theme.office-blue': 'Office Blue',
 
     // Greeting and briefing (built from raw values sent by the backend)
     'greet.morning': 'Good morning, {name}.', 'greet.afternoon': 'Good afternoon, {name}.', 'greet.evening': 'Good evening, {name}.',

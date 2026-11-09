@@ -123,6 +123,8 @@ STRINGS.hi = {
     "set.updateDownloading": "अपडेट डाउनलोड और इंस्टॉल हो रहा है…", "set.updateRestarting": "अपडेट इंस्टॉल हो गया। Courriel पुनः आरंभ हो रहा है…",
     'theme.midnight': 'मिडनाइट', 'theme.premium': 'प्रीमियम', 'theme.modern': 'मॉडर्न',
     'theme.brutalist': 'ब्रूटलिस्ट', 'theme.aero': 'Frutiger Aero', 'theme.terminal': 'टर्मिनल',
+    'theme.mozilla-blue': 'Mozilla नीला', 'theme.redmond97': 'Redmond 97',
+    'theme.webmail': 'क्लासिक वेबमेल', 'theme.office-blue': 'Office नीला',
 
     'greet.morning': 'सुप्रभात, {name}।', 'greet.afternoon': 'नमस्ते, {name}।', 'greet.evening': 'शुभ संध्या, {name}।',
     'greet.morning.noname': 'सुप्रभात।', 'greet.afternoon.noname': 'नमस्ते।', 'greet.evening.noname': 'शुभ संध्या।',

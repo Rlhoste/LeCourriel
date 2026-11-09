@@ -123,6 +123,8 @@ STRINGS.ja = {
     "set.updateDownloading": "アップデートをダウンロードしてインストール中…", "set.updateRestarting": "アップデートをインストールしました。Courriel を再起動しています…",
     'theme.midnight': 'ミッドナイト', 'theme.premium': 'プレミアム', 'theme.modern': 'モダン',
     'theme.brutalist': 'ブルータリスト', 'theme.aero': 'Frutiger Aero', 'theme.terminal': 'ターミナル',
+    'theme.mozilla-blue': 'Mozilla ブルー', 'theme.redmond97': 'Redmond 97',
+    'theme.webmail': 'クラシック Webmail', 'theme.office-blue': 'Office ブルー',
 
     'greet.morning': 'おはようございます、{name} さん。', 'greet.afternoon': 'こんにちは、{name} さん。', 'greet.evening': 'こんばんは、{name} さん。',
     'greet.morning.noname': 'おはようございます。', 'greet.afternoon.noname': 'こんにちは。', 'greet.evening.noname': 'こんばんは。',

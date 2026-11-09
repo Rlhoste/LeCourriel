@@ -1963,6 +1963,240 @@ body.compose-window .composer-resize { display: none; }
 [data-theme="terminal"] .composer-body { text-shadow: none; }
 [data-theme="terminal"] .greeting::before { content: "> "; color: var(--text-dim); }
 
+/* ── Mozilla Blue: modern desktop mail ── */
+[data-theme="mozilla-blue"] {
+  --bg: #f4f7fb; --bg2: #fff; --bg3: #edf3fb; --border: #d8e0ec;
+  --accent: #0a84ff; --accent-dim: #006ed6; --on-accent: #fff;
+  --text: #17243a; --text-dim: #637188; --text-faint: #96a2b4;
+  --urgent: #d73a49; --high: #d97917; --task: #087ea4; --threat: #8b5cf6; --info: #637188; --ok: #2b9365;
+  --paper: #fff; --paper-2: #f8faff; --paper-3: #edf3fb; --paper-active: #dcecff;
+  --paper-strong: #13213a; --paper-text: #22304a; --paper-text-dim: #5d6a7d; --paper-text-faint: #98a3b2;
+  --paper-border: #ccd6e4; --paper-border-soft: #e5eaf1; --paper-chip: #e8f2ff;
+  --link: #006fdc; --link-hover: #0058b0; --link-disabled: #91bce8;
+  --danger: #b42332; --danger-bg: #fdebed; --success: #247a55;
+  --composer-head: #14233a; --composer-head-text: #fff; --composer-head-dim: #c9d7ea;
+  --toast-bg: #14233a; --toast-text: #fff;
+  --font-ui: "Inter", "Segoe UI", system-ui, sans-serif;
+  --radius: 8px; --radius-sm: 5px; --radius-pill: 999px;
+  --shadow-pop: 0 8px 24px rgba(20, 42, 72, 0.14);
+  --shadow-win: 0 20px 52px rgba(11, 27, 50, 0.28);
+  color-scheme: light;
+}
+[data-theme="mozilla-blue"] #sidebar { background: #101b2d; border-right-color: #263954; }
+[data-theme="mozilla-blue"] #sidebar-logo { color: #70b7ff; }
+[data-theme="mozilla-blue"] .nav-btn { color: #b8c7db; }
+[data-theme="mozilla-blue"] .nav-btn:hover { background: #1c2a40; color: #fff; }
+[data-theme="mozilla-blue"] .nav-btn.active {
+  background: #263d5f; color: #fff; box-shadow: inset 3px 0 0 #0a84ff;
+}
+[data-theme="mozilla-blue"][dir="rtl"] .nav-btn.active { box-shadow: inset -3px 0 0 #0a84ff; }
+[data-theme="mozilla-blue"] .compose-btn { background: #0a84ff !important; color: #fff !important; }
+[data-theme="mozilla-blue"] .ov-box,
+[data-theme="mozilla-blue"] .kanban-col { box-shadow: 0 2px 8px rgba(20, 42, 72, 0.08); }
+
+/* ── Redmond 97: classic Windows desktop ── */
+[data-theme="redmond97"] {
+  --bg: #fff; --bg2: #c0c0c0; --bg3: #d4d0c8; --border: #808080;
+  --accent: #000080; --accent-dim: #00005c; --on-accent: #fff;
+  --text: #000; --text-dim: #222; --text-faint: #666;
+  --urgent: #c00000; --high: #b05a00; --task: #000080; --threat: #800080; --info: #444; --ok: #008000;
+  --paper: #fff; --paper-2: #fff; --paper-3: #c0c0c0; --paper-active: #000080;
+  --paper-strong: #000; --paper-text: #000; --paper-text-dim: #333; --paper-text-faint: #777;
+  --paper-border: #808080; --paper-border-soft: #c0c0c0; --paper-chip: #d4d0c8;
+  --link: #0000ee; --link-hover: #551a8b; --link-disabled: #777;
+  --danger: #a00000; --danger-bg: #fff0f0; --success: #006400;
+  --composer-head: #000080; --composer-head-text: #fff; --composer-head-dim: #e0e0e0;
+  --toast-bg: #ffffe1; --toast-text: #000;
+  --font-ui: Tahoma, "MS Sans Serif", "Segoe UI", sans-serif;
+  --radius: 0; --radius-sm: 0; --radius-pill: 0; --border-w: 1px;
+  --shadow-pop: 2px 2px 0 #000;
+  --shadow-win: 4px 4px 0 rgba(0, 0, 0, 0.55);
+  color-scheme: light;
+}
+[data-theme="redmond97"] #sidebar {
+  padding: 8px 7px;
+  background: #c0c0c0;
+  border-right: 3px solid;
+  border-color: #fff #404040 #404040 #fff;
+  box-shadow: inset -1px 0 #808080;
+}
+[data-theme="redmond97"] #sidebar-logo {
+  padding: 5px 8px 12px;
+  color: #000080;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  text-shadow: none;
+}
+[data-theme="redmond97"] .sidebar-logo-img {
+  border: 2px inset #d4d0c8;
+  filter: none;
+}
+[data-theme="redmond97"] .nav-btn {
+  padding: 6px 9px;
+  color: #222;
+  transition: none;
+}
+[data-theme="redmond97"] .nav-btn:hover { background: #000080; color: #fff; }
+[data-theme="redmond97"] .nav-sep {
+  height: 2px;
+  background: transparent;
+  border-top: 1px solid #808080;
+  border-bottom: 1px solid #fff;
+}
+[data-theme="redmond97"] #ov-grid {
+  gap: 8px;
+  padding: 8px;
+  background: #fff;
+}
+[data-theme="redmond97"] .dialog,
+[data-theme="redmond97"] .ov-box,
+[data-theme="redmond97"] .kanban-col,
+[data-theme="redmond97"] .email-list-col,
+[data-theme="redmond97"] #projects-sidebar,
+[data-theme="redmond97"] #projects-detail {
+  background: #fff;
+  border-width: 2px;
+  border-style: solid;
+  border-color: #fff #404040 #404040 #fff;
+  box-shadow: inset 1px 1px 0 #dfdfdf, inset -1px -1px 0 #808080;
+}
+[data-theme="redmond97"] .ov-box-body { background: #fff; }
+[data-theme="redmond97"] .ov-box-title,
+[data-theme="redmond97"] .kanban-col-title {
+  padding: 4px 6px;
+  background: #000080;
+  border-bottom-color: #000040;
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-shadow: 1px 1px #000;
+}
+[data-theme="redmond97"] .email-row:hover,
+[data-theme="redmond97"] .task-row:hover,
+[data-theme="redmond97"] .meeting-row:hover { background: #e8e8e8; }
+[data-theme="redmond97"] .email-row.active { background: #000080; color: #fff; }
+[data-theme="redmond97"] .email-row.active .email-from,
+[data-theme="redmond97"] .email-row.active .email-subject,
+[data-theme="redmond97"] .email-row.active .email-summary,
+[data-theme="redmond97"] .email-row.active .email-date { color: #fff; }
+[data-theme="redmond97"] .row-mark::before { border-radius: 0; }
+[data-theme="redmond97"] #ov-week-strip {
+  background: #fff;
+  border-top: 2px inset #d4d0c8;
+}
+[data-theme="redmond97"] .week-day.today { background: #d4d0c8; }
+[data-theme="redmond97"] .week-dl-pill { background: #c0c0c0; color: #222; }
+[data-theme="redmond97"] .primary-btn,
+[data-theme="redmond97"] .secondary-btn,
+[data-theme="redmond97"] .compose-btn,
+[data-theme="redmond97"] .rp-btn,
+[data-theme="redmond97"] .composer-send,
+[data-theme="redmond97"] .ov-filter-btn {
+  background: #c0c0c0;
+  border: 2px outset #d4d0c8;
+  color: #000;
+  box-shadow: none;
+  font-weight: 400;
+  text-shadow: none;
+}
+[data-theme="redmond97"] .compose-btn {
+  background: #c0c0c0 !important;
+  color: #000 !important;
+}
+[data-theme="redmond97"] .compose-btn:hover {
+  background: #d4d0c8 !important;
+  color: #000 !important;
+}
+[data-theme="redmond97"] .primary-btn:active,
+[data-theme="redmond97"] .secondary-btn:active,
+[data-theme="redmond97"] .compose-btn:active,
+[data-theme="redmond97"] .rp-btn:active,
+[data-theme="redmond97"] .composer-send:active,
+[data-theme="redmond97"] .ov-filter-btn:active { border-style: inset; }
+[data-theme="redmond97"] input,
+[data-theme="redmond97"] textarea,
+[data-theme="redmond97"] select {
+  background: #fff;
+  color: #000;
+  border: 2px inset #d4d0c8;
+  box-shadow: none;
+}
+[data-theme="redmond97"] .dialog-header,
+[data-theme="redmond97"] .composer-header { background: #000080; color: #fff; padding: 4px 6px; }
+[data-theme="redmond97"] .dialog-header .close-btn,
+[data-theme="redmond97"] .composer-header .close-btn { color: #fff; }
+[data-theme="redmond97"] .panel-header { color: #000; border-bottom-color: #808080; }
+[data-theme="redmond97"] .panel-header .briefing { color: #222; }
+[data-theme="redmond97"] .panel-header .icon-btn { color: #000; }
+[data-theme="redmond97"] .nav-btn.active { background: #000080; color: #fff; }
+[data-theme="redmond97"] .tab {
+  background: #c0c0c0;
+  border: 2px outset #d4d0c8;
+  color: #000;
+}
+[data-theme="redmond97"] .tab.active { background: #fff; border-style: inset; color: #000; }
+
+/* ── Classic Webmail: compact, warm and familiar ── */
+[data-theme="webmail"] {
+  --bg: #f6f7f7; --bg2: #fff; --bg3: #f1f3f4; --border: #dadce0;
+  --accent: #c5221f; --accent-dim: #a91b18; --on-accent: #fff;
+  --text: #202124; --text-dim: #5f6368; --text-faint: #9aa0a6;
+  --urgent: #d93025; --high: #e37400; --task: #1a73e8; --threat: #a142f4; --info: #5f6368; --ok: #188038;
+  --paper: #fff; --paper-2: #fafafa; --paper-3: #f1f3f4; --paper-active: #fce8e6;
+  --paper-strong: #202124; --paper-text: #202124; --paper-text-dim: #5f6368; --paper-text-faint: #9aa0a6;
+  --paper-border: #dadce0; --paper-border-soft: #eceff1; --paper-chip: #fce8e6;
+  --link: #1a73e8; --link-hover: #1558b0; --link-disabled: #9bbcf0;
+  --danger: #c5221f; --danger-bg: #fce8e6; --success: #188038;
+  --composer-head: #404040; --composer-head-text: #fff; --composer-head-dim: #ddd;
+  --toast-bg: #3c4043; --toast-text: #fff;
+  --font-ui: Arial, "Helvetica Neue", sans-serif;
+  --radius: 4px; --radius-sm: 3px; --radius-pill: 18px;
+  --shadow-pop: 0 2px 8px rgba(60, 64, 67, 0.18);
+  --shadow-win: 0 8px 24px rgba(60, 64, 67, 0.28);
+  color-scheme: light;
+}
+[data-theme="webmail"] .compose-btn {
+  background: #c5221f !important; color: #fff !important; border-radius: 3px;
+  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.3); text-transform: uppercase;
+}
+[data-theme="webmail"] .nav-btn.active { background: #fce8e6; color: #b3261e; font-weight: 700; }
+[data-theme="webmail"] .email-row.active { border-left-color: #c5221f; }
+[data-theme="webmail"][dir="rtl"] .email-row.active { border-right-color: #c5221f; }
+[data-theme="webmail"] .ov-box,
+[data-theme="webmail"] .kanban-col { box-shadow: none; }
+
+/* ── Office Blue: current productivity-suite styling ── */
+[data-theme="office-blue"] {
+  --bg: #f5f5f5; --bg2: #faf9f8; --bg3: #edebe9; --border: #d2d0ce;
+  --accent: #0f6cbd; --accent-dim: #115ea3; --on-accent: #fff;
+  --text: #242424; --text-dim: #616161; --text-faint: #929292;
+  --urgent: #d13438; --high: #ca5010; --task: #0078d4; --threat: #8764b8; --info: #616161; --ok: #107c10;
+  --paper: #fff; --paper-2: #fafafa; --paper-3: #f3f2f1; --paper-active: #e5f1fb;
+  --paper-strong: #201f1e; --paper-text: #323130; --paper-text-dim: #605e5c; --paper-text-faint: #a19f9d;
+  --paper-border: #d2d0ce; --paper-border-soft: #edebe9; --paper-chip: #deecf9;
+  --link: #0f6cbd; --link-hover: #115ea3; --link-disabled: #8bb8df;
+  --danger: #a4262c; --danger-bg: #fde7e9; --success: #107c10;
+  --composer-head: #0f6cbd; --composer-head-text: #fff; --composer-head-dim: #d7e9f7;
+  --toast-bg: #323130; --toast-text: #fff;
+  --font-ui: "Segoe UI", "Segoe UI Variable", system-ui, sans-serif;
+  --radius: 4px; --radius-sm: 2px; --radius-pill: 999px;
+  --shadow-pop: 0 4px 12px rgba(0, 0, 0, 0.14);
+  --shadow-win: 0 16px 40px rgba(0, 0, 0, 0.24);
+  color-scheme: light;
+}
+[data-theme="office-blue"] #sidebar { background: #f3f2f1; }
+[data-theme="office-blue"] #sidebar-logo { color: #0f6cbd; }
+[data-theme="office-blue"] .nav-btn.active {
+  background: #e5f1fb; color: #0f548c; box-shadow: inset 3px 0 0 #0f6cbd; font-weight: 600;
+}
+[data-theme="office-blue"][dir="rtl"] .nav-btn.active { box-shadow: inset -3px 0 0 #0f6cbd; }
+[data-theme="office-blue"] .tab.active {
+  background: transparent; color: #0f6cbd; box-shadow: inset 0 -2px 0 #0f6cbd; border-radius: 0;
+}
+[data-theme="office-blue"] .ov-box,
+[data-theme="office-blue"] .kanban-col { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
+
 /* ── Theme picker (Settings → General) ── */
 .theme-grid {
   display: grid;
@@ -2002,6 +2236,12 @@ body.compose-window .composer-resize { display: none; }
 }
 .theme-card[data-theme="aero"] .theme-card-preview { background: linear-gradient(180deg, #9fdcff 0%, #c9f0d3 100%); }
 .theme-card[data-theme="aero"] .theme-card-name { background: #e8f6ff; }
+.theme-card[data-theme="mozilla-blue"] .theme-card-side { background: #101b2d; border-color: #263954; }
+.theme-card[data-theme="redmond97"] .theme-card-preview { background: #fff; }
+.theme-card[data-theme="redmond97"] .theme-card-side,
+.theme-card[data-theme="redmond97"] .theme-card-paper { border-color: #fff #404040 #404040 #fff; }
+.theme-card[data-theme="webmail"] .theme-card-bar { background: #c5221f; }
+.theme-card[data-theme="office-blue"] .theme-card-bar { background: #0f6cbd; }
 
 /* Settings → Cloud */
 .checkbox-label { display: flex; align-items: center; gap: 8px; cursor: pointer; }

@@ -123,6 +123,8 @@ STRINGS.de = {
     "set.updateDownloading": "Update wird heruntergeladen und installiert…", "set.updateRestarting": "Update installiert. Courriel wird neu gestartet…",
     'theme.midnight': 'Mitternacht', 'theme.premium': 'Premium', 'theme.modern': 'Modern',
     'theme.brutalist': 'Brutalistisch', 'theme.aero': 'Frutiger Aero', 'theme.terminal': 'Terminal',
+    'theme.mozilla-blue': 'Mozilla-Blau', 'theme.redmond97': 'Redmond 97',
+    'theme.webmail': 'Klassisches Webmail', 'theme.office-blue': 'Office-Blau',
 
     'greet.morning': 'Guten Morgen, {name}.', 'greet.afternoon': 'Guten Tag, {name}.', 'greet.evening': 'Guten Abend, {name}.',
     'greet.morning.noname': 'Guten Morgen.', 'greet.afternoon.noname': 'Guten Tag.', 'greet.evening.noname': 'Guten Abend.',

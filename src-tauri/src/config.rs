@@ -113,7 +113,8 @@ pub struct UserConfig {
     pub display_name: String,
     #[serde(default = "default_font_scale")]
     pub font_scale: f32,
-    /// UI theme: midnight, premium (was white), modern, brutalist, aero, terminal.
+    /// UI theme: midnight, premium (was white), modern, brutalist, aero, terminal,
+    /// mozilla-blue, redmond97, webmail, or office-blue.
     #[serde(default = "default_theme")]
     pub theme: String,
     /// UI language: "en" or "fr".

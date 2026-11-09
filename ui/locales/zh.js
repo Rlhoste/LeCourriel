@@ -123,6 +123,8 @@ STRINGS.zh = {
     "set.updateDownloading": "正在下载并安装更新…", "set.updateRestarting": "更新已安装。正在重启 Courriel…",
     'theme.midnight': '午夜', 'theme.premium': '尊享', 'theme.modern': '现代',
     'theme.brutalist': '粗野主义', 'theme.aero': 'Frutiger Aero', 'theme.terminal': '终端',
+    'theme.mozilla-blue': 'Mozilla 蓝', 'theme.redmond97': 'Redmond 97',
+    'theme.webmail': '经典网页邮箱', 'theme.office-blue': 'Office 蓝',
 
     'greet.morning': '早上好，{name}。', 'greet.afternoon': '下午好，{name}。', 'greet.evening': '晚上好，{name}。',
     'greet.morning.noname': '早上好。', 'greet.afternoon.noname': '下午好。', 'greet.evening.noname': '晚上好。',

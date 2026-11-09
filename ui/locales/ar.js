@@ -130,6 +130,8 @@ STRINGS.ar = {
     "set.updateDownloading": "جارٍ تنزيل التحديث وتثبيته…", "set.updateRestarting": "تم تثبيت التحديث. جارٍ إعادة تشغيل Courriel…",
     'theme.midnight': 'منتصف الليل', 'theme.premium': 'مميّز', 'theme.modern': 'عصري',
     'theme.brutalist': 'وحشي', 'theme.aero': 'Frutiger Aero', 'theme.terminal': 'الطرفية',
+    'theme.mozilla-blue': 'أزرق Mozilla', 'theme.redmond97': 'Redmond 97',
+    'theme.webmail': 'بريد الويب الكلاسيكي', 'theme.office-blue': 'أزرق Office',
 
     'greet.morning': 'صباح الخير يا {name}.', 'greet.afternoon': 'مساء الخير يا {name}.', 'greet.evening': 'مساء الخير يا {name}.',
     'greet.morning.noname': 'صباح الخير.', 'greet.afternoon.noname': 'مساء الخير.', 'greet.evening.noname': 'مساء الخير.',

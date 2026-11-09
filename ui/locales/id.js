@@ -123,6 +123,8 @@ STRINGS.id = {
     "set.updateDownloading": "Mengunduh dan memasang pembaruan…", "set.updateRestarting": "Pembaruan terpasang. Memulai ulang Courriel…",
     'theme.midnight': 'Tengah Malam', 'theme.premium': 'Premium', 'theme.modern': 'Modern',
     'theme.brutalist': 'Brutalis', 'theme.aero': 'Frutiger Aero', 'theme.terminal': 'Terminal',
+    'theme.mozilla-blue': 'Biru Mozilla', 'theme.redmond97': 'Redmond 97',
+    'theme.webmail': 'Webmail Klasik', 'theme.office-blue': 'Biru Office',
 
     'greet.morning': 'Selamat pagi, {name}.', 'greet.afternoon': 'Selamat siang, {name}.', 'greet.evening': 'Selamat malam, {name}.',
     'greet.morning.noname': 'Selamat pagi.', 'greet.afternoon.noname': 'Selamat siang.', 'greet.evening.noname': 'Selamat malam.',

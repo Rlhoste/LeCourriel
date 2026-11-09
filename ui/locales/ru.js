@@ -127,6 +127,8 @@ STRINGS.ru = {
     "set.updateDownloading": "Загрузка и установка обновления…", "set.updateRestarting": "Обновление установлено. Перезапуск Courriel…",
     'theme.midnight': 'Полночь', 'theme.premium': 'Премиум', 'theme.modern': 'Современная',
     'theme.brutalist': 'Брутализм', 'theme.aero': 'Frutiger Aero', 'theme.terminal': 'Терминал',
+    'theme.mozilla-blue': 'Синий Mozilla', 'theme.redmond97': 'Redmond 97',
+    'theme.webmail': 'Классическая веб-почта', 'theme.office-blue': 'Синий Office',
 
     'greet.morning': 'Доброе утро, {name}.', 'greet.afternoon': 'Добрый день, {name}.', 'greet.evening': 'Добрый вечер, {name}.',
     'greet.morning.noname': 'Доброе утро.', 'greet.afternoon.noname': 'Добрый день.', 'greet.evening.noname': 'Добрый вечер.',
