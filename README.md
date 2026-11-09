@@ -4,6 +4,8 @@
 
 # Le courriel
 
+Client mail open source en Rust, boosté par l'IA
+
 Download link: [link](https://github.com/Rlhoste/LeCourriel/releases)
 
 **An AI-boosted alternative to Thunderbird.** Free, open source, and it works with the mailbox you
