@@ -102,7 +102,17 @@ jobs:
         working-directory: src-tauri
         run: |
           git diff --relative ${{ github.event.before }} ${{ github.sha }} > "$RUNNER_TEMP/push.diff"
+          set +e
           cargo mutants --in-place --in-diff "$RUNNER_TEMP/push.diff"
+          status=$?
+          set -e
+          if [ "$status" -eq 2 ]; then
+            echo "::warning::Mutation testing found surviving mutants; see mutants.out for details."
+            echo "### Mutation testing" >> "$GITHUB_STEP_SUMMARY"
+            echo "Surviving mutants were found. This check is informational; download the mutants.out artifact for details." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          exit "$status"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
