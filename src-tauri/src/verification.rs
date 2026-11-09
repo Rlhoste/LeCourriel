@@ -96,6 +96,7 @@ mod tests {
             is_read: false,
             body_text: body.into(),
             body_html: String::new(),
+            attachments: vec![],
             project: None,
             deadline: None,
             task: None,

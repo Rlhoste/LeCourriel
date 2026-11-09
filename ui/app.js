@@ -664,18 +664,70 @@ function showEmail(section, email) {
 
   section.querySelector('.rp-subject').textContent = email.subject;
   section.querySelector('.rp-meta').innerHTML = metaHtml(email);
+  renderAttachments(section.querySelector('.rp-attachments'), email);
 
-  const iframe = section.querySelector('.rp-iframe');
-  setIframeContent(iframe, email, remoteContentAllowed.has(emailContentKey(email)));
+  const body = section.querySelector('.rp-email-body');
+  setEmailBodyContent(body, email, remoteContentAllowed.has(emailContentKey(email)));
 
   renderActions(section.querySelector('.rp-actions'), email, () => {
     content.classList.add('hidden');
     placeholder.style.display = '';
   }, () => {
     remoteContentAllowed.add(emailContentKey(email));
-    setIframeContent(iframe, email, true);
+    setEmailBodyContent(body, email, true);
   });
   setRead(email, true);
+}
+
+function formatAttachmentSize(bytes) {
+  const size = Number(bytes) || 0;
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(size < 10 * 1024 ? 1 : 0)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(size < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+}
+
+function renderAttachments(container, email) {
+  if (!container) return;
+  const attachments = email.attachments || [];
+  container.classList.toggle('hidden', !attachments.length);
+  if (!attachments.length) { container.innerHTML = ''; return; }
+  container.innerHTML = `
+    <div class="rp-attachments-title">📎 ${t('rp.attachments', { n: attachments.length })}</div>
+    <div class="rp-attachment-list">${attachments.map((item, index) => `
+      <div class="rp-attachment" data-index="${index}">
+        <button class="rp-attachment-main" data-attachment-act="open" title="${t('rp.openAttachment')}">
+          <span class="rp-attachment-icon" aria-hidden="true">📄</span>
+          <span class="rp-attachment-info"><strong>${esc(item.filename)}</strong><small>${esc(item.mime_type || t('rp.unknownFile'))} · ${formatAttachmentSize(item.size)}</small></span>
+        </button>
+        <button class="rp-attachment-save" data-attachment-act="save" title="${t('rp.saveAttachment')}" aria-label="${t('rp.saveAttachment')}">⇩</button>
+      </div>`).join('')}</div>
+    <div class="rp-attachment-status" aria-live="polite"></div>`;
+  const status = container.querySelector('.rp-attachment-status');
+  container.querySelectorAll('.rp-attachment').forEach(card => {
+    const item = attachments[+card.dataset.index];
+    const setBusy = busy => card.querySelectorAll('button').forEach(button => { button.disabled = busy; });
+    card.querySelectorAll('[data-attachment-act]').forEach(button => button.addEventListener('click', async event => {
+      event.stopPropagation();
+      setBusy(true);
+      status.classList.remove('error');
+      status.textContent = t('rp.loadingAttachment');
+      try {
+        const args = { uid: email.uid, folder: panelForEmail(email), partId: item.part_id };
+        if (button.dataset.attachmentAct === 'save') {
+          const path = await cmd('save_attachment', { ...args, filter: t('rp.attachmentFilter') });
+          status.textContent = path ? t('rp.savedTo', { path }) : '';
+        } else {
+          await cmd('open_attachment', args);
+          status.textContent = '';
+        }
+      } catch (error) {
+        status.classList.add('error');
+        status.textContent = t('rp.attachmentError', { err: String(error) });
+      } finally {
+        setBusy(false);
+      }
+    }));
+  });
 }
 
 // Mark an inbox email read: locally right away, on the server in the background.
@@ -913,42 +965,109 @@ function personChip(addr) {
     : `<span class="rp-person">${esc(mail)}</span>`;
 }
 
-function setIframeContent(iframe, email, allowRemote = false) {
-  const html = email.body_html
-    ? protectEmailHtml(wrapHtml(email.body_html), allowRemote)
-    : `<html><body style="font-family:system-ui,sans-serif;font-size:14px;padding:16px;white-space:pre-wrap;color:#111">${esc(email.body_text)}</body></html>`;
-  // The backend has already decoded MIME charsets into a Unicode string. Declare
-  // UTF-8 explicitly so stale charset meta tags in the original mail cannot turn
-  // French characters such as é into mojibake.
-  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  iframe.src = url;
-  iframe.onload = () => URL.revokeObjectURL(url);
+function setEmailBodyContent(host, email, allowRemote = false) {
+  for (const url of host._embeddedImageUrls || []) URL.revokeObjectURL(url);
+  host._embeddedImageUrls = [];
+
+  if (!email.body_html) {
+    host.innerHTML = `<pre>${esc(email.body_text)}</pre>`;
+    return;
+  }
+
+  const safe = protectEmailHtml(wrapHtml(email.body_html), allowRemote);
+  const doc = new DOMParser().parseFromString(safe, 'text/html');
+  // Email stylesheets must not escape into the application UI. Safe inline styles
+  // remain on their own elements, which preserves the common email formatting.
+  doc.querySelectorAll('style, link').forEach(element => element.remove());
+  // Convert before inserting the markup. WebKitGTK may keep the failed state of
+  // a connected data: image even after its src is changed to a valid blob URL.
+  doc.querySelectorAll('img[src]').forEach(image => {
+    try {
+      const decoded = CourrielCore.decodeEmbeddedRasterImage(image.getAttribute('src'));
+      const svg = decoded ? null : CourrielCore.decodeEmbeddedSvgImage(image.getAttribute('src'));
+      if (!decoded && !svg) return;
+      const content = decoded ? decoded.bytes : sanitizeEmbeddedSvg(svg.text);
+      const mimeType = decoded ? decoded.mimeType : svg.mimeType;
+      const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
+      host._embeddedImageUrls.push(url);
+      image.setAttribute('src', url);
+    } catch (error) {
+      console.warn('Could not display embedded email image:', error);
+      image.removeAttribute('src');
+    }
+  });
+  host.innerHTML = `<div class="email-body">${doc.body.innerHTML}</div>`;
+  const bodyStyle = doc.body.getAttribute('style');
+  if (bodyStyle) host.firstElementChild.setAttribute('style', bodyStyle);
+}
+
+// SVG is rendered only through an <img>, where WebKit disables scripting and
+// interaction. This additional pass removes active and network-capable content
+// before the SVG bytes are handed to the image decoder.
+function sanitizeEmbeddedSvg(source) {
+  if (/<!doctype|<!entity/i.test(source)) throw new Error('SVG document declarations are not allowed');
+  const doc = new DOMParser().parseFromString(source, 'image/svg+xml');
+  if (doc.querySelector('parsererror') || doc.documentElement.localName !== 'svg') {
+    throw new Error('Invalid SVG image');
+  }
+  doc.querySelectorAll('script, foreignObject, iframe, frame, object, embed, applet, audio, video, link, meta')
+    .forEach(element => element.remove());
+  doc.querySelectorAll('*').forEach(element => {
+    for (const attr of Array.from(element.attributes)) {
+      const name = attr.localName.toLowerCase();
+      const compact = attr.value.replace(/[\s\u0000-\u001f]/g, '').toLowerCase();
+      if (name.startsWith('on') || name === 'srcdoc' || compact.startsWith('javascript:') || compact.startsWith('vbscript:')) {
+        element.removeAttributeNode(attr);
+      } else if (name === 'style') {
+        attr.value = CourrielCore.sanitizeEmbeddedSvgCss(attr.value);
+      } else if (name === 'href' || name === 'src') {
+        const rasterAllowed = element.localName === 'image';
+        if (!CourrielCore.isSafeEmbeddedSvgReference(attr.value, rasterAllowed)) element.removeAttributeNode(attr);
+      } else if (/url\s*\(/i.test(attr.value)) {
+        attr.value = CourrielCore.sanitizeEmbeddedSvgCss(attr.value);
+      }
+    }
+  });
+  doc.querySelectorAll('style').forEach(element => {
+    element.textContent = CourrielCore.sanitizeEmbeddedSvgCss(element.textContent);
+  });
+  return new XMLSerializer().serializeToString(doc.documentElement);
 }
 
 function hasRemoteContent(html) {
-  return /(?:\bsrc\s*=|\bsrcset\s*=|\bposter\s*=|\bbackground\s*=|url\s*\()[^>]*(?:https?:)?\/\//i.test(html || '') ||
-    /<link\b[^>]*href\s*=\s*["']?(?:https?:)?\/\//i.test(html || '');
+  const doc = new DOMParser().parseFromString(html || '', 'text/html');
+  for (const element of doc.querySelectorAll('[src], [srcset], [poster], [background], link[href]')) {
+    for (const name of ['src', 'srcset', 'poster', 'background', 'href']) {
+      if (element.hasAttribute(name) && CourrielCore.isRemoteResourceUrl(element.getAttribute(name), name === 'srcset')) return true;
+    }
+  }
+  return Array.from(doc.querySelectorAll('[style], style'))
+    .some(element => /url\(\s*(['"]?)(?:https?:)?\/\//i.test(element.getAttribute('style') || element.textContent || ''));
 }
 
-// Email HTML is hostile input. The iframe sandbox blocks scripts, while this pass also
-// prevents network tracking until the user explicitly loads remote content.
+// Email HTML is hostile input. Strip executable content before inserting it into the
+// reading pane, and prevent network tracking until the user explicitly loads it.
 function protectEmailHtml(html, allowRemote = false, fragment = false) {
   const doc = new DOMParser().parseFromString(html || '', 'text/html');
-  doc.querySelectorAll('script, iframe, frame, frameset, object, embed, applet, form, input, button, textarea, select, base')
+  doc.querySelectorAll('script, iframe, frame, frameset, object, embed, applet, form, input, button, textarea, select, base, svg, math')
     .forEach(el => el.remove());
   doc.querySelectorAll('meta[http-equiv]').forEach(el => el.remove());
   doc.querySelectorAll('*').forEach(el => {
     for (const attr of Array.from(el.attributes)) {
       const name = attr.name.toLowerCase();
       const compact = attr.value.replace(/[\s\u0000-\u001f]/g, '').toLowerCase();
+      const safeEmbeddedImage = el.tagName === 'IMG' &&
+        (/^data:image\/(?:png|jpeg|gif|webp);base64,/i.test(compact) ||
+         /^data:image\/svg\+xml(?:;charset=[^;,]+)?(?:;base64)?,/i.test(compact));
       if (name.startsWith('on') || name === 'srcdoc' || name === 'formaction' ||
           (['href', 'src', 'action', 'xlink:href', 'background'].includes(name) &&
-           (compact.startsWith('javascript:') || compact.startsWith('vbscript:') || compact.startsWith('data:text')))) {
+           (compact.startsWith('javascript:') || compact.startsWith('vbscript:') ||
+            (compact.startsWith('data:') && !safeEmbeddedImage)))) {
         el.removeAttribute(attr.name);
         continue;
       }
-      if (!allowRemote && ['src', 'srcset', 'poster', 'background'].includes(name) && /(?:https?:)?\/\//i.test(compact)) {
+      if (!allowRemote && ['src', 'srcset', 'poster', 'background'].includes(name) &&
+          CourrielCore.isRemoteResourceUrl(attr.value, name === 'srcset')) {
         el.removeAttribute(attr.name);
       }
       if (!allowRemote && name === 'style') {
@@ -962,7 +1081,7 @@ function protectEmailHtml(html, allowRemote = false, fragment = false) {
       el.textContent = el.textContent
         .replace(/@import[^;]+;/gi, '')
         .replace(/url\(\s*(['"]?)(?:https?:)?\/\/[^)]*\)/gi, 'none');
-    });
+      });
   }
   return fragment ? doc.body.innerHTML : `<!DOCTYPE html>${doc.documentElement.outerHTML}`;
 }
@@ -1202,7 +1321,8 @@ async function openSearchHit(h) {
     const pane = $s('search-preview');
     pane.querySelector('.rp-subject').textContent = email.subject;
     pane.querySelector('.rp-meta').innerHTML = metaHtml(email);
-    setIframeContent(pane.querySelector('.rp-iframe'), email);
+    renderAttachments(pane.querySelector('.rp-attachments'), email);
+    setEmailBodyContent(pane.querySelector('.rp-email-body'), email);
     showSearchSide('preview');
     return;
   }
@@ -1817,15 +1937,16 @@ function showProjectEmail(email) {
   pane.classList.remove('hidden');
   const header = document.getElementById('proj-rp-header');
   header.innerHTML = `<div class="rp-header"><div class="rp-subject">${esc(email.subject)}</div><div class="rp-meta">${metaHtml(email)}</div><div class="rp-actions"></div></div>`;
-  const iframe = document.getElementById('proj-rp-iframe');
-  setIframeContent(iframe, email, remoteContentAllowed.has(emailContentKey(email)));
+  const body = document.getElementById('proj-rp-body');
+  renderAttachments(document.getElementById('proj-rp-attachments'), email);
+  setEmailBodyContent(body, email, remoteContentAllowed.has(emailContentKey(email)));
   renderActions(header.querySelector('.rp-actions'), email, () => {
     pane.classList.add('hidden');
     const p = appState.projects.find(p => p.name === activeProject);
     if (p) showProject(p);
   }, () => {
     remoteContentAllowed.add(emailContentKey(email));
-    setIframeContent(iframe, email, true);
+    setEmailBodyContent(body, email, true);
   });
   setRead(email, true);
 }
@@ -4133,6 +4254,7 @@ function emailRow(email) {
       <div class="email-row-top">
         <span class="email-from">${esc(email.from_name)}</span>
         ${projectChip(email.project)}
+        ${email.attachments?.length ? `<span class="email-attachment-mark" title="${t('rp.attachments', { n: email.attachments.length })}">📎</span>` : ''}
         <span class="email-date">${esc(emailDateShort(email))}</span>
       </div>
       <div class="email-subject">${esc(email.subject)}</div>

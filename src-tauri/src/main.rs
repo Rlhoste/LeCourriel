@@ -298,6 +298,7 @@ fn get_email(uid: u64, shared: State<'_, SharedState>) -> Option<dto::EmailCardD
         task: c.task.clone().unwrap_or_default(),
         body_text: c.body_text.clone(),
         body_html: c.body_html.clone(),
+        attachments: c.attachments.clone(),
         meeting_link: c.meeting_link.clone().unwrap_or_default(),
     })
 }
@@ -1164,6 +1165,96 @@ async fn save_email(
     Ok(Some(path.display().to_string()))
 }
 
+fn attachment_source(shared: &SharedState, uid: u64, folder: &str) -> Result<(config::ImapConfig, u32), String> {
+    let (account, folders, imap_uid) = account_of(shared, uid)?;
+    let mailbox = match folder {
+        "sent" => folders.sent,
+        "drafts" => folders.drafts,
+        "trash" => folders.trash,
+        "spam" => spam_name(&folders),
+        _ => account.imap.mailbox.clone(),
+    };
+    Ok((config::ImapConfig { mailbox, ..account.imap }, imap_uid))
+}
+
+fn safe_attachment_name(name: &str) -> String {
+    let cleaned: String =
+        name.chars()
+            .map(|c| {
+                if c.is_control() || matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') {
+                    '_'
+                } else {
+                    c
+                }
+            })
+            .take(160)
+            .collect();
+    let cleaned = cleaned.trim().trim_matches('.');
+    if cleaned.is_empty() {
+        "attachment".into()
+    } else {
+        cleaned.into()
+    }
+}
+
+async fn load_attachment(
+    shared: &SharedState,
+    uid: u64,
+    folder: &str,
+    part_id: &str,
+) -> Result<(models::AttachmentMeta, Vec<u8>), String> {
+    let (source, imap_uid) = attachment_source(shared, uid, folder)?;
+    let raw = imap_client::fetch_raw(&source, imap_uid).await.map_err(|e| format!("{:#}", e))?;
+    imap_client::attachment_from_message(&raw, part_id).map_err(|e| format!("{:#}", e))
+}
+
+/// Decode an attachment only after the user chooses it, then ask where it should be saved.
+#[tauri::command]
+async fn save_attachment(
+    app: AppHandle,
+    uid: u64,
+    folder: String,
+    part_id: String,
+    filter: String,
+    shared: State<'_, SharedState>,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let (meta, bytes) = load_attachment(shared.inner(), uid, &folder, &part_id).await?;
+    let name = safe_attachment_name(&meta.filename);
+    let mut dialog = app.dialog().file().set_file_name(&name);
+    if let Some(extension) = std::path::Path::new(&name).extension().and_then(|s| s.to_str()).filter(|s| !s.is_empty())
+    {
+        dialog = dialog.add_filter(filter, &[extension]);
+    }
+    let Some(path) = dialog.blocking_save_file() else { return Ok(None) };
+    let path = path.into_path().map_err(|e| e.to_string())?;
+    std::fs::write(&path, bytes).map_err(|e| format!("Could not write {}: {}", path.display(), e))?;
+    Ok(Some(path.display().to_string()))
+}
+
+/// Put an attachment in the OS temporary directory and open it with the default application.
+#[tauri::command]
+async fn open_attachment(
+    app: AppHandle,
+    uid: u64,
+    folder: String,
+    part_id: String,
+    shared: State<'_, SharedState>,
+) -> Result<(), String> {
+    use tauri_plugin_shell::ShellExt;
+    let (meta, bytes) = load_attachment(shared.inner(), uid, &folder, &part_id).await?;
+    let dir = std::env::temp_dir().join("le-courriel-attachments");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Could not create {}: {}", dir.display(), e))?;
+    let id = part_id.replace('.', "-");
+    let path = dir.join(format!("{uid}-{id}-{}", safe_attachment_name(&meta.filename)));
+    std::fs::write(&path, bytes).map_err(|e| format!("Could not write {}: {}", path.display(), e))?;
+    #[allow(deprecated)]
+    app.shell()
+        .open(path.display().to_string(), None)
+        .map_err(|e| format!("Could not open {}: {}", path.display(), e))?;
+    Ok(())
+}
+
 /// Hide a task, deadline or meeting item without touching the email.
 #[tauri::command]
 fn dismiss_item(kind: String, uid: u64) -> Result<(), String> {
@@ -1313,6 +1404,8 @@ fn main() {
             set_read,
             set_email_project,
             save_email,
+            save_attachment,
+            open_attachment,
             signature_import,
             signature_get,
             compose_accounts,

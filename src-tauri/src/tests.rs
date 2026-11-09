@@ -192,6 +192,54 @@ api_key = "k" model = "m" max_tokens = 100
         );
     }
 
+    #[test]
+    fn test_mail_attachments_are_listed_and_decoded_without_replacing_body() {
+        let raw = concat!(
+            "MIME-Version: 1.0\r\n",
+            "Content-Type: multipart/mixed; boundary=outer\r\n\r\n",
+            "--outer\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nMessage body\r\n",
+            "--outer\r\nContent-Type: text/plain; name=notes.txt\r\n",
+            "Content-Disposition: attachment; filename=notes.txt\r\n\r\nAttached notes\r\n",
+            "--outer\r\nContent-Type: application/pdf; name=report.pdf\r\n",
+            "Content-Disposition: attachment; filename=report.pdf\r\n",
+            "Content-Transfer-Encoding: base64\r\n\r\nJVBERi0xLjQ=\r\n",
+            "--outer--\r\n"
+        );
+        let parsed = mailparse::parse_mail(raw.as_bytes()).unwrap();
+        let (plain, _, attachments) = crate::imap_client::extract_message_parts(&parsed);
+        assert_eq!(plain.trim(), "Message body");
+        assert_eq!(attachments.len(), 2);
+        assert_eq!(attachments[0].filename, "notes.txt");
+        assert_eq!(attachments[0].part_id, "2");
+        assert_eq!(attachments[1].mime_type, "application/pdf");
+        let (meta, bytes) = crate::imap_client::attachment_from_message(raw.as_bytes(), "3").unwrap();
+        assert_eq!(meta.filename, "report.pdf");
+        assert_eq!(bytes, b"%PDF-1.4");
+    }
+
+    #[test]
+    fn test_referenced_inline_image_is_not_a_downloadable_attachment() {
+        let raw = concat!(
+            "MIME-Version: 1.0\r\n",
+            "Content-Type: multipart/related; boundary=related\r\n\r\n",
+            "--related\r\nContent-Type: text/html\r\n\r\n<p>Hello<img src=\"cid:logo@example\"></p>\r\n",
+            "--related\r\nContent-Type: image/png; name=logo.png\r\n",
+            "Content-Disposition: inline; filename=logo.png\r\n",
+            "Content-ID: <logo@example>\r\nContent-Transfer-Encoding: base64\r\n\r\naW1hZ2U=\r\n",
+            "--related--\r\n"
+        );
+        let parsed = mailparse::parse_mail(raw.as_bytes()).unwrap();
+        let (_, html, attachments) = crate::imap_client::extract_message_parts(&parsed);
+        assert!(attachments.is_empty());
+        assert!(html.unwrap().contains("data:image/png;base64,aW1hZ2U="));
+    }
+
+    #[test]
+    fn test_attachment_filename_is_safe() {
+        assert_eq!(crate::safe_attachment_name("../../bad:name?.pdf"), "_.._bad_name_.pdf");
+        assert_eq!(crate::safe_attachment_name("..."), "attachment");
+    }
+
     // ── EmailCard serialization ───────────────────────────────────────────────
 
     #[test]
@@ -215,6 +263,7 @@ api_key = "k" model = "m" max_tokens = 100
             is_read: false,
             body_text: "Plain body".to_string(),
             body_html: "<p>HTML body</p>".to_string(),
+            attachments: vec![],
             project: Some("MyProject".to_string()),
             deadline: None,
             task: Some("Do something".to_string()),
@@ -362,6 +411,7 @@ api_key = "k" model = "m" max_tokens = 100
             is_read: false,
             body_text: "Body".to_string(),
             body_html: String::new(),
+            attachments: vec![],
             project: None,
             deadline: None,
             task: None,
@@ -942,6 +992,7 @@ max_tokens = 10
             date: None,
             body_text: "Help".into(),
             body_html: None,
+            attachments: vec![],
             security: Default::default(),
         };
         let err = crate::ai_classifier::classify(&AiConfig::default(), &email, &[]).await.unwrap_err();
@@ -969,6 +1020,7 @@ max_tokens = 10
             date: None,
             body_text: "Jury meeting: https://meet.google.com/x".into(),
             body_html: None,
+            attachments: vec![],
             security: Default::default(),
         };
         let projects = vec![ProjectConfig { name: "Thesis".into(), description: "PhD".into(), urgency: "high".into() }];
@@ -1660,6 +1712,7 @@ max_tokens = 10
             date: None,
             body_text: "Body".into(),
             body_html: None,
+            attachments: vec![],
             security,
         };
         let accounts = [account];
@@ -1845,6 +1898,7 @@ max_tokens = 10
             date: None,
             body_text: "Claim cheap pills and cash now".into(),
             body_html: None,
+            attachments: vec![],
             security: Default::default(),
         };
         assert_eq!(adaptive_spam::marks_spam(&candidate), None);
@@ -1951,6 +2005,7 @@ max_tokens = 10
                 date: None,
                 body_text: String::new(),
                 body_html: None,
+                attachments: vec![],
                 security: Default::default(),
             }
         };
@@ -1991,6 +2046,7 @@ max_tokens = 10
             date: chrono::DateTime::from_timestamp(1_800_000_000, 0),
             body_text: "Hello".into(),
             body_html: None,
+            attachments: vec![],
             security: Default::default(),
         };
         let own_addresses = std::collections::HashSet::from(["me@example.org".into()]);
@@ -2506,6 +2562,7 @@ max_tokens = 10
                 "Dear Remi, please confirm by Friday 23 October that the PhD defense can take place on 27 October."
                     .into(),
             body_html: None,
+            attachments: vec![],
             security: Default::default(),
         };
         let projects = vec![ProjectConfig {

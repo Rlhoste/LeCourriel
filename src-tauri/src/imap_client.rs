@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use async_imap::types::Fetch;
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
-use mailparse::{parse_mail, MailHeaderMap};
+use mailparse::{parse_mail, DispositionType, MailHeaderMap};
 use native_tls::TlsConnector;
 use tracing::{debug, info, warn};
 
@@ -405,7 +405,7 @@ fn parse_fetch_bytes(fetch: &Fetch, raw: &[u8]) -> Option<RawEmail> {
     let date: Option<DateTime<Utc>> =
         mailparse::dateparse(&date_str).ok().and_then(|ts| DateTime::from_timestamp(ts, 0));
 
-    let (body_text, body_html) = extract_bodies(&parsed);
+    let (body_text, body_html, attachments) = extract_message_parts(&parsed);
 
     debug!("Parsed email uid={} subject={:?}", uid, subject);
 
@@ -424,6 +424,7 @@ fn parse_fetch_bytes(fetch: &Fetch, raw: &[u8]) -> Option<RawEmail> {
         date,
         body_text,
         body_html,
+        attachments,
         security,
     })
 }
@@ -431,17 +432,36 @@ fn parse_fetch_bytes(fetch: &Fetch, raw: &[u8]) -> Option<RawEmail> {
 /// Inline images bigger than this are left out (they would bloat the cache).
 const MAX_INLINE_IMAGE: usize = 3 * 1024 * 1024;
 
+#[cfg(test)]
 pub(crate) fn extract_bodies(mail: &mailparse::ParsedMail) -> (String, Option<String>) {
+    let (plain, html, _) = extract_message_parts(mail);
+    (plain, html)
+}
+
+/// Extract display bodies and lightweight attachment metadata. Attachment bytes are not kept in
+/// the cache; the original message is fetched and the chosen MIME part decoded when it is opened.
+pub(crate) fn extract_message_parts(
+    mail: &mailparse::ParsedMail,
+) -> (String, Option<String>, Vec<crate::models::AttachmentMeta>) {
     let mut plain = String::new();
     let mut html: Option<String> = None;
     let mut inline = Vec::new();
-    collect_parts(mail, &mut plain, &mut html, &mut inline);
+    let mut candidates = Vec::new();
+    collect_parts(mail, "", &mut plain, &mut html, &mut inline, &mut candidates);
     if plain.is_empty() {
         if let Ok(body) = decode_text_body(mail) {
             plain = body;
         }
     }
-    (plain, html.map(|h| embed_inline_images(h, inline)))
+    let html_lower = html.as_deref().unwrap_or_default().to_lowercase();
+    let attachments = candidates
+        .into_iter()
+        .filter(|(_, cid, explicit)| {
+            *explicit || cid.is_empty() || !html_lower.contains(&format!("cid:{}", cid.to_lowercase()))
+        })
+        .map(|(meta, _, _)| meta)
+        .collect();
+    (plain, html.map(|h| embed_inline_images(h, inline)), attachments)
 }
 
 /// Inline images (signatures, logos) are attached parts that the HTML points to with
@@ -483,12 +503,45 @@ pub(crate) fn decode_text_body(mail: &mailparse::ParsedMail) -> Result<String, m
 
 fn collect_parts(
     mail: &mailparse::ParsedMail,
+    part_id: &str,
     plain: &mut String,
     html: &mut Option<String>,
     inline: &mut Vec<(String, String)>,
+    attachments: &mut Vec<(crate::models::AttachmentMeta, String, bool)>,
 ) {
     let ctype = mail.ctype.mimetype.to_lowercase();
-    if ctype == "text/plain" {
+    let disposition = mail.get_content_disposition();
+    let filename = disposition
+        .params
+        .get("filename")
+        .or_else(|| mail.ctype.params.get("name"))
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default();
+    let explicit_attachment = disposition.disposition == DispositionType::Attachment;
+    let is_attachment = explicit_attachment || !filename.is_empty();
+
+    if mail.subparts.is_empty() && is_attachment {
+        let data = mail.get_body_raw().unwrap_or_default();
+        let name = if filename.is_empty() { format!("attachment-{}", attachments.len() + 1) } else { filename };
+        let cid = mail.headers.get_first_value("Content-ID").unwrap_or_default();
+        let cid = cid.trim().trim_start_matches('<').trim_end_matches('>').trim().to_string();
+        attachments.push((
+            crate::models::AttachmentMeta {
+                part_id: if part_id.is_empty() { "1".into() } else { part_id.into() },
+                filename: name,
+                mime_type: ctype.clone(),
+                size: data.len() as u64,
+            },
+            cid.clone(),
+            explicit_attachment,
+        ));
+        if !cid.is_empty() && !data.is_empty() && data.len() <= MAX_INLINE_IMAGE {
+            use base64::Engine;
+            let mime = if ctype.starts_with("image/") { ctype.as_str() } else { "application/octet-stream" };
+            let encoded = base64::engine::general_purpose::STANDARD.encode(&data);
+            inline.push((cid, format!("data:{mime};base64,{encoded}")));
+        }
+    } else if ctype == "text/plain" {
         if let Ok(body) = decode_text_body(mail) {
             if plain.is_empty() {
                 *plain = body;
@@ -515,8 +568,38 @@ fn collect_parts(
             }
         }
     } else {
-        for sub in &mail.subparts {
-            collect_parts(sub, plain, html, inline);
+        for (index, sub) in mail.subparts.iter().enumerate() {
+            let child_id =
+                if part_id.is_empty() { (index + 1).to_string() } else { format!("{part_id}.{}", index + 1) };
+            collect_parts(sub, &child_id, plain, html, inline, attachments);
         }
     }
+}
+
+/// Decode one previously advertised attachment from a complete RFC 822 message.
+pub(crate) fn attachment_from_message(raw: &[u8], part_id: &str) -> Result<(crate::models::AttachmentMeta, Vec<u8>)> {
+    let parsed = parse_mail(raw).context("Could not parse the message")?;
+    let (_, _, attachments) = extract_message_parts(&parsed);
+    let meta = attachments.into_iter().find(|item| item.part_id == part_id).context("Attachment not found")?;
+    let part = find_part(&parsed, "", part_id).context("Attachment part not found")?;
+    let bytes = part.get_body_raw().context("Could not decode the attachment")?;
+    Ok((meta, bytes))
+}
+
+fn find_part<'a>(
+    mail: &'a mailparse::ParsedMail<'a>,
+    current: &str,
+    wanted: &str,
+) -> Option<&'a mailparse::ParsedMail<'a>> {
+    let own_id = if current.is_empty() && mail.subparts.is_empty() { "1" } else { current };
+    if own_id == wanted {
+        return Some(mail);
+    }
+    for (index, sub) in mail.subparts.iter().enumerate() {
+        let child = if current.is_empty() { (index + 1).to_string() } else { format!("{current}.{}", index + 1) };
+        if let Some(found) = find_part(sub, &child, wanted) {
+            return Some(found);
+        }
+    }
+    None
 }

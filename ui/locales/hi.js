@@ -60,6 +60,7 @@ STRINGS.hi = {
     'rp.markUnread': 'अपठित चिह्नित करें', 'rp.markRead': 'पठित चिह्नित करें', 'rp.saveAs': 'इस रूप में सहेजें…', 'rp.print': 'प्रिंट करें', 'rp.loadRemote': 'दूरस्थ चित्र लोड करें',
     'rp.movedTo': '{project} में ले जाया गया', 'rp.removedFromProject': 'प्रोजेक्ट से हटाया गया',
     'rp.markedUnread': 'अपठित चिह्नित किया गया', 'rp.savedTo': '{path} में सहेजा गया', 'rp.emailFilter': 'ईमेल',
+    'rp.attachments': 'संलग्नक ({n})', 'rp.openAttachment': 'संलग्नक खोलें', 'rp.saveAttachment': 'संलग्नक सहेजें', 'rp.unknownFile': 'फ़ाइल', 'rp.loadingAttachment': 'संलग्नक लोड हो रहा है…', 'rp.attachmentFilter': 'संलग्नक', 'rp.attachmentError': 'संलग्नक नहीं खुल सका: {err}',
     'rp.toggleRead': 'पठित/अपठित बदलें',
     'meta.from': 'प्रेषक', 'meta.to': 'प्रति', 'meta.cc': 'Cc', 'meta.bcc': 'Bcc', 'meta.replyTo': 'इसको जवाब दें',
     'meta.date': 'तारीख़', 'meta.subject': 'विषय',

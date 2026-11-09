@@ -60,6 +60,7 @@ STRINGS.pt = {
     'rp.markUnread': 'Marcar como não lido', 'rp.markRead': 'Marcar como lido', 'rp.saveAs': 'Salvar como…', 'rp.print': 'Imprimir', 'rp.loadRemote': 'Carregar imagens remotas',
     'rp.movedTo': 'Movido para {project}', 'rp.removedFromProject': 'Removido do projeto',
     'rp.markedUnread': 'Marcado como não lido', 'rp.savedTo': 'Salvo em {path}', 'rp.emailFilter': 'E-mail',
+    'rp.attachments': 'Anexos ({n})', 'rp.openAttachment': 'Abrir anexo', 'rp.saveAttachment': 'Salvar anexo', 'rp.unknownFile': 'Arquivo', 'rp.loadingAttachment': 'Carregando anexo…', 'rp.attachmentFilter': 'Anexo', 'rp.attachmentError': 'Não foi possível abrir o anexo: {err}',
     'rp.toggleRead': 'Alternar lido / não lido',
     'meta.from': 'De', 'meta.to': 'Para', 'meta.cc': 'Cc', 'meta.bcc': 'Cco', 'meta.replyTo': 'Responder a',
     'meta.date': 'Data', 'meta.subject': 'Assunto',

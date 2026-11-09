@@ -269,7 +269,8 @@
              data-resize-key="projects-detail" data-target="#projects-detail" data-default="360" data-min="280" data-max="620" data-reserve="280"></div>
         <div id="projects-reading-pane" class="reading-pane hidden">
           <div id="proj-rp-header"></div>
-          <iframe id="proj-rp-iframe" sandbox="allow-same-origin"></iframe>
+          <div id="proj-rp-attachments" class="rp-attachments hidden"></div>
+          <div id="proj-rp-body" class="rp-email-body"></div>
         </div>
       </div>
     </section>
@@ -459,7 +460,8 @@
         <div class="search-preview hidden" id="search-preview">
           <div class="rp-header"><div class="rp-subject"></div><div class="rp-meta"></div>
             <div class="rp-actions"><button class="rp-btn" id="search-preview-reply" data-i18n="rp.reply">Reply</button></div></div>
-          <iframe class="rp-iframe" sandbox="allow-same-origin"></iframe>
+          <div class="rp-attachments hidden"></div>
+          <div class="rp-email-body"></div>
         </div>
       </div>
     </div>
@@ -705,7 +707,8 @@
         <div class="rp-meta"></div>
         <div class="rp-actions"></div>
       </div>
-      <iframe class="rp-iframe" sandbox="allow-same-origin"></iframe>
+      <div class="rp-attachments hidden"></div>
+      <div class="rp-email-body"></div>
     </div>
   </div>
 </template>

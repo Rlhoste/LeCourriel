@@ -66,6 +66,7 @@ STRINGS.en = {
     'rp.markUnread': 'Mark as unread', 'rp.markRead': 'Mark as read', 'rp.saveAs': 'Save as…', 'rp.print': 'Print', 'rp.loadRemote': 'Load remote images',
     'rp.movedTo': 'Moved to {project}', 'rp.removedFromProject': 'Removed from project',
     'rp.markedUnread': 'Marked as unread', 'rp.savedTo': 'Saved to {path}', 'rp.emailFilter': 'Email',
+    'rp.attachments': 'Attachments ({n})', 'rp.openAttachment': 'Open attachment', 'rp.saveAttachment': 'Save attachment', 'rp.unknownFile': 'File', 'rp.loadingAttachment': 'Loading attachment…', 'rp.attachmentFilter': 'Attachment', 'rp.attachmentError': 'Could not open attachment: {err}',
     'rp.toggleRead': 'Toggle read',
     'meta.from': 'From', 'meta.to': 'To', 'meta.cc': 'Cc', 'meta.bcc': 'Bcc', 'meta.replyTo': 'Reply-To',
     'meta.date': 'Date', 'meta.subject': 'Subject',

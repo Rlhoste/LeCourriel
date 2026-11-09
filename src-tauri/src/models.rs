@@ -64,6 +64,16 @@ pub struct MailSecurity {
     pub precedence: String,
 }
 
+/// A downloadable MIME part. Only metadata is cached; bytes are fetched from IMAP on demand.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AttachmentMeta {
+    /// Stable, one-based path through the MIME tree (for example `2.1`).
+    pub part_id: String,
+    pub filename: String,
+    pub mime_type: String,
+    pub size: u64,
+}
+
 #[derive(Debug, Clone)]
 pub struct RawEmail {
     pub uid: u64,
@@ -83,6 +93,7 @@ pub struct RawEmail {
     pub date: Option<DateTime<Utc>>,
     pub body_text: String,
     pub body_html: Option<String>,
+    pub attachments: Vec<AttachmentMeta>,
     pub security: MailSecurity,
 }
 
@@ -122,6 +133,9 @@ pub struct EmailCard {
     pub body_text: String,
     /// Raw HTML body for WebView rendering.
     pub body_html: String,
+    /// Downloadable MIME parts; their bytes are deliberately not persisted in the cache.
+    #[serde(default)]
+    pub attachments: Vec<AttachmentMeta>,
     /// Project this email was assigned to, if any.
     pub project: Option<String>,
     /// Deadline extracted from email content.

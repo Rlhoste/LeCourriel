@@ -60,6 +60,7 @@ STRINGS.es = {
     'rp.markUnread': 'Marcar como no leído', 'rp.markRead': 'Marcar como leído', 'rp.saveAs': 'Guardar como…', 'rp.print': 'Imprimir', 'rp.loadRemote': 'Cargar imágenes remotas',
     'rp.movedTo': 'Movido a {project}', 'rp.removedFromProject': 'Quitado del proyecto',
     'rp.markedUnread': 'Marcado como no leído', 'rp.savedTo': 'Guardado en {path}', 'rp.emailFilter': 'Correo',
+    'rp.attachments': 'Archivos adjuntos ({n})', 'rp.openAttachment': 'Abrir archivo adjunto', 'rp.saveAttachment': 'Guardar archivo adjunto', 'rp.unknownFile': 'Archivo', 'rp.loadingAttachment': 'Cargando archivo adjunto…', 'rp.attachmentFilter': 'Archivo adjunto', 'rp.attachmentError': 'No se pudo abrir el archivo adjunto: {err}',
     'rp.toggleRead': 'Alternar leído / no leído',
     'meta.from': 'De', 'meta.to': 'Para', 'meta.cc': 'CC', 'meta.bcc': 'CCO', 'meta.replyTo': 'Responder a',
     'meta.date': 'Fecha', 'meta.subject': 'Asunto',

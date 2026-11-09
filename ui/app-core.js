@@ -151,6 +151,58 @@
     return (state?.tasks || []).filter(task => task.status === 'todo' || task.status === 'in_progress');
   }
 
+  // Decode only the raster data URLs accepted by the email HTML sanitizer. Keeping this
+  // transformation independent from the DOM makes every step testable without launching Tauri.
+  function decodeEmbeddedRasterImage(source, decodeBase64 = atob) {
+    const match = String(source || '').match(
+      /^data:(image\/(?:png|jpeg|gif|webp));base64,([a-z0-9+/=\s]+)$/i,
+    );
+    if (!match) return null;
+    const binary = decodeBase64(match[2].replace(/\s/g, ''));
+    return {
+      mimeType: match[1].toLowerCase(),
+      bytes: Uint8Array.from(binary, character => character.charCodeAt(0)),
+    };
+  }
+
+  function decodeEmbeddedSvgImage(source, decodeBase64 = atob) {
+    const match = String(source || '').match(
+      /^data:image\/svg\+xml(?:;charset=[^;,]+)?(;base64)?,([\s\S]*)$/i,
+    );
+    if (!match) return null;
+    let text;
+    if (match[1]) {
+      const binary = decodeBase64(match[2].replace(/\s/g, ''));
+      const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+      text = new TextDecoder().decode(bytes);
+    } else {
+      text = decodeURIComponent(match[2]);
+    }
+    return { mimeType: 'image/svg+xml', text };
+  }
+
+  function isSafeEmbeddedSvgReference(value, allowRasterData = false) {
+    const reference = String(value || '').trim();
+    return /^#[a-z_][\w:.-]*$/i.test(reference) ||
+      (allowRasterData && /^data:image\/(?:png|jpeg|gif|webp);base64,/i.test(reference));
+  }
+
+  function sanitizeEmbeddedSvgCss(value) {
+    return String(value || '')
+      .replace(/@import[\s\S]*?(?:;|$)/gi, '')
+      .replace(/url\(\s*(['"]?)([^)'"\s]+)\1\s*\)/gi,
+        (rule, _quote, url) => isSafeEmbeddedSvgReference(url) ? `url(${url})` : 'none')
+      .replace(/expression\s*\(/gi, 'blocked(');
+  }
+
+  // Check the URL itself, not arbitrary characters later in it. Base64 data commonly
+  // contains "//", which must not make an embedded image look like a remote URL.
+  function isRemoteResourceUrl(source, sourceSet = false) {
+    const value = String(source || '').trim();
+    if (!sourceSet) return /^(?:https?:)?\/\//i.test(value);
+    return value.split(',').some(candidate => /^(?:https?:)?\/\//i.test(candidate.trim()));
+  }
+
   return {
     PRIORITY_ORDER,
     normalizedSort,
@@ -164,5 +216,10 @@
     needsAccountSetup,
     attentionEmails,
     activeTasks,
+    decodeEmbeddedRasterImage,
+    decodeEmbeddedSvgImage,
+    isSafeEmbeddedSvgReference,
+    sanitizeEmbeddedSvgCss,
+    isRemoteResourceUrl,
   };
 });

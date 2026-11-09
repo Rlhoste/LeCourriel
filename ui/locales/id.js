@@ -60,6 +60,7 @@ STRINGS.id = {
     'rp.markUnread': 'Tandai belum dibaca', 'rp.markRead': 'Tandai sudah dibaca', 'rp.saveAs': 'Simpan sebagai…', 'rp.print': 'Cetak', 'rp.loadRemote': 'Muat gambar jarak jauh',
     'rp.movedTo': 'Dipindahkan ke {project}', 'rp.removedFromProject': 'Dihapus dari proyek',
     'rp.markedUnread': 'Ditandai belum dibaca', 'rp.savedTo': 'Disimpan ke {path}', 'rp.emailFilter': 'Email',
+    'rp.attachments': 'Lampiran ({n})', 'rp.openAttachment': 'Buka lampiran', 'rp.saveAttachment': 'Simpan lampiran', 'rp.unknownFile': 'Berkas', 'rp.loadingAttachment': 'Memuat lampiran…', 'rp.attachmentFilter': 'Lampiran', 'rp.attachmentError': 'Lampiran tidak dapat dibuka: {err}',
     'rp.toggleRead': 'Ubah status dibaca',
     'meta.from': 'Dari', 'meta.to': 'Kepada', 'meta.cc': 'Cc', 'meta.bcc': 'Bcc', 'meta.replyTo': 'Balas ke',
     'meta.date': 'Tanggal', 'meta.subject': 'Subjek',

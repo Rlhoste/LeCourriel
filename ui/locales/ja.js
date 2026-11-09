@@ -60,6 +60,7 @@ STRINGS.ja = {
     'rp.markUnread': '未読にする', 'rp.markRead': '既読にする', 'rp.saveAs': '名前を付けて保存…', 'rp.print': '印刷', 'rp.loadRemote': '外部画像を読み込む',
     'rp.movedTo': '{project} に移動しました', 'rp.removedFromProject': 'プロジェクトから外しました',
     'rp.markedUnread': '未読にしました', 'rp.savedTo': '{path} に保存しました', 'rp.emailFilter': 'メール',
+    'rp.attachments': '添付ファイル（{n}）', 'rp.openAttachment': '添付ファイルを開く', 'rp.saveAttachment': '添付ファイルを保存', 'rp.unknownFile': 'ファイル', 'rp.loadingAttachment': '添付ファイルを読み込み中…', 'rp.attachmentFilter': '添付ファイル', 'rp.attachmentError': '添付ファイルを開けませんでした：{err}',
     'rp.toggleRead': '既読/未読を切り替え',
     'meta.from': '差出人', 'meta.to': '宛先', 'meta.cc': 'Cc', 'meta.bcc': 'Bcc', 'meta.replyTo': '返信先',
     'meta.date': '日付', 'meta.subject': '件名',

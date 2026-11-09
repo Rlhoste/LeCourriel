@@ -24,6 +24,8 @@ pub struct EmailCardDto {
     pub task: String,
     pub body_text: String,
     pub body_html: String,
+    #[serde(default)]
+    pub attachments: Vec<crate::models::AttachmentMeta>,
     pub meeting_link: String,
 }
 

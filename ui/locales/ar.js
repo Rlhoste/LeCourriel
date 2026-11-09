@@ -67,6 +67,7 @@ STRINGS.ar = {
     'rp.markUnread': 'وضع علامة كغير مقروءة', 'rp.markRead': 'وضع علامة كمقروءة', 'rp.saveAs': 'حفظ باسم…', 'rp.print': 'طباعة', 'rp.loadRemote': 'تحميل الصور البعيدة',
     'rp.movedTo': 'نُقلت إلى {project}', 'rp.removedFromProject': 'أُزيلت من المشروع',
     'rp.markedUnread': 'عُلّمت كغير مقروءة', 'rp.savedTo': 'حُفظت في {path}', 'rp.emailFilter': 'رسالة',
+    'rp.attachments': 'المرفقات ({n})', 'rp.openAttachment': 'فتح المرفق', 'rp.saveAttachment': 'حفظ المرفق', 'rp.unknownFile': 'ملف', 'rp.loadingAttachment': 'جارٍ تحميل المرفق…', 'rp.attachmentFilter': 'مرفق', 'rp.attachmentError': 'تعذر فتح المرفق: {err}',
     'rp.toggleRead': 'تبديل مقروءة / غير مقروءة',
     'meta.from': 'من', 'meta.to': 'إلى', 'meta.cc': 'نسخة', 'meta.bcc': 'نسخة مخفية', 'meta.replyTo': 'الرد إلى',
     'meta.date': 'التاريخ', 'meta.subject': 'الموضوع',

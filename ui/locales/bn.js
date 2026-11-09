@@ -60,6 +60,7 @@ STRINGS.bn = {
     'rp.markUnread': 'অপঠিত হিসেবে চিহ্নিত করুন', 'rp.markRead': 'পঠিত হিসেবে চিহ্নিত করুন', 'rp.saveAs': 'এভাবে সংরক্ষণ করুন…', 'rp.print': 'প্রিন্ট', 'rp.loadRemote': 'দূরবর্তী ছবি লোড করুন',
     'rp.movedTo': '{project}-এ সরানো হয়েছে', 'rp.removedFromProject': 'প্রজেক্ট থেকে সরানো হয়েছে',
     'rp.markedUnread': 'অপঠিত হিসেবে চিহ্নিত হয়েছে', 'rp.savedTo': '{path}-এ সংরক্ষিত হয়েছে', 'rp.emailFilter': 'ইমেল',
+    'rp.attachments': 'সংযুক্তি ({n})', 'rp.openAttachment': 'সংযুক্তি খুলুন', 'rp.saveAttachment': 'সংযুক্তি সংরক্ষণ করুন', 'rp.unknownFile': 'ফাইল', 'rp.loadingAttachment': 'সংযুক্তি লোড হচ্ছে…', 'rp.attachmentFilter': 'সংযুক্তি', 'rp.attachmentError': 'সংযুক্তি খোলা যায়নি: {err}',
     'rp.toggleRead': 'পঠিত/অপঠিত পরিবর্তন',
     'meta.from': 'প্রেরক', 'meta.to': 'প্রাপক', 'meta.cc': 'Cc', 'meta.bcc': 'Bcc', 'meta.replyTo': 'উত্তরের ঠিকানা',
     'meta.date': 'তারিখ', 'meta.subject': 'বিষয়',

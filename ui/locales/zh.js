@@ -60,6 +60,7 @@ STRINGS.zh = {
     'rp.markUnread': '标记为未读', 'rp.markRead': '标记为已读', 'rp.saveAs': '另存为…', 'rp.print': '打印', 'rp.loadRemote': '加载远程图片',
     'rp.movedTo': '已移至 {project}', 'rp.removedFromProject': '已从项目中移除',
     'rp.markedUnread': '已标记为未读', 'rp.savedTo': '已保存到 {path}', 'rp.emailFilter': '邮件',
+    'rp.attachments': '附件（{n}）', 'rp.openAttachment': '打开附件', 'rp.saveAttachment': '保存附件', 'rp.unknownFile': '文件', 'rp.loadingAttachment': '正在加载附件…', 'rp.attachmentFilter': '附件', 'rp.attachmentError': '无法打开附件：{err}',
     'rp.toggleRead': '切换已读/未读',
     'meta.from': '发件人', 'meta.to': '收件人', 'meta.cc': '抄送', 'meta.bcc': '密送', 'meta.replyTo': '回复地址',
     'meta.date': '日期', 'meta.subject': '主题',

@@ -60,6 +60,7 @@ STRINGS.fr = {
     'rp.markUnread': 'Marquer comme non lu', 'rp.markRead': 'Marquer comme lu', 'rp.saveAs': 'Enregistrer sous…', 'rp.print': 'Imprimer', 'rp.loadRemote': 'Charger les images distantes',
     'rp.movedTo': 'Déplacé vers {project}', 'rp.removedFromProject': 'Retiré du projet',
     'rp.markedUnread': 'Marqué comme non lu', 'rp.savedTo': 'Enregistré dans {path}', 'rp.emailFilter': 'E-mail',
+    'rp.attachments': 'Pièces jointes ({n})', 'rp.openAttachment': 'Ouvrir la pièce jointe', 'rp.saveAttachment': 'Enregistrer la pièce jointe', 'rp.unknownFile': 'Fichier', 'rp.loadingAttachment': 'Chargement de la pièce jointe…', 'rp.attachmentFilter': 'Pièce jointe', 'rp.attachmentError': 'Impossible d’ouvrir la pièce jointe : {err}',
     'rp.toggleRead': 'Basculer lu / non lu',
     'meta.from': 'De', 'meta.to': 'À', 'meta.cc': 'Cc', 'meta.bcc': 'Cci', 'meta.replyTo': 'Répondre à',
     'meta.date': 'Date', 'meta.subject': 'Objet',

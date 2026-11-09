@@ -64,6 +64,7 @@ STRINGS.ru = {
     'rp.markUnread': 'Отметить как непрочитанное', 'rp.markRead': 'Отметить как прочитанное', 'rp.saveAs': 'Сохранить как…', 'rp.print': 'Печать', 'rp.loadRemote': 'Загрузить внешние изображения',
     'rp.movedTo': 'Перемещено в {project}', 'rp.removedFromProject': 'Удалено из проекта',
     'rp.markedUnread': 'Отмечено как непрочитанное', 'rp.savedTo': 'Сохранено в {path}', 'rp.emailFilter': 'Письмо',
+    'rp.attachments': 'Вложения ({n})', 'rp.openAttachment': 'Открыть вложение', 'rp.saveAttachment': 'Сохранить вложение', 'rp.unknownFile': 'Файл', 'rp.loadingAttachment': 'Загрузка вложения…', 'rp.attachmentFilter': 'Вложение', 'rp.attachmentError': 'Не удалось открыть вложение: {err}',
     'rp.toggleRead': 'Прочитано / непрочитано',
     'meta.from': 'От', 'meta.to': 'Кому', 'meta.cc': 'Копия', 'meta.bcc': 'Скрытая копия', 'meta.replyTo': 'Ответить на',
     'meta.date': 'Дата', 'meta.subject': 'Тема',

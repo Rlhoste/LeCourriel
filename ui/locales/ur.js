@@ -60,6 +60,7 @@ STRINGS.ur = {
     'rp.markUnread': 'بغیر پڑھا نشان زد کریں', 'rp.markRead': 'پڑھا ہوا نشان زد کریں', 'rp.saveAs': 'بطور محفوظ کریں…', 'rp.print': 'پرنٹ کریں', 'rp.loadRemote': 'بیرونی تصاویر لوڈ کریں',
     'rp.movedTo': '{project} میں منتقل کر دیا گیا', 'rp.removedFromProject': 'پروجیکٹ سے ہٹا دیا گیا',
     'rp.markedUnread': 'بغیر پڑھا نشان زد کر دیا گیا', 'rp.savedTo': '{path} میں محفوظ کر دیا گیا', 'rp.emailFilter': 'ای میل',
+    'rp.attachments': 'منسلکات ({n})', 'rp.openAttachment': 'منسلکہ کھولیں', 'rp.saveAttachment': 'منسلکہ محفوظ کریں', 'rp.unknownFile': 'فائل', 'rp.loadingAttachment': 'منسلکہ لوڈ ہو رہا ہے…', 'rp.attachmentFilter': 'منسلکہ', 'rp.attachmentError': 'منسلکہ نہیں کھولا جا سکا: {err}',
     'rp.toggleRead': 'پڑھا / بغیر پڑھا تبدیل کریں',
     'meta.from': 'منجانب', 'meta.to': 'بنام', 'meta.cc': 'Cc', 'meta.bcc': 'Bcc', 'meta.replyTo': 'جواب بنام',
     'meta.date': 'تاریخ', 'meta.subject': 'موضوع',

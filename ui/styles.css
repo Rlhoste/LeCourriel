@@ -21,6 +21,14 @@ button, input, select, textarea { font-family: inherit; }
   --info:       #7a80a0;
   --ok:         #4caf7f;
 
+  /* Email importance: cold/low → hot/high. Kept independent from theme accent colours. */
+  --priority-info:   #2563eb;
+  --priority-threat: #93c5fd;
+  --priority-other:  #f8fafc;
+  --priority-task:   #fee2e2;
+  --priority-high:   #f97360;
+  --priority-urgent: #dc2626;
+
   /* "Paper" surfaces: reading pane, menus, composer */
   --paper:             #fff;
   --paper-scheme:      light;   /* colour scheme of the paper areas' native controls */
@@ -409,13 +417,13 @@ button.row-mark:hover::before { transform: scale(1.2); }
 .email-subject { font-size: 0.8rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .email-summary { font-size: 0.73rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* Priority colours, used by the bar on email rows */
-.p-urgent  { --prio: var(--urgent); }
-.p-high    { --prio: var(--high); }
-.p-task    { --prio: var(--task); }
-.p-threat  { --prio: var(--threat); }
-.p-info    { --prio: var(--info); }
-.p-other   { --prio: var(--text-faint); }
+/* Importance scale used by the bar on email rows: cold blue → white → hot red. */
+.p-urgent                         { --prio: var(--priority-urgent); }
+.p-high, .p-high_priority         { --prio: var(--priority-high); }
+.p-task                           { --prio: var(--priority-task); }
+.p-other, .p-other_priority       { --prio: var(--priority-other); }
+.p-threat                         { --prio: var(--priority-threat); }
+.p-info, .p-information           { --prio: var(--priority-info); }
 
 /* ── Split Panel ───────────────────────────────────────────────────────────── */
 .split-panel { flex-direction: row !important; }
@@ -602,12 +610,75 @@ button.row-mark:hover::before { transform: scale(1.2); }
 }
 .rp-menu button:hover { background: var(--paper-3); }
 
-.rp-iframe {
+.rp-attachments {
+  flex-shrink: 0;
+  padding: 10px 20px 12px;
+  border-bottom: var(--border-w) solid var(--paper-border-soft);
+  background: var(--paper-2);
+  color: var(--paper-text);
+}
+.rp-attachments.hidden { display: none; }
+.rp-attachments-title { font-size: 0.78rem; font-weight: 700; margin-bottom: 7px; }
+.rp-attachment-list { display: flex; flex-wrap: wrap; gap: 7px; }
+.rp-attachment {
+  display: flex;
+  max-width: 320px;
+  border: var(--border-w) solid var(--paper-border);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  overflow: hidden;
+}
+.rp-attachment button { color: var(--paper-text); font: inherit; cursor: pointer; }
+.rp-attachment button:disabled { opacity: 0.55; cursor: wait; }
+.rp-attachment-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+.rp-attachment-main:hover, .rp-attachment-save:hover { background: var(--paper-3); }
+.rp-attachment-icon { font-size: 1.2rem; }
+.rp-attachment-info { display: flex; flex-direction: column; min-width: 0; }
+.rp-attachment-info strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-attachment-info small { color: var(--paper-text-dim); font-size: 0.7rem; margin-top: 2px; }
+.rp-attachment-save { width: 34px; border: 0; border-left: var(--border-w) solid var(--paper-border-soft); background: transparent; font-size: 1.1rem; }
+.rp-attachment-status { min-height: 1em; margin-top: 5px; font-size: 0.72rem; color: var(--success); }
+.rp-attachment-status:empty { display: none; }
+.rp-attachment-status.error { color: var(--danger); }
+.email-attachment-mark { margin-left: auto; font-size: 0.75rem; line-height: 1; }
+.email-attachment-mark + .email-date { margin-left: 4px; }
+
+.rp-email-body {
   flex: 1;
-  border: none;
+  min-height: 0;
   width: 100%;
+  overflow: auto;
   background: #fff;   /* emails are designed for white, in every theme */
 }
+.rp-email-body > .email-body {
+  min-height: 100%;
+  padding: 16px;
+  color: #111;
+  font: 14px system-ui, sans-serif;
+}
+.rp-email-body > .email-body img { max-width: 100%; height: auto; }
+.rp-email-body > pre {
+  min-height: 100%;
+  margin: 0;
+  padding: 16px;
+  color: #111;
+  font: 14px system-ui, sans-serif;
+  white-space: pre-wrap;
+}
+
+[data-theme="redmond97"] .rp-attachments { background: #c0c0c0; border-bottom: 2px solid #808080; }
+[data-theme="redmond97"] .rp-attachment { border: 2px outset #fff; border-radius: 0; background: #fff; }
+[data-theme="redmond97"] .rp-attachment-main:active,
+[data-theme="redmond97"] .rp-attachment-save:active { border-style: inset; }
 
 /* ── Calendar ──────────────────────────────────────────────────────────────── */
 #cal-grid {
@@ -868,12 +939,11 @@ button.row-mark:hover::before { transform: scale(1.2); }
 }
 #projects-reading-pane.hidden { display: none; }
 #proj-rp-header { flex-shrink: 0; }
-/* Fill the rest of the pane (an iframe defaults to 300×150 otherwise). */
-#proj-rp-iframe {
+/* Fill the rest of the pane. */
+#proj-rp-body {
   flex: 1;
   min-height: 0;
   width: 100%;
-  border: none;
   background: #fff;
 }
 
@@ -1698,6 +1768,12 @@ body.compose-window .composer-resize { display: none; }
   --threat:     #e040fb;
   --info:       #7a80a0;
   --ok:         #4caf7f;
+  --priority-info:   #2563eb;
+  --priority-threat: #93c5fd;
+  --priority-other:  #f8fafc;
+  --priority-task:   #fee2e2;
+  --priority-high:   #f97360;
+  --priority-urgent: #dc2626;
   --paper:             #fff;
   --paper-scheme:      light;   /* colour scheme of the paper areas' native controls */
   --paper-2:           #fafafa;
@@ -2381,7 +2457,7 @@ body.compose-window .composer-resize { display: none; }
 }
 .search-cited-chip:hover { border-color: var(--accent); }
 .search-preview { flex: 1; display: flex; flex-direction: column; min-height: 0; background: var(--paper); }
-.search-preview .rp-iframe { flex: 1; min-height: 200px; }
+.search-preview .rp-email-body { flex: 1; min-height: 200px; }
 .search-help.hidden, .search-answer.hidden, .search-preview.hidden { display: none; }
 .search-footer {
   display: flex;

@@ -14,6 +14,11 @@ const {
   activeTasks,
   threadSubject,
   groupThreads,
+  decodeEmbeddedRasterImage,
+  decodeEmbeddedSvgImage,
+  isSafeEmbeddedSvgReference,
+  sanitizeEmbeddedSvgCss,
+  isRemoteResourceUrl,
 } = require('../app-core.js');
 
 const mail = (uid, overrides = {}) => ({
@@ -26,6 +31,80 @@ const mail = (uid, overrides = {}) => ({
   priority: 'information',
   project: null,
   ...overrides,
+});
+
+// A complete 1 × 1 transparent PNG. These tests follow the same stages as the reader:
+// recognize the source, decode it, then construct the Blob used by the displayed <img>.
+const EMBEDDED_PNG = 'data:image/png;base64,' +
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+const EMBEDDED_SVG = 'data:image/svg+xml;base64,' +
+  Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><text>Café</text></svg>').toString('base64');
+
+test('base64 slashes do not make an embedded image look remote', () => {
+  assert.equal(isRemoteResourceUrl('data:image/png;base64,abc//def=='), false);
+});
+
+test('remote resource URLs are recognized only at URL boundaries', () => {
+  assert.equal(isRemoteResourceUrl('https://example.com/image.png'), true);
+  assert.equal(isRemoteResourceUrl('//example.com/image.png'), true);
+  assert.equal(isRemoteResourceUrl('cid:logo//signature'), false);
+  assert.equal(isRemoteResourceUrl('cid:logo, https://example.com/2x.png', true), true);
+});
+
+test('embedded SVG data URLs decode without becoming live markup', () => {
+  const decoded = decodeEmbeddedSvgImage(EMBEDDED_SVG, value => Buffer.from(value, 'base64').toString('binary'));
+  assert.equal(decoded.mimeType, 'image/svg+xml');
+  assert.match(decoded.text, /^<svg/);
+  assert.match(decoded.text, /Café/);
+});
+
+test('percent-encoded SVG data URLs are decoded', () => {
+  const source = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg"><circle r="4"/></svg>')}`;
+  assert.match(decodeEmbeddedSvgImage(source).text, /<circle/);
+});
+
+test('embedded SVG accepts local references and raster data only', () => {
+  assert.equal(isSafeEmbeddedSvgReference('#gradient'), true);
+  assert.equal(isSafeEmbeddedSvgReference('data:image/png;base64,AAAA', true), true);
+  assert.equal(isSafeEmbeddedSvgReference('data:image/svg+xml;base64,AAAA', true), false);
+  assert.equal(isSafeEmbeddedSvgReference('https://example.com/tracker.png', true), false);
+  assert.equal(isSafeEmbeddedSvgReference('javascript:alert(1)'), false);
+});
+
+test('embedded SVG CSS keeps local paint references and removes network access', () => {
+  const css = sanitizeEmbeddedSvgCss('@import "https://example.com/a.css";fill:url(#paint);filter:url(https://example.com/f.svg#x)');
+  assert.doesNotMatch(css, /@import|https:/);
+  assert.match(css, /fill:url\(#paint\)/);
+  assert.match(css, /filter:none/);
+});
+
+test('embedded image stage 1: recognizes a safe raster data URL', () => {
+  const decoded = decodeEmbeddedRasterImage(EMBEDDED_PNG);
+  assert.ok(decoded);
+  assert.equal(decoded.mimeType, 'image/png');
+});
+
+test('embedded image stage 2: base64 decodes to valid PNG bytes', () => {
+  const { bytes } = decodeEmbeddedRasterImage(EMBEDDED_PNG);
+  assert.deepEqual(Array.from(bytes.slice(0, 8)), [137, 80, 78, 71, 13, 10, 26, 10]);
+  assert.equal(bytes.length, 68);
+});
+
+test('embedded image stage 3: decoded bytes produce the Blob given to the image URL', async () => {
+  const decoded = decodeEmbeddedRasterImage(EMBEDDED_PNG);
+  const blob = new Blob([decoded.bytes], { type: decoded.mimeType });
+  assert.equal(blob.type, 'image/png');
+  assert.equal(blob.size, 68);
+  assert.deepEqual(
+    Array.from(new Uint8Array(await blob.arrayBuffer()).slice(0, 8)),
+    [137, 80, 78, 71, 13, 10, 26, 10],
+  );
+});
+
+test('embedded image decoding rejects executable and malformed data URLs', () => {
+  assert.equal(decodeEmbeddedRasterImage('data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='), null);
+  assert.equal(decodeEmbeddedRasterImage('data:text/html;base64,PGgxPm5vPC9oMT4='), null);
+  assert.equal(decodeEmbeddedRasterImage('not an image'), null);
 });
 
 test('missing sort defaults to newest date first', () => {

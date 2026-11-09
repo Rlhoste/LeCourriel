@@ -60,6 +60,7 @@ STRINGS.de = {
     'rp.markUnread': 'Als ungelesen markieren', 'rp.markRead': 'Als gelesen markieren', 'rp.saveAs': 'Speichern unter…', 'rp.print': 'Drucken', 'rp.loadRemote': 'Externe Bilder laden',
     'rp.movedTo': 'Verschoben nach {project}', 'rp.removedFromProject': 'Aus Projekt entfernt',
     'rp.markedUnread': 'Als ungelesen markiert', 'rp.savedTo': 'Gespeichert unter {path}', 'rp.emailFilter': 'E-Mail',
+    'rp.attachments': 'Anhänge ({n})', 'rp.openAttachment': 'Anhang öffnen', 'rp.saveAttachment': 'Anhang speichern', 'rp.unknownFile': 'Datei', 'rp.loadingAttachment': 'Anhang wird geladen…', 'rp.attachmentFilter': 'Anhang', 'rp.attachmentError': 'Anhang konnte nicht geöffnet werden: {err}',
     'rp.toggleRead': 'Gelesen / ungelesen',
     'meta.from': 'Von', 'meta.to': 'An', 'meta.cc': 'Cc', 'meta.bcc': 'Bcc', 'meta.replyTo': 'Antwort an',
     'meta.date': 'Datum', 'meta.subject': 'Betreff',
