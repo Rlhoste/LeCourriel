@@ -4,6 +4,8 @@
 
 # Le courriel
 
+Download link: [link](https://github.com/Rlhoste/LeCourriel/releases)
+
 **An AI-boosted alternative to Thunderbird.** Free, open source, and it works with the mailbox you
 already have.
 
