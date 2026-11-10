@@ -11,6 +11,7 @@ let activePanel = 'overview';
 let fontScale = 1.0;
 let showOpenedAttention = false;
 let verificationExpiryTimer = null;
+const loadingFolderPanels = new Set();
 
 // ── Tauri helpers ──────────────────────────────────────────────────────────
 async function cmd(name, args = {}) {
@@ -25,7 +26,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Register listeners FIRST before anything else to avoid race condition
   await listen('state-updated', e => {
-    appState = e.payload;
+    appState = CourrielCore.normalizeStateSnapshot(e.payload);
     renderAll();
   });
 
@@ -227,6 +228,23 @@ function switchPanel(panel) {
     p.classList.toggle('active', p.id === `panel-${panel}`)
   );
   if (appState) renderPanel(panel);
+  if (['sent', 'drafts', 'trash', 'spam'].includes(panel)) void ensureFolderPanelLoaded(panel);
+}
+
+async function ensureFolderPanelLoaded(panel) {
+  if (loadingFolderPanels.has(panel)) return;
+  loadingFolderPanels.add(panel);
+  const bar = document.getElementById('loading-bar');
+  bar.classList.remove('hidden');
+  try {
+    await cmd('load_mail_folder', { folder: panel });
+  } catch (error) {
+    console.error(`load ${panel}`, error);
+    showToast(String(error));
+  } finally {
+    loadingFolderPanels.delete(panel);
+    bar.classList.add('hidden');
+  }
 }
 
 function setupOverview() {
@@ -656,7 +674,11 @@ function renderSplitPanel(panelId, meta) {
 const remoteContentAllowed = new Set();
 const emailContentKey = email => `${panelForEmail(email)}:${email.uid}`;
 
-function showEmail(section, email) {
+async function showEmail(section, email) {
+  const request = Symbol('email-load');
+  section._emailLoad = request;
+  email = await loadEmailDetails(email);
+  if (!email || section._emailLoad !== request) return;
   const placeholder = section.querySelector('.rp-placeholder');
   const content = section.querySelector('.rp-content');
   placeholder.style.display = 'none';
@@ -677,6 +699,21 @@ function showEmail(section, email) {
     setEmailBodyContent(body, email, true);
   });
   setRead(email, true);
+}
+
+async function loadEmailDetails(email) {
+  if (!email || email._detailsLoaded) return email;
+  if (!email._detailsPromise) {
+    email._detailsPromise = cmd('get_email', { uid: email.uid, folder: panelForEmail(email) })
+      .then(details => {
+        if (!details) throw new Error(`Email ${email.uid} is no longer available`);
+        Object.assign(email, details, { _detailsLoaded: true });
+        return email;
+      })
+      .finally(() => { delete email._detailsPromise; });
+  }
+  try { return await email._detailsPromise; }
+  catch (error) { showToast(String(error)); return null; }
 }
 
 function formatAttachmentSize(bytes) {
@@ -1124,6 +1161,7 @@ function openEmailIn(panel, uid) {
 // look for the email object itself first, and only then compare UIDs.
 const OTHER_FOLDERS = [['sent', 'sent_emails'], ['drafts', 'drafts_emails'], ['trash', 'trash_emails'], ['spam', 'spam_emails']];
 function panelForEmail(email) {
+  if (email?._folder) return email._folder;
   const own = OTHER_FOLDERS.find(([, key]) => appState[key].includes(email));
   if (own) return own[0];
   // Taken from an inbox list (all, important, urgent, meetings…).
@@ -1932,7 +1970,9 @@ function showProject(p) {
   }
 }
 
-function showProjectEmail(email) {
+async function showProjectEmail(email) {
+  email = await loadEmailDetails(email);
+  if (!email) return;
   const pane = document.getElementById('projects-reading-pane');
   pane.classList.remove('hidden');
   const header = document.getElementById('proj-rp-header');
@@ -3130,6 +3170,7 @@ async function openSettings() {
   renderCloudStatus(await cmd('cloud_status'));
   document.getElementById('s-update-auto').checked = autoUpdatesEnabled();
   document.getElementById('s-update-current').textContent = await cmd('app_version');
+  await renderMailRefreshStatus();
 
   renderAccountBlocks(settingsData.accounts);
   settingsBaseline = settingsSnapshot();
@@ -3378,6 +3419,11 @@ function setupSettings() {
   });
 
   document.getElementById('settings-save').addEventListener('click', saveSettings);
+  document.getElementById('s-check-mail').addEventListener('click', () => runMailRefresh(false));
+  document.getElementById('s-full-refresh').addEventListener('click', async () => {
+    if (!(await askInApp(t('set.fullRefreshConfirm'), t('set.fullRefreshAction')))) return;
+    await runMailRefresh(true);
+  });
   document.getElementById('s-language').addEventListener('change', e => applyLanguage(e.target.value));   // live preview
   setupCloudSettings();
   setupAiSettings();
@@ -3389,6 +3435,41 @@ function setupSettings() {
     out.textContent = qr;
     out.style.display = out.style.display === 'none' ? 'block' : 'none';
   });
+}
+
+function refreshTime(timestamp) {
+  return timestamp > 0 ? fmtFull(timestamp) : t('set.refreshNever');
+}
+
+async function renderMailRefreshStatus(message = '') {
+  const element = document.getElementById('s-refresh-status');
+  if (message) {
+    element.textContent = message;
+    return;
+  }
+  const status = await cmd('get_refresh_status');
+  element.textContent = t('set.refreshStatus', {
+    check: refreshTime(status.last_check),
+    full: refreshTime(status.last_full_refresh),
+    n: fmtNumber(status.last_new_count),
+  });
+}
+
+async function runMailRefresh(full) {
+  const check = document.getElementById('s-check-mail');
+  const strong = document.getElementById('s-full-refresh');
+  check.disabled = true;
+  strong.disabled = true;
+  await renderMailRefreshStatus(t(full ? 'set.fullRefreshing' : 'set.checkingMail'));
+  try {
+    await cmd(full ? 'full_refresh_emails' : 'refresh_emails');
+    await renderMailRefreshStatus();
+  } catch (error) {
+    await renderMailRefreshStatus(t('set.refreshFailed', { err: String(error) }));
+  } finally {
+    check.disabled = false;
+    strong.disabled = false;
+  }
 }
 
 function autoUpdatesEnabled() {
@@ -4254,7 +4335,7 @@ function emailRow(email) {
       <div class="email-row-top">
         <span class="email-from">${esc(email.from_name)}</span>
         ${projectChip(email.project)}
-        ${email.attachments?.length ? `<span class="email-attachment-mark" title="${t('rp.attachments', { n: email.attachments.length })}">📎</span>` : ''}
+        ${(email.attachment_count || email.attachments?.length) ? `<span class="email-attachment-mark" title="${t('rp.attachments', { n: email.attachment_count || email.attachments.length })}">📎</span>` : ''}
         <span class="email-date">${esc(emailDateShort(email))}</span>
       </div>
       <div class="email-subject">${esc(email.subject)}</div>

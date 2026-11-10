@@ -19,6 +19,7 @@ const {
   isSafeEmbeddedSvgReference,
   sanitizeEmbeddedSvgCss,
   isRemoteResourceUrl,
+  normalizeStateSnapshot,
 } = require('../app-core.js');
 
 const mail = (uid, overrides = {}) => ({
@@ -39,6 +40,30 @@ const EMBEDDED_PNG = 'data:image/png;base64,' +
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 const EMBEDDED_SVG = 'data:image/svg+xml;base64,' +
   Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><text>Café</text></svg>').toString('base64');
+
+test('compact state snapshots share one email object across derived lists', () => {
+  const snapshot = normalizeStateSnapshot({
+    emails: [{ key: 'inbox:7', folder: 'inbox', uid: 7, subject: 'One copy' }],
+    all_emails: ['inbox:7'], urgent_emails: ['inbox:7'], high_emails: [],
+  });
+  assert.equal(snapshot.emails, undefined);
+  assert.equal(snapshot.all_emails[0], snapshot.urgent_emails[0]);
+  snapshot.all_emails[0].is_read = true;
+  assert.equal(snapshot.urgent_emails[0].is_read, true);
+});
+
+test('compact state keys keep equal IMAP UIDs in different folders distinct', () => {
+  const snapshot = normalizeStateSnapshot({
+    emails: [
+      { key: 'inbox:4', folder: 'inbox', uid: 4 },
+      { key: 'sent:4', folder: 'sent', uid: 4 },
+    ],
+    all_emails: ['inbox:4'], sent_emails: ['sent:4'],
+  });
+  assert.notEqual(snapshot.all_emails[0], snapshot.sent_emails[0]);
+  assert.equal(snapshot.all_emails[0]._folder, 'inbox');
+  assert.equal(snapshot.sent_emails[0]._folder, 'sent');
+});
 
 test('base64 slashes do not make an embedded image look remote', () => {
   assert.equal(isRemoteResourceUrl('data:image/png;base64,abc//def=='), false);

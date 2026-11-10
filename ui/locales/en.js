@@ -106,6 +106,11 @@ STRINGS.en = {
     // Settings
     'set.title': 'Settings', 'set.general': 'General', 'set.accounts': 'Accounts', 'set.ai': 'AI',
     'set.notify': 'Notify me when new emails arrive',
+    'set.mailRefresh': 'Mailbox refresh', 'set.mailRefreshNote': 'Routine checks process only new Inbox mail. Use a full refresh to repair or reconcile the recent mailbox.',
+    'set.checkMail': 'Check for new mail', 'set.fullRefresh': 'Full mailbox refresh…',
+    'set.fullRefreshConfirm': 'Refetch and reconcile recent mail in every folder? Existing AI classifications will be preserved.', 'set.fullRefreshAction': 'Full refresh',
+    'set.refreshNever': 'Never', 'set.refreshStatus': 'Last check: {check} · Full refresh: {full} · New mail: {n}',
+    'set.fullRefreshing': 'Refreshing the full mailbox…', 'set.checkingMail': 'Checking for new mail…', 'set.refreshFailed': 'Refresh failed: {err}',
     'set.fontScale': 'Font Scale', 'set.theme': 'Theme', 'set.language': 'Language',
     "set.signature": "Signature", "set.sigChoose": "📄 Choose an HTML file…", "set.sigRemove": "Remove", "set.sigOnNew": "Add to new messages", "set.sigOnReply": "Add to replies and forwards", "set.sigHint": "No signature yet. Export it from your mail client (Outlook, Gmail…) as an HTML file, or create one with any signature generator.", "set.sigImported": "Signature imported", "set.sigRemoved": "Signature removed", "set.sigFileFilter": "HTML files",
     "set.incoming": "📥 Incoming mail (IMAP)", "set.outgoing": "📤 Outgoing mail (SMTP)", "set.server": "Server", "set.port": "Port", "set.username": "Username", "set.usernamePh": "you@example.com", "set.password": "Password", "set.sameAsIncoming": "Same as incoming", "set.advanced": "Advanced options", "set.imapMailbox": "Folder to check", "set.fetchCount": "Number of emails to fetch",

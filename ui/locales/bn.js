@@ -98,6 +98,11 @@ STRINGS.bn = {
 
     'set.title': 'সেটিংস', 'set.general': 'সাধারণ', 'set.accounts': 'অ্যাকাউন্ট', 'set.ai': 'AI',
     'set.notify': 'নতুন ইমেল এলে আমাকে জানান',
+    'set.mailRefresh': 'মেইলবক্স রিফ্রেশ', 'set.mailRefreshNote': 'নিয়মিত পরীক্ষায় শুধু ইনবক্সের নতুন মেইল প্রক্রিয়া করা হয়। সাম্প্রতিক মেইল মেরামত বা মিলিয়ে নিতে পূর্ণ রিফ্রেশ ব্যবহার করুন।',
+    'set.checkMail': 'নতুন মেইল দেখুন', 'set.fullRefresh': 'সম্পূর্ণ মেইলবক্স রিফ্রেশ…',
+    'set.fullRefreshConfirm': 'সব ফোল্ডারের সাম্প্রতিক মেইল আবার ডাউনলোড ও মিলিয়ে নেওয়া হবে? আগের AI শ্রেণিবিন্যাস রাখা হবে।', 'set.fullRefreshAction': 'সম্পূর্ণ রিফ্রেশ',
+    'set.refreshNever': 'কখনও নয়', 'set.refreshStatus': 'শেষ পরীক্ষা: {check} · পূর্ণ রিফ্রেশ: {full} · নতুন: {n}',
+    'set.fullRefreshing': 'সম্পূর্ণ মেইলবক্স রিফ্রেশ হচ্ছে…', 'set.checkingMail': 'নতুন মেইল দেখা হচ্ছে…', 'set.refreshFailed': 'রিফ্রেশ ব্যর্থ: {err}',
     'set.fontScale': 'ফন্টের আকার', 'set.theme': 'থিম', 'set.language': 'ভাষা',
     "set.signature": "স্বাক্ষর", "set.sigChoose": "📄 একটি HTML ফাইল বেছে নিন…", "set.sigRemove": "সরান", "set.sigOnNew": "নতুন বার্তায় যোগ করুন", "set.sigOnReply": "উত্তর ও ফরোয়ার্ডে যোগ করুন", "set.sigHint": "এখনও কোনো স্বাক্ষর নেই। আপনার মেইল ক্লায়েন্ট (Outlook, Gmail…) থেকে HTML ফাইল হিসেবে রপ্তানি করুন, অথবা যেকোনো স্বাক্ষর জেনারেটর দিয়ে তৈরি করুন।", "set.sigImported": "স্বাক্ষর আমদানি হয়েছে", "set.sigRemoved": "স্বাক্ষর সরানো হয়েছে", "set.sigFileFilter": "HTML ফাইল",
     "set.incoming": "📥 আগত মেইল (IMAP)", "set.outgoing": "📤 বহির্গামী মেইল (SMTP)", "set.server": "সার্ভার", "set.port": "পোর্ট", "set.username": "ব্যবহারকারীর নাম", "set.usernamePh": "apni@udaharon.com", "set.password": "পাসওয়ার্ড", "set.sameAsIncoming": "আগত মেইলের মতো", "set.advanced": "উন্নত বিকল্প", "set.imapMailbox": "যে ফোল্ডার দেখা হবে", "set.fetchCount": "কতগুলো ইমেইল আনা হবে",

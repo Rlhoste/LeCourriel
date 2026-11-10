@@ -98,6 +98,11 @@ STRINGS.fr = {
 
     'set.title': 'Paramètres', 'set.general': 'Général', 'set.accounts': 'Comptes', 'set.ai': 'IA',
     'set.notify': 'Me prévenir quand de nouveaux e-mails arrivent',
+    'set.mailRefresh': 'Actualisation de la messagerie', 'set.mailRefreshNote': 'Les vérifications courantes traitent uniquement les nouveaux messages reçus. Utilisez l’actualisation complète pour réparer ou resynchroniser les messages récents.',
+    'set.checkMail': 'Relever les nouveaux messages', 'set.fullRefresh': 'Actualisation complète…',
+    'set.fullRefreshConfirm': 'Retélécharger et resynchroniser les messages récents de tous les dossiers ? Les classements IA existants seront conservés.', 'set.fullRefreshAction': 'Tout actualiser',
+    'set.refreshNever': 'Jamais', 'set.refreshStatus': 'Dernière vérification : {check} · Actualisation complète : {full} · Nouveaux : {n}',
+    'set.fullRefreshing': 'Actualisation complète en cours…', 'set.checkingMail': 'Recherche de nouveaux messages…', 'set.refreshFailed': 'Échec de l’actualisation : {err}',
     'set.fontScale': 'Taille du texte', 'set.theme': 'Thème', 'set.language': 'Langue',
     "set.signature": "Signature", "set.sigChoose": "📄 Choisir un fichier HTML…", "set.sigRemove": "Supprimer", "set.sigOnNew": "Ajouter aux nouveaux messages", "set.sigOnReply": "Ajouter aux réponses et transferts", "set.sigHint": "Pas encore de signature. Exportez-la depuis votre messagerie (Outlook, Gmail…) en fichier HTML, ou créez-en une avec un générateur de signature.", "set.sigImported": "Signature importée", "set.sigRemoved": "Signature supprimée", "set.sigFileFilter": "Fichiers HTML",
     "set.incoming": "📥 Réception (IMAP)", "set.outgoing": "📤 Envoi (SMTP)", "set.server": "Serveur", "set.port": "Port", "set.username": "Identifiant", "set.usernamePh": "vous@exemple.fr", "set.password": "Mot de passe", "set.sameAsIncoming": "Comme pour la réception", "set.advanced": "Options avancées", "set.imapMailbox": "Dossier à relever", "set.fetchCount": "Nombre d'e-mails récupérés",

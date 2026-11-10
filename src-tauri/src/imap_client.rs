@@ -9,6 +9,45 @@ use tracing::{debug, info, warn};
 use crate::config::ImapConfig;
 use crate::models::RawEmail;
 
+/// Result of the cheap Inbox synchronization used by routine refreshes.
+/// `reset` means the server's UID namespace changed (or the local cursor was
+/// impossible), so `emails` is a fresh recent window rather than only arrivals.
+#[derive(Debug)]
+pub struct InboxDelta {
+    pub emails: Vec<RawEmail>,
+    pub uid_validity: Option<u32>,
+    pub highest_uid: u32,
+    pub reset: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InboxFetchPlan {
+    None,
+    NewerThan(u32),
+    RecentWindow,
+}
+
+fn inbox_fetch_plan(
+    saved_validity: Option<u32>,
+    saved_highest: Option<u32>,
+    server_validity: Option<u32>,
+    server_next: Option<u32>,
+) -> (InboxFetchPlan, bool) {
+    let validity_changed = saved_validity.is_some() && server_validity.is_some() && saved_validity != server_validity;
+    let impossible_cursor = saved_highest.zip(server_next).is_some_and(|(highest, next)| highest >= next);
+    if validity_changed || impossible_cursor {
+        return (InboxFetchPlan::RecentWindow, true);
+    }
+    let Some(highest) = saved_highest else {
+        return (InboxFetchPlan::RecentWindow, false);
+    };
+    if server_next.is_some_and(|next| next <= highest.saturating_add(1)) {
+        (InboxFetchPlan::None, false)
+    } else {
+        (InboxFetchPlan::NewerThan(highest), false)
+    }
+}
+
 pub async fn fetch_folder(cfg: &ImapConfig, mailbox: &str) -> Result<Vec<RawEmail>> {
     let mut override_cfg = cfg.clone();
     override_cfg.mailbox = mailbox.to_string();
@@ -344,6 +383,109 @@ pub async fn fetch_emails(cfg: &ImapConfig) -> Result<Vec<RawEmail>> {
     Ok(emails)
 }
 
+/// Select Inbox and download only messages whose UID is newer than the saved
+/// cursor. With no usable cursor (first run or UIDVALIDITY reset), download the
+/// configured recent window once. A no-change check performs no FETCH at all.
+pub async fn fetch_inbox_delta(
+    cfg: &ImapConfig,
+    saved_validity: Option<u32>,
+    saved_highest: Option<u32>,
+) -> Result<InboxDelta> {
+    let mut session = connect(cfg).await?;
+    let mailbox = session.select(&cfg.mailbox).await.context("IMAP SELECT mailbox failed")?;
+    let (mut plan, reset) = inbox_fetch_plan(saved_validity, saved_highest, mailbox.uid_validity, mailbox.uid_next);
+
+    // UIDNEXT is normally present. For unusual servers, one UID SEARCH is still
+    // much cheaper than downloading and parsing message bodies every two minutes.
+    let server_highest = match mailbox.uid_next {
+        Some(next) => next.saturating_sub(1),
+        None => session.uid_search("ALL").await.context("IMAP UID SEARCH failed")?.into_iter().max().unwrap_or(0),
+    };
+    if mailbox.uid_next.is_none() {
+        plan = if reset {
+            InboxFetchPlan::RecentWindow
+        } else {
+            match saved_highest {
+                Some(highest) if server_highest <= highest => InboxFetchPlan::None,
+                Some(highest) => InboxFetchPlan::NewerThan(highest),
+                None => InboxFetchPlan::RecentWindow,
+            }
+        };
+    }
+
+    let fetch_set = match plan {
+        InboxFetchPlan::None => None,
+        InboxFetchPlan::NewerThan(highest) => Some(format!("{}:*", highest.saturating_add(1))),
+        InboxFetchPlan::RecentWindow if mailbox.exists == 0 => None,
+        InboxFetchPlan::RecentWindow => {
+            let start = if mailbox.exists > cfg.fetch_count { mailbox.exists - cfg.fetch_count + 1 } else { 1 };
+            Some(format!("{start}:{}", mailbox.exists))
+        }
+    };
+
+    let mut emails = Vec::new();
+    let mut incomplete_fetch = false;
+    if let Some(set) = fetch_set {
+        info!("Incremental Inbox fetch: {}", set);
+        // RecentWindow is a sequence-number range; NewerThan is a UID range.
+        match plan {
+            InboxFetchPlan::NewerThan(_) => {
+                let stream = session
+                    .uid_fetch(&set, "(UID FLAGS BODY.PEEK[])")
+                    .await
+                    .context("IMAP incremental UID FETCH failed")?;
+                futures::pin_mut!(stream);
+                while let Some(item) = stream.next().await {
+                    match item {
+                        Ok(fetch) => {
+                            if let Some(email) = parse_fetch(&fetch) {
+                                if !email.deleted {
+                                    emails.push(email);
+                                }
+                            } else {
+                                incomplete_fetch = true;
+                            }
+                        }
+                        Err(error) => {
+                            incomplete_fetch = true;
+                            warn!("Malformed incremental fetch result: {}", error);
+                        }
+                    }
+                }
+            }
+            InboxFetchPlan::RecentWindow => {
+                let stream =
+                    session.fetch(&set, "(UID FLAGS BODY.PEEK[])").await.context("IMAP recent-window FETCH failed")?;
+                futures::pin_mut!(stream);
+                while let Some(item) = stream.next().await {
+                    match item {
+                        Ok(fetch) => {
+                            if let Some(email) = parse_fetch(&fetch) {
+                                if !email.deleted {
+                                    emails.push(email);
+                                }
+                            } else {
+                                incomplete_fetch = true;
+                            }
+                        }
+                        Err(error) => {
+                            incomplete_fetch = true;
+                            warn!("Malformed recent-window fetch result: {}", error);
+                        }
+                    }
+                }
+            }
+            InboxFetchPlan::None => unreachable!(),
+        }
+    }
+    if incomplete_fetch {
+        anyhow::bail!("IMAP FETCH returned incomplete message data; sync cursor was not advanced");
+    }
+    emails.sort_by(|a, b| b.date.cmp(&a.date).then_with(|| b.uid.cmp(&a.uid)));
+    session.logout().await.ok();
+    Ok(InboxDelta { emails, uid_validity: mailbox.uid_validity, highest_uid: server_highest, reset })
+}
+
 fn parse_fetch(fetch: &Fetch) -> Option<RawEmail> {
     let raw = fetch.body()?;
     parse_fetch_bytes(fetch, raw)
@@ -602,4 +744,34 @@ fn find_part<'a>(
         }
     }
     None
+}
+
+#[cfg(test)]
+mod incremental_tests {
+    use super::{inbox_fetch_plan, InboxFetchPlan};
+
+    #[test]
+    fn unchanged_uidnext_needs_no_fetch() {
+        assert_eq!(inbox_fetch_plan(Some(9), Some(42), Some(9), Some(43)), (InboxFetchPlan::None, false));
+    }
+
+    #[test]
+    fn newer_uidnext_fetches_only_arrivals() {
+        assert_eq!(inbox_fetch_plan(Some(9), Some(42), Some(9), Some(46)), (InboxFetchPlan::NewerThan(42), false));
+    }
+
+    #[test]
+    fn changed_uidvalidity_forces_recent_reconciliation() {
+        assert_eq!(inbox_fetch_plan(Some(9), Some(42), Some(10), Some(8)), (InboxFetchPlan::RecentWindow, true));
+    }
+
+    #[test]
+    fn impossible_cursor_forces_recent_reconciliation() {
+        assert_eq!(inbox_fetch_plan(Some(9), Some(99), Some(9), Some(50)), (InboxFetchPlan::RecentWindow, true));
+    }
+
+    #[test]
+    fn missing_cursor_bootstraps_with_recent_window() {
+        assert_eq!(inbox_fetch_plan(None, None, Some(9), Some(50)), (InboxFetchPlan::RecentWindow, false));
+    }
 }

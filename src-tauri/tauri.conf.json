@@ -1,6 +1,6 @@
 {
   "productName": "Le courriel",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "identifier": "io.courriel.app",
   "build": {
     "frontendDist": "../ui"

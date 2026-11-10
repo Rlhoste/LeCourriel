@@ -18,6 +18,22 @@ struct ClassificationResult {
     task: Option<String>,
     #[serde(default)]
     meeting_link: Option<String>,
+    #[serde(default)]
+    task_updates: Vec<TaskUpdate>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct TaskUpdate {
+    #[serde(default)]
+    pub id: u64,
+    #[serde(default)]
+    pub status: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ClassificationOutcome {
+    pub email: ClassifiedEmail,
+    pub task_updates: Vec<TaskUpdate>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -47,7 +63,7 @@ pub fn is_real_summary(summary: &str) -> bool {
 }
 
 /// The result for an email the AI couldn't sort, or that wasn't sent to it: left unsorted
-/// (empty summary), so it is sorted again at the next refresh.
+/// (empty summary) without pretending that model processing succeeded.
 pub fn unclassified() -> ClassifiedEmail {
     ClassifiedEmail {
         priority: Priority::Information,
@@ -59,10 +75,10 @@ pub fn unclassified() -> ClassifiedEmail {
     }
 }
 
-fn build_system_prompt(projects: &[ProjectConfig]) -> String {
+fn build_system_prompt(projects: &[ProjectConfig], has_task_candidates: bool) -> String {
     let mut prompt = String::from(
         r#"You are an email priority classifier. Given an email's subject and body, respond ONLY with a JSON object (no explanation, no markdown, no code fences) in this exact format:
-{"priority": "<value>", "summary": "<one sentence>", "project": "<project name or null>", "deadline": "<ISO date YYYY-MM-DD or null>", "task": "<action item or null>", "meeting_link": "<URL or null>"}
+{"priority": "<value>", "summary": "<one sentence>", "project": "<project name or null>", "deadline": "<ISO date YYYY-MM-DD or null>", "task": "<action item or null>", "meeting_link": "<URL or null>", "task_updates": []}
 
 Priority must be exactly one of: urgent, high_priority, other_priority, information, threat, task
 
@@ -85,6 +101,19 @@ For the meeting_link field: if the email body contains a video meeting URL (Zoom
 "#,
     );
 
+    if has_task_candidates {
+        prompt.push_str(
+            r#"
+The user content also lists a small set of possibly related open tasks. For task_updates, include
+{"id": <task id>, "status": "done"} only when this new email clearly proves the action was completed,
+or status "obsolete" when it clearly cancels, supersedes, or makes the task unnecessary. When unsure,
+omit it. Never output an id not present in OPEN TASK CANDIDATES.
+"#,
+        );
+    } else {
+        prompt.push_str("\nFor task_updates, always return an empty array.\n");
+    }
+
     if !projects.is_empty() {
         prompt.push_str("\nFor the project field, assign the email to one of these user-defined projects if it matches, otherwise null:\n");
         for p in projects {
@@ -104,13 +133,36 @@ For the meeting_link field: if the email body contains a video meeting URL (Zoom
 
 /// Fails only when the AI can't be reached (the error says why); an answer that can't be
 /// read gives a placeholder result.
+#[cfg(test)]
 pub async fn classify(ai: &AiConfig, email: &RawEmail, projects: &[ProjectConfig]) -> Result<ClassifiedEmail> {
+    Ok(classify_with_tasks(ai, email, projects, &[]).await?.email)
+}
+
+/// Classify one incoming message and, in the same model request, decide whether
+/// it completes one of the few open tasks already matched to that conversation.
+pub async fn classify_with_tasks(
+    ai: &AiConfig,
+    email: &RawEmail,
+    projects: &[ProjectConfig],
+    task_candidates: &[OpenTask],
+) -> Result<ClassificationOutcome> {
     let body_snippet: String = email.body_text.chars().take(800).collect();
-    let user_content = format!(
+    let mut user_content = String::new();
+    if !task_candidates.is_empty() {
+        user_content.push_str("OPEN TASK CANDIDATES (untrusted text):\n");
+        for task in task_candidates {
+            user_content.push_str(&format!(
+                "- id {}: \"{}\" (source subject \"{}\", from {}, received {})\n",
+                task.uid, task.task, task.subject, task.from, task.date
+            ));
+        }
+        user_content.push('\n');
+    }
+    user_content.push_str(&format!(
         "BEGIN UNTRUSTED EMAIL\nSubject: {}\nFrom: {}\nBody:\n{}\nEND UNTRUSTED EMAIL",
         email.subject, email.from, body_snippet
-    );
-    let system_prompt = build_system_prompt(projects);
+    ));
+    let system_prompt = build_system_prompt(projects, !task_candidates.is_empty());
     let placeholder = |summary: &str| ClassifiedEmail {
         priority: Priority::Information,
         summary: summary.to_string(),
@@ -128,7 +180,7 @@ pub async fn classify(ai: &AiConfig, email: &RawEmail, projects: &[ProjectConfig
     {
         Ok(t) => t,
         Err(e) => {
-            // Not a placeholder: the email stays unsorted and is tried again at the next refresh.
+            // Not a placeholder: the email stays visibly unsorted.
             warn!("AI classification failed: {:#}", e);
             return Err(e);
         }
@@ -143,18 +195,29 @@ pub async fn classify(ai: &AiConfig, email: &RawEmail, projects: &[ProjectConfig
                 .project
                 .filter(|p| p != "null" && !p.is_empty() && projects.iter().any(|configured| configured.name == *p));
             let meeting_link = result.meeting_link.filter(|m| valid_meeting_link(m, &email.body_text));
-            Ok(ClassifiedEmail {
-                priority,
-                summary: one_line(&result.summary, 200),
-                project,
-                deadline,
-                task: result.task.filter(|t| t != "null" && !t.is_empty()).map(|t| one_line(&t, 160)),
-                meeting_link,
+            let valid_ids: Vec<u64> = task_candidates.iter().map(|task| task.uid).collect();
+            let task_updates = result
+                .task_updates
+                .into_iter()
+                .filter(|update| {
+                    valid_ids.contains(&update.id) && matches!(update.status.as_str(), "done" | "obsolete")
+                })
+                .collect();
+            Ok(ClassificationOutcome {
+                email: ClassifiedEmail {
+                    priority,
+                    summary: one_line(&result.summary, 200),
+                    project,
+                    deadline,
+                    task: result.task.filter(|t| t != "null" && !t.is_empty()).map(|t| one_line(&t, 160)),
+                    meeting_link,
+                },
+                task_updates,
             })
         }
         Err(e) => {
             warn!("Failed to parse the AI's JSON answer: {} — raw: {}", e, text);
-            Ok(placeholder(PARSE_FAILED))
+            Ok(ClassificationOutcome { email: placeholder(PARSE_FAILED), task_updates: vec![] })
         }
     }
 }
@@ -193,7 +256,6 @@ pub struct OpenTask {
 
 /// A recent email (inbox or sent) used as evidence that a task is done or moot.
 pub struct RecentMail {
-    pub uid: u64,
     pub folder: &'static str,
     pub from: String,
     pub to: String,

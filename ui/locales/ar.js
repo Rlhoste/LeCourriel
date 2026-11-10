@@ -105,6 +105,11 @@ STRINGS.ar = {
 
     'set.title': 'الإعدادات', 'set.general': 'عام', 'set.accounts': 'الحسابات', 'set.ai': 'الذكاء الاصطناعي',
     'set.notify': 'أعلمني عند وصول رسائل جديدة',
+    'set.mailRefresh': 'تحديث صندوق البريد', 'set.mailRefreshNote': 'تعالج عمليات التحقق العادية الرسائل الجديدة في الوارد فقط. استخدم التحديث الكامل لإصلاح الرسائل الحديثة أو مزامنتها.',
+    'set.checkMail': 'التحقق من البريد الجديد', 'set.fullRefresh': 'تحديث كامل لصندوق البريد…',
+    'set.fullRefreshConfirm': 'إعادة تنزيل الرسائل الحديثة ومزامنتها في كل المجلدات؟ سيتم الاحتفاظ بتصنيفات الذكاء الاصطناعي الحالية.', 'set.fullRefreshAction': 'تحديث كامل',
+    'set.refreshNever': 'أبدًا', 'set.refreshStatus': 'آخر تحقق: {check} · التحديث الكامل: {full} · الجديد: {n}',
+    'set.fullRefreshing': 'جارٍ تحديث صندوق البريد بالكامل…', 'set.checkingMail': 'جارٍ التحقق من البريد الجديد…', 'set.refreshFailed': 'فشل التحديث: {err}',
     'set.fontScale': 'حجم الخط', 'set.theme': 'السمة', 'set.language': 'اللغة',
     "set.signature": "التوقيع", "set.sigChoose": "📄 اختر ملف HTML…", "set.sigRemove": "إزالة", "set.sigOnNew": "إضافة إلى الرسائل الجديدة", "set.sigOnReply": "إضافة إلى الردود وإعادة التوجيه", "set.sigHint": "لا يوجد توقيع بعد. صدّره من برنامج البريد لديك (Outlook وGmail…) كملف HTML، أو أنشئ واحدًا بأي مولّد توقيعات.", "set.sigImported": "تم استيراد التوقيع", "set.sigRemoved": "تمت إزالة التوقيع", "set.sigFileFilter": "ملفات HTML",
     "set.incoming": "📥 البريد الوارد (IMAP)", "set.outgoing": "📤 البريد الصادر (SMTP)", "set.server": "الخادم", "set.port": "المنفذ", "set.username": "اسم المستخدم", "set.usernamePh": "you@example.com", "set.password": "كلمة المرور", "set.sameAsIncoming": "مثل البريد الوارد", "set.advanced": "خيارات متقدمة", "set.imapMailbox": "المجلد الذي يُفحص", "set.fetchCount": "عدد الرسائل التي تُجلب",

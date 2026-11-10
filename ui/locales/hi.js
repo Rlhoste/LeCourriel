@@ -98,6 +98,11 @@ STRINGS.hi = {
 
     'set.title': 'सेटिंग', 'set.general': 'सामान्य', 'set.accounts': 'खाते', 'set.ai': 'AI',
     'set.notify': 'नए ईमेल आने पर मुझे सूचित करें',
+    'set.mailRefresh': 'मेलबॉक्स रीफ़्रेश', 'set.mailRefreshNote': 'नियमित जाँच केवल इनबॉक्स के नए मेल संसाधित करती है। हाल के मेल की मरम्मत या मिलान के लिए पूर्ण रीफ़्रेश करें।',
+    'set.checkMail': 'नया मेल जाँचें', 'set.fullRefresh': 'पूरा मेलबॉक्स रीफ़्रेश…',
+    'set.fullRefreshConfirm': 'सभी फ़ोल्डरों के हाल के मेल फिर डाउनलोड और मिलान करें? मौजूदा AI वर्गीकरण सुरक्षित रहेंगे।', 'set.fullRefreshAction': 'पूरा रीफ़्रेश',
+    'set.refreshNever': 'कभी नहीं', 'set.refreshStatus': 'अंतिम जाँच: {check} · पूर्ण रीफ़्रेश: {full} · नए: {n}',
+    'set.fullRefreshing': 'पूरा मेलबॉक्स रीफ़्रेश हो रहा है…', 'set.checkingMail': 'नया मेल जाँचा जा रहा है…', 'set.refreshFailed': 'रीफ़्रेश विफल: {err}',
     'set.fontScale': 'फ़ॉन्ट आकार', 'set.theme': 'थीम', 'set.language': 'भाषा',
     "set.signature": "हस्ताक्षर", "set.sigChoose": "📄 HTML फ़ाइल चुनें…", "set.sigRemove": "हटाएँ", "set.sigOnNew": "नए संदेशों में जोड़ें", "set.sigOnReply": "जवाबों और फ़ॉरवर्ड में जोड़ें", "set.sigHint": "अभी कोई हस्ताक्षर नहीं है। इसे अपने मेल क्लाइंट (Outlook, Gmail…) से HTML फ़ाइल के रूप में निर्यात करें, या किसी हस्ताक्षर जनरेटर से बनाएँ।", "set.sigImported": "हस्ताक्षर आयात किया गया", "set.sigRemoved": "हस्ताक्षर हटाया गया", "set.sigFileFilter": "HTML फ़ाइलें",
     "set.incoming": "📥 आने वाली मेल (IMAP)", "set.outgoing": "📤 जाने वाली मेल (SMTP)", "set.server": "सर्वर", "set.port": "पोर्ट", "set.username": "उपयोगकर्ता नाम", "set.usernamePh": "aap@udaharan.com", "set.password": "पासवर्ड", "set.sameAsIncoming": "आने वाली मेल जैसा", "set.advanced": "उन्नत विकल्प", "set.imapMailbox": "जाँचने वाला फ़ोल्डर", "set.fetchCount": "लाए जाने वाले ईमेल की संख्या",

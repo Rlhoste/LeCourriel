@@ -29,6 +29,29 @@ pub struct EmailCardDto {
     pub meeting_link: String,
 }
 
+/// Lightweight email data carried by state snapshots. Large bodies and full recipient
+/// headers are fetched with `get_email` only when the reading pane opens.
+#[derive(Serialize, Clone)]
+pub struct EmailSummaryDto {
+    /// Stable within a snapshot and unique across IMAP folders (whose UIDs may overlap).
+    pub key: String,
+    pub folder: String,
+    pub uid: u64,
+    pub subject: String,
+    pub from_name: String,
+    pub from_email: String,
+    pub message_id: String,
+    pub references: String,
+    pub date_str: String,
+    pub date_full: String,
+    pub date_ts: i64,
+    pub summary: String,
+    pub priority: String,
+    pub is_read: bool,
+    pub project: String,
+    pub attachment_count: usize,
+}
+
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct AccountDto {
     pub label: String,
@@ -132,22 +155,25 @@ pub struct AppStateDto {
     pub hour: u32,
     pub briefing: Briefing,
     pub loading: bool,
-    pub urgent_emails: Vec<EmailCardDto>,
-    pub high_emails: Vec<EmailCardDto>,
-    pub other_emails: Vec<EmailCardDto>,
-    pub info_emails: Vec<EmailCardDto>,
-    pub threat_emails: Vec<EmailCardDto>,
-    pub task_emails: Vec<EmailCardDto>,
-    pub all_emails: Vec<EmailCardDto>,
+    /// Each lightweight email is serialized once. The lists below contain keys into this
+    /// vector, avoiding repeated metadata and (especially) repeated message bodies.
+    pub emails: Vec<EmailSummaryDto>,
+    pub urgent_emails: Vec<String>,
+    pub high_emails: Vec<String>,
+    pub other_emails: Vec<String>,
+    pub info_emails: Vec<String>,
+    pub threat_emails: Vec<String>,
+    pub task_emails: Vec<String>,
+    pub all_emails: Vec<String>,
     pub tasks: Vec<crate::tasks::Task>,
-    pub meeting_items: Vec<EmailCardDto>,
+    pub meeting_items: Vec<String>,
     pub verification_items: Vec<VerificationDto>,
-    pub important_emails: Vec<EmailCardDto>,
-    pub all_emails_by_priority: Vec<EmailCardDto>,
-    pub sent_emails: Vec<EmailCardDto>,
-    pub drafts_emails: Vec<EmailCardDto>,
-    pub trash_emails: Vec<EmailCardDto>,
-    pub spam_emails: Vec<EmailCardDto>,
+    pub important_emails: Vec<String>,
+    pub all_emails_by_priority: Vec<String>,
+    pub sent_emails: Vec<String>,
+    pub drafts_emails: Vec<String>,
+    pub trash_emails: Vec<String>,
+    pub spam_emails: Vec<String>,
     pub deadlines: Vec<DeadlineDto>,
     pub week_days: Vec<WeekDayDto>,
     pub projects: Vec<ProjectDto>,

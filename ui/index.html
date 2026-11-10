@@ -502,6 +502,15 @@
         <input type="checkbox" id="s-notify" />
         <span data-i18n="set.notify">Notify me when new emails arrive</span>
       </label>
+      <div class="mail-refresh-card">
+        <strong data-i18n="set.mailRefresh">Mailbox refresh</strong>
+        <p class="settings-note" data-i18n="set.mailRefreshNote">Routine checks fetch and process only new Inbox mail. Use a full refresh to repair and reconcile mailbox data.</p>
+        <div class="db-test-row">
+          <button type="button" id="s-check-mail" class="secondary-btn" data-i18n="set.checkMail">Check for new mail</button>
+          <button type="button" id="s-full-refresh" class="secondary-btn" data-i18n="set.fullRefresh">Full mailbox refresh…</button>
+        </div>
+        <div id="s-refresh-status" class="db-status"></div>
+      </div>
     </div>
 
     <!-- Accounts -->

@@ -98,6 +98,11 @@ STRINGS.ja = {
 
     'set.title': '設定', 'set.general': '全般', 'set.accounts': 'アカウント', 'set.ai': 'AI',
     'set.notify': '新しいメールが届いたら通知する',
+    'set.mailRefresh': 'メールボックスの更新', 'set.mailRefreshNote': '通常の確認では受信トレイの新着メールだけを処理します。最近のメールを修復・照合するには完全更新を使用してください。',
+    'set.checkMail': '新着メールを確認', 'set.fullRefresh': 'メールボックスを完全更新…',
+    'set.fullRefreshConfirm': 'すべてのフォルダーの最近のメールを再取得して照合しますか？既存の AI 分類は保持されます。', 'set.fullRefreshAction': '完全更新',
+    'set.refreshNever': 'なし', 'set.refreshStatus': '最終確認：{check} · 完全更新：{full} · 新着：{n}',
+    'set.fullRefreshing': 'メールボックスを完全更新しています…', 'set.checkingMail': '新着メールを確認しています…', 'set.refreshFailed': '更新に失敗しました：{err}',
     'set.fontScale': '文字の大きさ', 'set.theme': 'テーマ', 'set.language': '言語',
     "set.signature": "署名", "set.sigChoose": "📄 HTML ファイルを選択…", "set.sigRemove": "削除", "set.sigOnNew": "新規メッセージに追加", "set.sigOnReply": "返信と転送に追加", "set.sigHint": "署名はまだありません。メールソフト（Outlook、Gmail など）から HTML ファイルとして書き出すか、署名作成ツールで作成してください。", "set.sigImported": "署名を読み込みました", "set.sigRemoved": "署名を削除しました", "set.sigFileFilter": "HTML ファイル",
     "set.incoming": "📥 受信 (IMAP)", "set.outgoing": "📤 送信 (SMTP)", "set.server": "サーバー", "set.port": "ポート", "set.username": "ユーザー名", "set.usernamePh": "you@example.com", "set.password": "パスワード", "set.sameAsIncoming": "受信と同じ", "set.advanced": "詳細オプション", "set.imapMailbox": "確認するフォルダー", "set.fetchCount": "取得するメール数",

@@ -1068,6 +1068,47 @@ max_tokens = 10
         }
     }
 
+    #[tokio::test]
+    async fn test_classification_checks_related_task_in_the_same_request() {
+        use crate::ai_classifier::{classify_with_tasks, OpenTask, TaskUpdate};
+        let reply = r#"{"choices":[{"message":{"content":"{\"priority\":\"information\",\"summary\":\"The requested file was received.\",\"project\":null,\"deadline\":null,\"task\":null,\"meeting_link\":null,\"task_updates\":[{\"id\":42,\"status\":\"done\"},{\"id\":999,\"status\":\"done\"},{\"id\":42,\"status\":\"maybe\"}]}"}}]}"#;
+        let (base, server) = fake_ai_server(200, reply).await;
+        let email = RawEmail {
+            uid: 77,
+            subject: "Re: documents".into(),
+            from: "Alice <alice@example.com>".into(),
+            to: String::new(),
+            cc: String::new(),
+            reply_to: String::new(),
+            bcc: String::new(),
+            message_id: "<reply@example.com>".into(),
+            references: "<request@example.com>".into(),
+            seen: false,
+            deleted: false,
+            date: None,
+            body_text: "Thanks, I received the requested file.".into(),
+            body_html: None,
+            attachments: vec![],
+            security: Default::default(),
+        };
+        let candidates = vec![OpenTask {
+            uid: 42,
+            task: "Send Alice the requested file".into(),
+            subject: "Documents".into(),
+            from: "Alice".into(),
+            date: "today".into(),
+        }];
+        let outcome =
+            classify_with_tasks(&ai_cfg("custom", "m", "k", &format!("{}/v1", base)), &email, &[], &candidates)
+                .await
+                .unwrap();
+        assert_eq!(outcome.task_updates, vec![TaskUpdate { id: 42, status: "done".into() }]);
+        let (_, request) = server.await.unwrap();
+        assert!(request.contains("OPEN TASK CANDIDATES"));
+        assert!(request.contains("Send Alice the requested file"));
+        assert!(request.contains("task_updates"));
+    }
+
     #[test]
     fn test_board_dismissals_overrides_survive_a_restart() {
         use crate::{dismissals::Dismissals, overrides::Overrides, tasks::Board};

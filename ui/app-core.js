@@ -151,6 +151,29 @@
     return (state?.tasks || []).filter(task => task.status === 'todo' || task.status === 'in_progress');
   }
 
+  // Expand the compact backend snapshot into the array shape used by the existing UI.
+  // Every derived list points at the same summary objects, so local read/project updates
+  // are applied once without retaining duplicate email records.
+  const EMAIL_LISTS = Object.freeze([
+    'urgent_emails', 'high_emails', 'other_emails', 'info_emails', 'threat_emails',
+    'task_emails', 'all_emails', 'meeting_items', 'important_emails',
+    'all_emails_by_priority', 'sent_emails', 'drafts_emails', 'trash_emails', 'spam_emails',
+  ]);
+
+  function normalizeStateSnapshot(snapshot) {
+    if (!snapshot || !Array.isArray(snapshot.emails)) return snapshot;
+    const byKey = new Map(snapshot.emails.map(email => [email.key, {
+      ...email,
+      _key: email.key,
+      _folder: email.folder,
+    }]));
+    for (const name of EMAIL_LISTS) {
+      snapshot[name] = (snapshot[name] || []).map(key => byKey.get(key)).filter(Boolean);
+    }
+    delete snapshot.emails;
+    return snapshot;
+  }
+
   // Decode only the raster data URLs accepted by the email HTML sanitizer. Keeping this
   // transformation independent from the DOM makes every step testable without launching Tauri.
   function decodeEmbeddedRasterImage(source, decodeBase64 = atob) {
@@ -216,6 +239,7 @@
     needsAccountSetup,
     attentionEmails,
     activeTasks,
+    normalizeStateSnapshot,
     decodeEmbeddedRasterImage,
     decodeEmbeddedSvgImage,
     isSafeEmbeddedSvgReference,

@@ -98,6 +98,11 @@ STRINGS.ur = {
 
     'set.title': 'ترتیبات', 'set.general': 'عمومی', 'set.accounts': 'اکاؤنٹس', 'set.ai': 'اے آئی',
     'set.notify': 'نئی ای میلز آنے پر مجھے مطلع کریں',
+    'set.mailRefresh': 'میل باکس ریفریش', 'set.mailRefreshNote': 'معمول کی جانچ صرف ان باکس کی نئی میل پر کارروائی کرتی ہے۔ حالیہ میل کی مرمت یا مطابقت کے لیے مکمل ریفریش استعمال کریں۔',
+    'set.checkMail': 'نئی میل چیک کریں', 'set.fullRefresh': 'مکمل میل باکس ریفریش…',
+    'set.fullRefreshConfirm': 'تمام فولڈرز کی حالیہ میل دوبارہ ڈاؤن لوڈ اور مطابقت کی جائے؟ موجودہ AI درجہ بندی محفوظ رہے گی۔', 'set.fullRefreshAction': 'مکمل ریفریش',
+    'set.refreshNever': 'کبھی نہیں', 'set.refreshStatus': 'آخری جانچ: {check} · مکمل ریفریش: {full} · نئی: {n}',
+    'set.fullRefreshing': 'مکمل میل باکس ریفریش ہو رہا ہے…', 'set.checkingMail': 'نئی میل چیک ہو رہی ہے…', 'set.refreshFailed': 'ریفریش ناکام: {err}',
     'set.fontScale': 'فونٹ کا پیمانہ', 'set.theme': 'تھیم', 'set.language': 'زبان',
     "set.signature": "دستخط", "set.sigChoose": "📄 HTML فائل منتخب کریں…", "set.sigRemove": "ہٹائیں", "set.sigOnNew": "نئے پیغامات میں شامل کریں", "set.sigOnReply": "جوابات اور فارورڈ میں شامل کریں", "set.sigHint": "ابھی کوئی دستخط نہیں۔ اسے اپنے میل کلائنٹ (Outlook، Gmail…) سے HTML فائل کے طور پر برآمد کریں، یا کسی دستخط جنریٹر سے بنائیں۔", "set.sigImported": "دستخط درآمد ہو گیا", "set.sigRemoved": "دستخط ہٹا دیا گیا", "set.sigFileFilter": "HTML فائلیں",
     "set.incoming": "📥 آنے والی میل (IMAP)", "set.outgoing": "📤 جانے والی میل (SMTP)", "set.server": "سرور", "set.port": "پورٹ", "set.username": "صارف نام", "set.usernamePh": "you@example.com", "set.password": "پاس ورڈ", "set.sameAsIncoming": "آنے والی میل جیسا", "set.advanced": "اعلیٰ اختیارات", "set.imapMailbox": "جانچنے والا فولڈر", "set.fetchCount": "حاصل کی جانے والی ای میلز کی تعداد",

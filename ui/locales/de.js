@@ -98,6 +98,11 @@ STRINGS.de = {
 
     'set.title': 'Einstellungen', 'set.general': 'Allgemein', 'set.accounts': 'Konten', 'set.ai': 'KI',
     'set.notify': 'Benachrichtigen, wenn neue E-Mails eintreffen',
+    'set.mailRefresh': 'Postfach aktualisieren', 'set.mailRefreshNote': 'Regelmäßige Prüfungen verarbeiten nur neue Nachrichten im Posteingang. Eine vollständige Aktualisierung gleicht die letzten Nachrichten neu ab.',
+    'set.checkMail': 'Auf neue E-Mails prüfen', 'set.fullRefresh': 'Postfach vollständig aktualisieren…',
+    'set.fullRefreshConfirm': 'Letzte Nachrichten in allen Ordnern neu laden und abgleichen? Bestehende KI-Klassifizierungen bleiben erhalten.', 'set.fullRefreshAction': 'Vollständig aktualisieren',
+    'set.refreshNever': 'Nie', 'set.refreshStatus': 'Letzte Prüfung: {check} · Vollständig: {full} · Neu: {n}',
+    'set.fullRefreshing': 'Postfach wird vollständig aktualisiert…', 'set.checkingMail': 'Neue E-Mails werden gesucht…', 'set.refreshFailed': 'Aktualisierung fehlgeschlagen: {err}',
     'set.fontScale': 'Schriftgröße', 'set.theme': 'Design', 'set.language': 'Sprache',
     "set.signature": "Signatur", "set.sigChoose": "📄 HTML-Datei auswählen…", "set.sigRemove": "Entfernen", "set.sigOnNew": "Zu neuen Nachrichten hinzufügen", "set.sigOnReply": "Zu Antworten und Weiterleitungen hinzufügen", "set.sigHint": "Noch keine Signatur. Exportieren Sie sie aus Ihrem Mailprogramm (Outlook, Gmail…) als HTML-Datei oder erstellen Sie eine mit einem Signaturgenerator.", "set.sigImported": "Signatur importiert", "set.sigRemoved": "Signatur entfernt", "set.sigFileFilter": "HTML-Dateien",
     "set.incoming": "📥 Posteingang (IMAP)", "set.outgoing": "📤 Postausgang (SMTP)", "set.server": "Server", "set.port": "Port", "set.username": "Benutzername", "set.usernamePh": "sie@beispiel.de", "set.password": "Passwort", "set.sameAsIncoming": "Wie beim Posteingang", "set.advanced": "Erweiterte Optionen", "set.imapMailbox": "Zu prüfender Ordner", "set.fetchCount": "Anzahl abzurufender E-Mails",

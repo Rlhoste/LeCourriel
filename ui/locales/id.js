@@ -98,6 +98,11 @@ STRINGS.id = {
 
     'set.title': 'Pengaturan', 'set.general': 'Umum', 'set.accounts': 'Akun', 'set.ai': 'AI',
     'set.notify': 'Beri tahu saya saat email baru masuk',
+    'set.mailRefresh': 'Penyegaran kotak surat', 'set.mailRefreshNote': 'Pemeriksaan rutin hanya memproses email Kotak Masuk yang baru. Gunakan penyegaran penuh untuk memperbaiki atau menyelaraskan email terbaru.',
+    'set.checkMail': 'Periksa email baru', 'set.fullRefresh': 'Segarkan seluruh kotak surat…',
+    'set.fullRefreshConfirm': 'Ambil ulang dan selaraskan email terbaru di semua folder? Klasifikasi AI yang ada akan dipertahankan.', 'set.fullRefreshAction': 'Segarkan semua',
+    'set.refreshNever': 'Belum pernah', 'set.refreshStatus': 'Pemeriksaan terakhir: {check} · Penuh: {full} · Baru: {n}',
+    'set.fullRefreshing': 'Menyegarkan seluruh kotak surat…', 'set.checkingMail': 'Memeriksa email baru…', 'set.refreshFailed': 'Penyegaran gagal: {err}',
     'set.fontScale': 'Ukuran Teks', 'set.theme': 'Tema', 'set.language': 'Bahasa',
     "set.signature": "Tanda tangan", "set.sigChoose": "📄 Pilih file HTML…", "set.sigRemove": "Hapus", "set.sigOnNew": "Tambahkan ke pesan baru", "set.sigOnReply": "Tambahkan ke balasan dan penerusan", "set.sigHint": "Belum ada tanda tangan. Ekspor dari aplikasi email Anda (Outlook, Gmail…) sebagai file HTML, atau buat dengan generator tanda tangan apa pun.", "set.sigImported": "Tanda tangan diimpor", "set.sigRemoved": "Tanda tangan dihapus", "set.sigFileFilter": "File HTML",
     "set.incoming": "📥 Email masuk (IMAP)", "set.outgoing": "📤 Email keluar (SMTP)", "set.server": "Server", "set.port": "Port", "set.username": "Nama pengguna", "set.usernamePh": "anda@contoh.com", "set.password": "Kata sandi", "set.sameAsIncoming": "Sama dengan email masuk", "set.advanced": "Opsi lanjutan", "set.imapMailbox": "Folder yang diperiksa", "set.fetchCount": "Jumlah email yang diambil",

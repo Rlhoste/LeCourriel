@@ -1070,6 +1070,11 @@ button.row-mark:hover::before { transform: scale(1.2); }
   border: var(--border-w) solid var(--border);
   border-radius: var(--radius);
 }
+.mail-refresh-card {
+  display: flex; flex-direction: column; gap: 8px; margin-top: 8px; padding: 12px;
+  background: var(--bg3); border: var(--border-w) solid var(--border); border-radius: var(--radius);
+}
+.mail-refresh-card .settings-note { margin: 0; }
 .update-version-row { display: flex; justify-content: space-between; align-items: center; }
 .update-auto-label { margin: 2px 0 4px; }
 .update-progress { height: 7px; overflow: hidden; background: var(--bg); border-radius: var(--radius-pill); }

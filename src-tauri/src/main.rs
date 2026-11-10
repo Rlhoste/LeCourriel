@@ -184,7 +184,7 @@ async fn app_ready(app: AppHandle, shared: State<'_, SharedState>) -> Result<(),
     tauri::async_runtime::spawn(async move {
         let cfg = sync_from_database(&app, &shared_clone).await.unwrap_or(cfg);
         // Kick off live refresh in background
-        app_state::refresh(cfg, app.clone(), shared_clone.clone()).await;
+        let _ = app_state::refresh(cfg, app.clone(), shared_clone.clone()).await;
         start_auto_refresh(app, shared_clone);
     });
     Ok(())
@@ -206,7 +206,7 @@ fn start_auto_refresh(app: AppHandle, shared: SharedState) {
             tick.tick().await;
             let cfg = shared.lock().unwrap().cfg.clone();
             if !cfg.accounts.is_empty() {
-                app_state::refresh(cfg, app.clone(), shared.clone()).await;
+                let _ = app_state::refresh(cfg, app.clone(), shared.clone()).await;
             }
         }
     });
@@ -269,38 +269,38 @@ async fn refresh_emails(app: AppHandle, shared: State<'_, SharedState>) -> Resul
         s.cfg.clone()
     };
     let shared_clone = shared.inner().clone();
-    app_state::refresh(cfg, app, shared_clone).await;
-    Ok(())
+    app_state::refresh(cfg, app, shared_clone).await.map(|_| ())
 }
 
 #[tauri::command]
-fn get_email(uid: u64, shared: State<'_, SharedState>) -> Option<dto::EmailCardDto> {
+async fn full_refresh_emails(app: AppHandle, shared: State<'_, SharedState>) -> Result<(), String> {
+    let cfg = shared.lock().unwrap().cfg.clone();
+    let shared_clone = shared.inner().clone();
+    app_state::full_refresh(cfg, app, shared_clone).await.map(|_| ())
+}
+
+#[tauri::command]
+fn get_refresh_status() -> app_state::RefreshStatus {
+    app_state::refresh_status()
+}
+
+#[tauri::command]
+async fn load_mail_folder(folder: String, app: AppHandle, shared: State<'_, SharedState>) -> Result<bool, String> {
+    let folder = search::Folder::parse(&folder).ok_or_else(|| format!("Unknown mail folder: {folder}"))?;
+    let cfg = shared.lock().unwrap().cfg.clone();
+    app_state::load_secondary_folder(cfg, app, shared.inner().clone(), folder)
+        .await
+        .map_err(|error| format!("{error:#}"))
+}
+
+#[tauri::command]
+fn get_email(uid: u64, folder: String, shared: State<'_, SharedState>) -> Option<dto::EmailCardDto> {
     let s = shared.lock().unwrap();
-    s.emails.iter().find(|e| e.uid == uid).map(|c| dto::EmailCardDto {
-        uid: c.uid,
-        subject: c.subject.clone(),
-        from_name: c.from_name.clone(),
-        from_email: c.from_email.clone(),
-        to: c.to.clone(),
-        cc: c.cc.clone(),
-        reply_to: c.reply_to.clone(),
-        bcc: c.bcc.clone(),
-        message_id: c.message_id.clone(),
-        references: c.references.clone(),
-        date_str: c.date_str.clone(),
-        date_full: c.date_full.clone(),
-        date_ts: c.date_ts,
-        summary: c.summary.clone(),
-        priority: c.priority.as_str().to_string(),
-        is_read: c.is_read,
-        project: c.project.clone().unwrap_or_default(),
-        deadline_str: c.deadline.map(|d| i18n::day_month(&d, i18n::lang())).unwrap_or_default(),
-        task: c.task.clone().unwrap_or_default(),
-        body_text: c.body_text.clone(),
-        body_html: c.body_html.clone(),
-        attachments: c.attachments.clone(),
-        meeting_link: c.meeting_link.clone().unwrap_or_default(),
-    })
+    let wanted = search::Folder::parse(&folder)?;
+    s.search_index
+        .iter()
+        .find(|(found, email)| *found == wanted && email.uid == uid)
+        .map(|(_, email)| app_state::to_dto(email))
 }
 
 #[tauri::command]
@@ -312,6 +312,7 @@ async fn send_email(
     html: String,
     in_reply_to: Option<String>,
     account: Option<usize>,
+    app: AppHandle,
     shared: State<'_, SharedState>,
 ) -> Result<(), String> {
     // The account chosen in the composer's "From" (the first one by default).
@@ -325,9 +326,23 @@ async fn send_email(
     let smtp = account.smtp_for_sending(&cfg.user_name());
     let raw = smtp_sender::send_message(&smtp, &mail).await.map_err(|e| format!("{:#}", e))?;
     // The SMTP relay doesn't keep a copy, so store one in Sent ourselves.
-    if let Err(e) = imap_client::append_sent(&account.imap, &sent_folder, &raw).await {
-        tracing::warn!("Could not save a copy to {}: {:#}", sent_folder, e);
+    match imap_client::append_sent(&account.imap, &sent_folder, &raw).await {
+        Ok(()) => {
+            shared.lock().unwrap().loaded_folders.remove(&search::Folder::Sent);
+        }
+        Err(e) => {
+            tracing::warn!("Could not save a copy to {}: {:#}", sent_folder, e);
+        }
     }
+    // Task completion is checked only for this successfully sent message and
+    // only when it matches an open task. Keep SMTP completion responsive while
+    // the targeted model check runs in the background.
+    let shared = shared.inner().clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = app_state::check_outgoing_tasks(&cfg, &app, &shared, &mail).await {
+            tracing::warn!("Outgoing task check failed: {:#}", error);
+        }
+    });
     Ok(())
 }
 
@@ -423,7 +438,13 @@ fn save_settings(
             i18n::set_lang(&new_cfg.user.language);
             cloud::configure(&new_cfg);
             let new_cfg = Arc::new(new_cfg);
-            shared.lock().unwrap().cfg = new_cfg.clone();
+            {
+                let mut state = shared.lock().unwrap();
+                state.cfg = new_cfg.clone();
+                // Account mailbox/folder settings may have changed. Secondary
+                // folders are cheap to reload the next time they are opened.
+                state.loaded_folders.clear();
+            }
             // An account is the same one while its server and login are: its emails keep
             // their tasks; a removed account's emails and tasks go with it.
             // (A login set up twice, e.g. for two mailboxes, pairs in order.)
@@ -444,7 +465,7 @@ fn save_settings(
             if !new_cfg.accounts.is_empty() {
                 let shared = shared.inner().clone();
                 tauri::async_runtime::spawn(async move {
-                    app_state::refresh(new_cfg, app.clone(), shared.clone()).await;
+                    let _ = app_state::refresh(new_cfg, app.clone(), shared.clone()).await;
                     start_auto_refresh(app, shared);
                 });
             }
@@ -1006,7 +1027,9 @@ async fn move_email(shared: &SharedState, uid: u64, folder: String) -> Result<()
 async fn trash_email(uid: u64, shared: State<'_, SharedState>) -> Result<(), String> {
     let (_, folders, _) = account_of(shared.inner(), uid)?;
     let folder = folders.trash;
-    move_email(shared.inner(), uid, folder).await
+    move_email(shared.inner(), uid, folder).await?;
+    shared.lock().unwrap().loaded_folders.remove(&search::Folder::Trash);
+    Ok(())
 }
 
 /// "Not spam": move an email from the Spam/Junk folder back to the inbox.
@@ -1021,6 +1044,7 @@ async fn not_spam_email(uid: u64, shared: State<'_, SharedState>) -> Result<(), 
     // back in the inbox at the next refresh.
     let mut s = shared.lock().unwrap();
     s.search_index.retain(|(f, e)| !(*f == search::Folder::Spam && e.uid == uid));
+    s.loaded_folders.remove(&search::Folder::Spam);
     drop(s);
     if let Some(card) = training {
         adaptive_spam::train(&card, adaptive_spam::Label::Ham);
@@ -1037,6 +1061,7 @@ async fn spam_email(uid: u64, shared: State<'_, SharedState>) -> Result<(), Stri
     // Many mailboxes have no spam folder: create it the first time, like other mail clients.
     imap_client::ensure_folder(&account.imap, &folder).await.map_err(|e| format!("{:#}", e))?;
     move_email(shared.inner(), uid, folder).await?;
+    shared.lock().unwrap().loaded_folders.remove(&search::Folder::Spam);
     if let Some(card) = training {
         adaptive_spam::train(&card, adaptive_spam::Label::Spam);
     }
@@ -1362,6 +1387,8 @@ fn main() {
         cfg: cfg.clone(),
         emails: vec![],
         search_index: vec![],
+        cache_loaded: false,
+        loaded_folders: std::collections::HashSet::new(),
         mailboxes: Vec::new(),
         sent_folders: Vec::new(),
         briefing: None,
@@ -1382,6 +1409,9 @@ fn main() {
             check_for_update,
             install_update,
             refresh_emails,
+            full_refresh_emails,
+            get_refresh_status,
+            load_mail_folder,
             get_email,
             send_email,
             get_settings,
